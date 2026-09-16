@@ -24,14 +24,14 @@ Large data files are **not** committed to this repository. Download them directl
 ```
 .
 ├── data/
-│   ├── raw/          # downloaded Zenodo data (git-ignored)
-│   └── processed/    # mapped attribute values, intermediate outputs
+│   ├── raw/           # downloaded Zenodo data (git-ignored)
+│   └── processed/     # mapped attribute values, intermediate outputs
 ├── src/               # mapping and prediction pipeline
 ├── notebooks/         # exploratory analysis
-├── graphics/          # figures (e.g. mock comparison chart, Gantt chart)
+├── graphics/          # figures
 └── README.md
 ```
 
 ## Status
 
-Work in progress. See the project proposal (Overleaf) for the full method description and open methodological questions.
+Work in progress.
