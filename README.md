@@ -3,7 +3,7 @@
 Semester project mapping winter-gap mitigation energy scenarios from Mellot et al. (2024), *"Mitigating future winter electricity deficits: A case study from Switzerland"*, onto the discrete choice model from Tröndle, Mey & Lilliestam (2025), *"Socially preferable and technically feasible: European citizens choose solar power and import independence over lower costs"*, to predict Swiss citizen preferences.
 
 **Author:** Josua Müller
-**Supervision:** Tim Tröndle (informal), Prof. Anthony Patt (formal)
+**Supervision:** Dr. Tim Tröndle, Prof. Anthony Patt
 
 ## Overview
 
