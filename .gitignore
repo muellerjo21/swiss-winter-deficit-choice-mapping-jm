@@ -1,0 +1,31 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.pyc
+.ipynb_checkpoints/
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env
+
+# Large data files - not committed, see README for download links
+*.nc
+data/raw/
+data/*.csv
+
+# LaTeX / Overleaf leftovers
+*.aux
+*.log
+*.synctex.gz
+*.out
+*.toc
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
