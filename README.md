@@ -17,7 +17,7 @@ This project applies an existing discrete choice model (Tröndle, Mey & Lilliest
 | Tröndle, Mey & Lilliestam (2025) | Fitted model coefficients (posterior inference, NetCDF) | Zenodo, DOI 10.5281/zenodo.14501018 |
 | Tröndle, Mey & Lilliestam (2025) | Reproducible analysis code (Snakemake) | Zenodo, DOI 10.5281/zenodo.14501036 |
 
-Large data files (in particular `choice-model-inference.nc`, ~3.5 GB) are **not** committed to this repository. Download them directly from the Zenodo links above into `data/raw/` (git-ignored).
+Large data files are **not** committed to this repository. Download them directly from the Zenodo links above into `data/raw/` (git-ignored).
 
 ## Repository structure
 
