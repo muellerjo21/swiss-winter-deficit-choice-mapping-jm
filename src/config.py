@@ -8,3 +8,10 @@ PROJECT_ROOT = SRC_DIR.parent
 
 DATA_PATH = PROJECT_ROOT / "data" / "raw" / "choice-model-inference.nc"
 SCENARIOS_PATH = PROJECT_ROOT / "data" / "manual" / "scenarios.csv"
+
+ATTRIBUTE_MAX_VALUES = {
+    "LAND": 0.08,
+    "PRICES": 0.60,
+    "SHARE_IMPORTS": 0.90,
+    "TRANSMISSION": 0.75,
+}

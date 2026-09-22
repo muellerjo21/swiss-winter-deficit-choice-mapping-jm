@@ -1,0 +1,13 @@
+scenario,cost_change_pct_vs_ep2050,fuel_imports_twh,gross_winter_imports_twh,buildings_heat_electrification_pct,materials_land_concern,public_acceptance_note,land_use_km2_approx,land_use_precision,source
+EP2050+,0.0,9.1,24.7,36.3,n.a.,5% for electricity imports,67,approximate (read from Figure 1S bar chart),"Table 3 (main text); Figure 1S (supplementary)"
+EP2050+ (5TWh constraint),64.3,,,,,,,,"Table 1 and main text (main text); not reported in Table 3"
+S/CCGT (Fossil) + DACCS,-16.3,31.8,25.3,100.0,,25% for natural gas,67,approximate (read from Figure 1S bar chart),"Table 3 (main text); Figure 1S (supplementary)"
+S/CCGT (Ren. Methane) + H2,-3.6,0.0,24.4,100.0,,66% for biomass,67,approximate (read from Figure 1S bar chart),"Table 3 (main text); Figure 1S (supplementary)"
+S/CCGT (Ren. Methane),-3.6,0.0,24.4,100.0,,66% for biomass,67,approximate (read from Figure 1S bar chart),"Table 3 (main text); Figure 1S (supplementary)"
+Alpine PV,-0.8,0.0,24.0,56.4,"Land use, Graphite",56% for open-field PV,128,approximate (read from Figure 1S bar chart),"Table 3 (main text); Figure 1S (supplementary)"
+Wind,18.0,16.3,22.7,32.4,PGM,60%,72,approximate (read from Figure 1S bar chart),"Table 3 (main text); Figure 1S (supplementary)"
+Roof PV++,33.7,17.8,22.5,32.4,"Graphite, PGM",90%,72,approximate (read from Figure 1S bar chart),"Table 3 (main text); Figure 1S (supplementary)"
+CHP,22.2,17.4,23.2,33.5,,,72,approximate (read from Figure 1S bar chart),"Table 3 (main text); Figure 1S (supplementary)"
+H2 Imports,19.2,18.7,22.3,3.0,PGM,,67,approximate (read from Figure 1S bar chart),"Table 3 (main text); Figure 1S (supplementary)"
+MIX,-17.0,26.9,25.2,100.0,,25% for natural gas,67,approximate (read from Figure 1S bar chart),"Table 3 (main text); Figure 1S (supplementary)"
+RE MIX,-8.8,0.0,24.3,66.9,Land use,"66% biomass, 60% wind, 56% open-field PV",97,approximate (read from Figure 1S bar chart),"Table 3 (main text); Figure 1S (supplementary)"
