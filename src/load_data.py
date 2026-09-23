@@ -8,6 +8,7 @@ See CLAUDE.md and the project proposal for background on the model.
 import arviz as az
 import numpy as np
 import pandas as pd
+import xarray as xr
 
 
 def load_beta_partworths_mean(data_path: str, country: str = "NOT_SAMPLED") -> pd.DataFrame:
@@ -111,3 +112,16 @@ if __name__ == "__main__":
     for attr, values in samples.items():
         print(f"{attr}: {len(values)} samples, mean={values.mean():.4f}, "
               f"94% HDI=[{np.percentile(values, 3):.4f}, {np.percentile(values, 97):.4f}]")
+
+def compute_beta_real_units(idata) -> pd.DataFrame:
+    
+    """Scale full posterior beta_partworths to real units (beta / max_survey_value)."""
+    beta = idata.posterior["beta_partworths"]
+
+    raw_left = idata.constant_data["attribute_values_left"]
+    raw_right = idata.constant_data["attribute_values_right"]
+    max_per_attribute = xr.concat([raw_left, raw_right], dim="choice_situation").max(dim="choice_situation")
+
+    beta_real = beta / max_per_attribute
+
+    return beta_real.to_dataframe(name="beta_real").reset_index()
