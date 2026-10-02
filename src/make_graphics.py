@@ -168,7 +168,7 @@ def fig_forest(rankings: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 # 3. Attribut-Beitragszerlegung (divergierend gestapelt)
 # ---------------------------------------------------------------------------
-CONTRIBUTION_GROUPS = [  # (Label, Modell-Terme); Reihenfolge = Farbslot-Reihenfolge
+CONTRIBUTION_GROUPS = [  # (Label, Modell-Terme)
     ("Cost", ["cost"]),
     ("Import", ["import"]),
     ("Land", ["land"]),
@@ -177,6 +177,8 @@ CONTRIBUTION_GROUPS = [  # (Label, Modell-Terme); Reihenfolge = Farbslot-Reihenf
     ("Ownership", ["ownership_commercial", "ownership_community"]),
     ("Other (biomass, coal, nuclear, transmission)", ["source_biomass", "source_coal", "source_nuclear", "transmission"]),
 ]
+# Ownership lila statt dunkelgrün (Kollision mit Land), Rest-Gruppe neutral grau; Palette validiert
+CONTRIBUTION_COLORS = [SERIES[0], SERIES[1], SERIES[2], SERIES[3], SERIES[4], SERIES[6], NEUTRAL]
 
 
 def compute_contributions(attrs: pd.DataFrame, region: str, scale: dict) -> pd.DataFrame:
@@ -189,26 +191,41 @@ def compute_contributions(attrs: pd.DataFrame, region: str, scale: dict) -> pd.D
     return pd.DataFrame(rows).T
 
 
-def fig_contributions(attrs: pd.DataFrame, rankings: pd.DataFrame) -> None:
+def fig_contributions(attrs: pd.DataFrame, rankings: pd.DataFrame, centered: bool, name: str, note: str) -> None:
+    """centered=True: jedes Segment = Beitrag minus Mittel dieses Attributs über alle Szenarien
+    (pro Region). Konstante Terme verschwinden, sichtbar bleibt, was die Utility-Unterschiede
+    erklärt. Die Raute liegt dann bei U - mean(U) (= Summe der sichtbaren Segmente); die obere
+    Achse ist um mean(U) verschoben und zeigt dort die echte Utility ab."""
     scale = load_attribute_scale(CHOICE_MODEL_PATH)
     order = rankings.sort_values("utility_national", ascending=True)["scenario_id"].tolist()  # beste oben
     regions = [("DE-CH", "DE-CH"), ("FR-CH", "FR-CH")]
     fig, axes = plt.subplots(1, 2, figsize=(10, 6.2), sharey=True)
     for ax, (region, title) in zip(axes, regions):
-        contrib = compute_contributions(attrs, region, scale).loc[order]
+        contrib = compute_contributions(attrs, region, scale)
+        offset = contrib.sum(axis=1).mean() if centered else 0.0  # mean(U) über die Szenarien
+        if centered:
+            contrib = contrib - contrib.mean(axis=0)
+        contrib = contrib.loc[order]
         y = np.arange(len(order))
         pos = np.zeros(len(order)); neg = np.zeros(len(order))
-        for (label, _), color in zip(CONTRIBUTION_GROUPS, SERIES):
+        for (label, _), color in zip(CONTRIBUTION_GROUPS, CONTRIBUTION_COLORS):
             v = contrib[label].values
             left = np.where(v >= 0, pos, neg)
             ax.barh(y, v, left=left, height=0.7, color=color, edgecolor="white", linewidth=1, label=label)
             pos += np.clip(v, 0, None); neg += np.clip(v, None, 0)
         total = contrib.sum(axis=1).values
         ax.plot(total, y, "D", color=TEXT_PRIMARY, markersize=5.5, markeredgecolor="white",
-                markeredgewidth=1, label="Total utility", zorder=4)
+                markeredgewidth=1, label="Total utility (top axis)" if centered else "Total utility", zorder=4)
         ax.axvline(0, color=TEXT_SECONDARY, lw=1)
-        ax.set_title(title, loc="left", fontweight="bold")
-        ax.set_xlabel("Contribution to utility (β × scaled attribute)")
+        if centered:
+            top = ax.secondary_xaxis("top", functions=(lambda x, o=offset: x + o, lambda x, o=offset: x - o))
+            top.set_xlabel("Total utility ◆", fontsize=9.5, color=TEXT_SECONDARY)
+            top.tick_params(labelsize=9, colors=TEXT_SECONDARY)
+            ax.set_title(title, loc="left", fontweight="bold", pad=34)
+            ax.set_xlabel("Deviation from scenario mean per attribute\n(β × scaled attribute)")
+        else:
+            ax.set_title(title, loc="left", fontweight="bold")
+            ax.set_xlabel("Contribution to utility (β × scaled attribute)")
         ax.xaxis.grid(True, color=GRID, lw=0.8)
         ax.set_axisbelow(True)
         ax.spines["left"].set_visible(False)
@@ -220,11 +237,22 @@ def fig_contributions(attrs: pd.DataFrame, rankings: pd.DataFrame) -> None:
         a.set_xlim(lo, hi)
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper center", ncol=4, frameon=False, bbox_to_anchor=(0.55, 1.08))
-    fig.text(0, -0.02, "Scenarios sorted by national utility (highest at top). Positive contributions to the right "
-             "of zero, negative to the left.\nA negative cost change (price decrease vs. ElCom 2025) contributes "
-             "positively.", fontsize=8.5, color=TEXT_SECONDARY, ha="left")
+    fig.text(0, -0.02, note, fontsize=8.5, color=TEXT_SECONDARY, ha="left", va="top")
     fig.tight_layout()
-    save(fig, "fig3_utility_contributions")
+    save(fig, name)
+
+
+CONTRIBUTIONS_CENTERED_NOTE = (
+    "Segments show the deviation from the scenario mean per attribute, not the absolute contribution "
+    "(mean over all 12 scenarios, per region).\nTheir sum is U − mean(U); the diamond marks this sum and is "
+    "read as true total utility on the top axis. Scenarios sorted by national utility (highest at top).\n"
+    "Absolute contributions incl. constant terms: see Fig. A1."
+)
+CONTRIBUTIONS_ABSOLUTE_NOTE = (
+    "Shows absolute contributions incl. near-constant terms such as ownership; these are not the drivers of "
+    "the rank differences – see Fig. 3 for the centered version.\nScenarios sorted by national utility "
+    "(highest at top). A negative cost change (price decrease vs. ElCom 2025) contributes positively."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -315,7 +343,10 @@ if __name__ == "__main__":
     attrs, rankings = load_results()
     fig_rank_vs_cost(rankings)
     fig_forest(rankings)
-    fig_contributions(attrs, rankings)
+    fig_contributions(attrs, rankings, centered=True, name="fig3_utility_contributions",
+                      note=CONTRIBUTIONS_CENTERED_NOTE)
+    fig_contributions(attrs, rankings, centered=False, name="figA1_utility_contributions_absolute",
+                      note=CONTRIBUTIONS_ABSOLUTE_NOTE)
     fig_slope_regions(rankings)
     fig_cost_vs_preference(attrs)
     print(f"Saved graphics to {GRAPHICS_DIR}")
