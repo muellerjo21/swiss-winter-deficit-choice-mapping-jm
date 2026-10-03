@@ -1,24 +1,32 @@
 from pathlib import Path
 
-# Ordner, in dem diese config.py selbst liegt (src/)
+# Directory containing config.py (src/)
 SRC_DIR = Path(__file__).resolve().parent
 
-# Projekt-Root ist eine Ebene über src/
+# Project root is one level above src/
 PROJECT_ROOT = SRC_DIR.parent
 
-# Neues Choice-Modell (Jan 2026), pro Sprachregion (DE-CH/FR-CH/...), 11 Attribute
+# Choice model (Jan 2026), per language region
 CHOICE_MODEL_PATH = PROJECT_ROOT / "data" / "raw" / "choice-model-jan-2026.nc"
-# Altes Modell aus Tims Paper, pro Land (DNK/DEU/PRT/POL/NOT_SAMPLED), 6 Attribute
-# -- nur noch von choice_model.py / 02_single_scenario.ipynb genutzt
+
+# LEGACY: old model from the paper, per country (DNK/DEU/PRT/POL/NOT_SAMPLED), 6 attributes
+# -- only used by choice_model.py / 02_single_scenario.ipynb
 DATA_PATH = PROJECT_ROOT / "data" / "raw" / "choice-model-inference.nc"
+# LEGACY: manually compiled values from Mellot et al. (same users as DATA_PATH)
 SCENARIOS_PATH = PROJECT_ROOT / "data" / "manual" / "scenarios.csv"
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
-# Calliope-Ergebnisse von Mellot et al., ein .nc pro Szenario
+
+# Calliope results of Mellot et al., one .nc per scenario
 SCENARIO_DIR = RAW_DIR / "scenario_data"
-# Kantonsflächen (km², Statista/BFS), für relative Landnutzung
+
+# Canton areas (km², Statista/BFS), for relative land use
 CANTON_AREA_CSV_PATH = RAW_DIR / "flache_der_schweiz_nach_kantonen_in_quadratkilometern.csv"
 
+# LEGACY (old model, only used by choice_model.py / 02_single_scenario.ipynb): attribute maxima
+# from Tröndle et al.'s paper, the national land area and the old technology keys. The current
+# pipeline reads the scaling from the model file (load_attribute_scale) and computes relative land
+# use per canton (CANTON_AREA_CSV_PATH).
 ATTRIBUTE_MAX_VALUES = {
     "LAND": 0.08,
     "PRICES": 0.60,
@@ -28,6 +36,43 @@ ATTRIBUTE_MAX_VALUES = {
 
 SWISS_LAND_AREA_KM2 = 41_285
 TECHNOLOGY_KEYS = ["TECHNOLOGY:Open-field PV", "TECHNOLOGY:Wind"]
+
+# Canton names (German) -> BFS abbreviations
+
+CANTON_NAME_TO_CODE = {
+    "Zürich": "ZH", 
+    "Bern": "BE", 
+    "Luzern": "LU", 
+    "Uri": "UR", 
+    "Schwyz": "SZ",
+    "Obwalden": "OW", 
+    "Nidwalden": "NW",
+    "Glarus": "GL", 
+    "Zug": "ZG", 
+    "Freiburg": "FR",
+    "Solothurn": "SO", 
+    "Basel-Stadt": "BS", 
+    "Basel-Landschaft": "BL", 
+    "Schaffhausen": "SH",
+    "Appenzell Ausserrhoden": "AR", 
+    "Appenzell Innerrhoden": "AI", 
+    "St. Gallen": "SG",
+    "Graubünden": "GR", 
+    "Aargau": "AG", 
+    "Thurgau": "TG", 
+    "Tessin": "TI", 
+    "Waadt": "VD",
+    "Wallis": "VS", 
+    "Neuenburg": "NE", 
+    "Genf": "GE", 
+    "Jura": "JU",
+}
+
+CANTON_MERGES = {
+    "AI_AR": ["AI", "AR"],
+    "BL_BS": ["BL", "BS"],
+    "NW_OW": ["NW", "OW"],
+}
 
 CANTON_LANGUAGE = {
     "ZH": "DE-CH",
@@ -52,29 +97,15 @@ CANTON_LANGUAGE = {
     "AI_AR": "DE-CH",
     "BL_BS": "DE-CH",
     "NW_OW": "DE-CH",
-    "TI": None,  # Italienisch, nicht im Choice-Modell abgedeckt
+    "TI": None,  # Italian-speaking, not covered by the choice model
 }
 
 FOREIGN_CODES = {"AUT", "DEU", "FRA", "ITA"}
 
-CANTON_NAME_TO_CODE = {
-    "Zürich": "ZH", "Bern": "BE", "Luzern": "LU", "Uri": "UR", "Schwyz": "SZ",
-    "Obwalden": "OW", "Nidwalden": "NW", "Glarus": "GL", "Zug": "ZG", "Freiburg": "FR",
-    "Solothurn": "SO", "Basel-Stadt": "BS", "Basel-Landschaft": "BL", "Schaffhausen": "SH",
-    "Appenzell Ausserrhoden": "AR", "Appenzell Innerrhoden": "AI", "St. Gallen": "SG",
-    "Graubünden": "GR", "Aargau": "AG", "Thurgau": "TG", "Tessin": "TI", "Waadt": "VD",
-    "Wallis": "VS", "Neuenburg": "NE", "Genf": "GE", "Jura": "JU",
-}
 
-CANTON_MERGES = {
-    "AI_AR": ["AI", "AR"],
-    "BL_BS": ["BL", "BS"],
-    "NW_OW": ["NW", "OW"],
-}
-
-# Flächendichte pro Technologie (GW/km²), gemäss Tröndle et al. Methodik
-# (8 MW/km² Wind, 80 MW/km² PV -- gilt für alle PV- bzw. Wind-Subtypen gleich).
-# roof_mounted_pv bewusst ausgeschlossen: Dachflächen sind keine zusätzlich beanspruchte Fläche.
+# Capacity density per technology (GW/km²), following Tröndle et al.'s methodology
+# (8 MW/km² wind, 80 MW/km² PV -- applies equally to all PV and wind subtypes).
+# roof_mounted_pv deliberately excluded: rooftops do not occupy additional land.
 CAPACITY_DENSITY_GW_PER_KM2 = {
     "wind_onshore_monopoly": 0.008,
     "wind_onshore_competing": 0.008,
@@ -83,8 +114,8 @@ CAPACITY_DENSITY_GW_PER_KM2 = {
     "alpine_pv_not_subsidised": 0.08,
 }
 
-# Annahme (nicht empirisch): Technologie -> Eigentümerkategorie für compute_ownership_shares.
-# "public" ist die implizite Referenzkategorie im Choice-Modell.
+# Assumption (not empirical): technology -> ownership category for compute_ownership_shares.
+# "public" is the implicit reference category in the choice model.
 OWNERSHIP_MAPPING = {
     "roof_mounted_pv": "commercial",
     "open_field_pv": "commercial",
@@ -103,14 +134,14 @@ OWNERSHIP_MAPPING = {
     "nuclear": "public",
 }
 
-# Technologie -> source_*-Kategorie im Choice-Modell.
-# roof_mounted_pv, open_field_pv, alpine_pv_* -> implizite Referenzkategorie (Solar/PV),
-# kein eigener Beta, aber Teil des Kapazitäts-Nenners in compute_technology_mix_shares.
-# source_coal, source_nuclear: keine entsprechende CH-Technologie vorhanden -> Anteil immer 0.
-# hydro_reservoir, hydro_run_of_river, pumped_hydro: bewusst ausgeschlossen -- das Choice-Modell
-# kennt keine Hydro-Kategorie, und Mellot et al. frieren Hydro-Kapazitäten über alle Szenarien
-# ein ("we freeze the installed capacities to today's levels"), tragen also ohnehin nicht zur
-# Szenario-Variation bei.
+# Technology -> source_* category in the choice model.
+# roof_mounted_pv, open_field_pv, alpine_pv_* -> implicit reference category (solar/PV),
+# no beta of their own, but part of the capacity denominator in compute_technology_mix_shares.
+# source_coal, source_nuclear: no corresponding Swiss technology -> share always 0.
+# hydro_reservoir, hydro_run_of_river, pumped_hydro: deliberately excluded -- the choice model
+# has no hydro category, and Mellot et al. freeze hydro capacities across all scenarios
+# ("we freeze the installed capacities to today's levels"), so they do not contribute to
+# scenario variation anyway.
 TECH_SOURCE_MAPPING = {
     "wind_onshore_monopoly": "source_wind",
     "wind_onshore_competing": "source_wind",
@@ -121,32 +152,33 @@ TECH_SOURCE_MAPPING = {
     "chp_waste": "source_biomass",
 }
 
-# Zusätzliche Technologien, die zwar keine eigene source_*-Kategorie haben (PV = impliziter
-# Referenzwert), aber trotzdem Teil des Kapazitäts-Nenners sein müssen (compute_technology_mix_shares)
-# bzw. der Landnutzungsberechnung (compute_land_from_capacity via CAPACITY_DENSITY_GW_PER_KM2).
-# Techs mit Strom als Input (Sektorkopplung), die zusätzlich zu demand_elec als Stromverbrauch
-# zählen (Nenner für import_share und price_change). Speicher (pumped_hydro,
-# hydrogen_electricity_storage, battery) bewusst nicht enthalten -> Doppelzählung.
+# Techs with electricity as input (sector coupling) that count as electricity consumption in
+# addition to demand_elec (denominator for import_share and price_change). Storage (pumped_hydro,
+# hydrogen_electricity_storage, battery) deliberately excluded -> would double-count.
 SECTOR_COUPLING_ELEC_TECHS = [
     "light_transport_ev", "heavy_transport_ev", "hp", "electrode_boiler",
     "electrolysis", "dac", "daccs_local",
 ]
 
+# Technologies without a source_* category of their own (PV = implicit reference), which must
+# still be part of the capacity denominator (compute_technology_mix_shares) and of the land-use
+# calculation (compute_land_from_capacity via CAPACITY_DENSITY_GW_PER_KM2).
 PV_REFERENCE_TECHS = ["roof_mounted_pv", "open_field_pv", "alpine_pv_subsidised", "alpine_pv_not_subsidised"]
 
 PRICE_MARGIN = 0.10          # Tröndle's assumed 10% revenue margin
 
-# Bereits reproduzierbar, kein Pinning nötig: ElCom-Tarife ändern sich nur einmal pro Jahr und
-# das Jahr ist fest -> get_elcom_reference_price() liefert bei jedem Lauf denselben Referenzpreis.
-PRICE_REFERENCE_YEAR = 2025  # Baseline-Jahr des Choice-Experiments ("...compared with 2022's levels")
-# EZB-Referenzkurs EUR/CHF für die Preisumrechnung, fest statt /latest (Snakemake-Reproduzierbarkeit).
-# Datum des Kurses (0.9461), mit dem die validierten Werte in scenario_attributes_summary.csv
-# berechnet wurden (aus den gespeicherten price_change zurückgerechnet, einziger Treffer im Zeitraum).
+# Already reproducible, no pinning needed: ElCom tariffs change only once per year and the year
+# is fixed -> get_elcom_reference_price() returns the same reference price on every run.
+PRICE_REFERENCE_YEAR = 2025  # Baseline year of the choice experiment ("...compared with 2022's levels")
+# ECB EUR/CHF reference rate for the price conversion, fixed instead of /latest (Snakemake
+# reproducibility). Date of the rate (0.9461) used to compute the validated values in
+# scenario_attributes_summary.csv (back-calculated from the stored price_change, the only
+# match in the period).
 PRICE_REFERENCE_DATE = "2026-09-29"
-TRANSMISSION_REFERENCE_YEAR = PRICE_REFERENCE_YEAR  # gleiche "heute"-Referenzjahr-Logik wie Price
+TRANSMISSION_REFERENCE_YEAR = PRICE_REFERENCE_YEAR  # same "today" reference-year logic as price
 
-# Spalte in scenario_attributes_summary (compute_all_attributes) -> attribute-Koordinate im
-# Choice-Modell (CHOICE_MODEL_PATH).
+# Column in scenario_attributes_summary (compute_all_attributes) -> attribute coordinate in the
+# choice model (CHOICE_MODEL_PATH).
 ATTRIBUTE_COLUMN_TO_MODEL_TERM = {
     "source_wind": "source_wind",
     "source_coal": "source_coal",
@@ -161,20 +193,19 @@ ATTRIBUTE_COLUMN_TO_MODEL_TERM = {
     "ownership_community": "ownership_community",
 }
 
-# Quelle: Bundesamt für Statistik (BFS), "Sprachliche Praktiken in der
-# Schweiz", Strukturerhebung 2023. Hauptsprachen der staendigen
-# Wohnbevoelkerung: Deutsch 61%, Franzoesisch 23% (Mehrfachnennungen
-# moeglich). Hier normalisiert auf DE-CH/FR-CH allein (analog
-# CANTON_LANGUAGE, TI/Raetoromanisch ausgeklammert):
+# Source: Swiss Federal Statistical Office (BFS), "Sprachliche Praktiken in der Schweiz",
+# structural survey 2023. Main languages of the permanent resident population: German 61%,
+# French 23% (multiple answers possible). Normalised here to DE-CH/FR-CH only (analogous to
+# CANTON_LANGUAGE, Italian/Romansh excluded):
 # https://dam-api.bfs.admin.ch/hub/api/dam/assets/34788128/master
 LANGUAGE_REGION_WEIGHTS = {
     "DE-CH": 61 / (61 + 23),  # 0.726
     "FR-CH": 23 / (61 + 23),  # 0.274
 }
 
-# Offizielle Kostenänderung der Szenarien relativ zu EP2050+ ("Swiss cost change [%]"), aus
+# Official cost change of the scenarios relative to EP2050+ ("Swiss cost change [%]"), from
 # Mellot et al. (2024), Energy Conversion and Management 309, 118426, Table 3.
-# "baseline" (EP2050+ mit 5-TWh-Winter-Constraint) ist nicht in Table 3 enthalten -> NaN.
+# "baseline" (EP2050+ with 5 TWh winter constraint) is not in Table 3 -> NaN.
 MELLOT_COST_CHANGE_PCT = {
     "policy_mix": -17.0,                                # MIX
     "policy_sccgt_daccs": -16.3,                        # S/CCGT (Fossil) + DACCS
@@ -182,15 +213,15 @@ MELLOT_COST_CHANGE_PCT = {
     "policy_sccgt_plus_h2": -3.6,                       # S/CCGT (Ren. Methane) +H2
     "policy_sccgt_no_h2": -3.6,                         # S/CCGT (Ren. Methane)
     "policy_alpine_pv": -0.8,                           # Alpine PV
-    "baseline_no_self_sufficiency_result_4H": 0.0,      # EP2050+ (Referenz)
+    "baseline_no_self_sufficiency_result_4H": 0.0,      # EP2050+ (reference)
     "policy_wind_x2": 18.0,                             # Wind
     "policy_h2_imports_only": 19.2,                     # H2Imports
     "policy_chp": 22.2,                                 # CHP
     "policy_roof_pv": 33.7,                             # Roof PV++
-    "baseline": float("nan"),                           # nicht in Table 3
+    "baseline": float("nan"),                           # not in Table 3
 }
 
-# Lesbare Szenario-Namen für Abbildungen, gemäss Mellot et al. (2024), Table 3.
+# Readable scenario names for figures, following Mellot et al. (2024), Table 3.
 SCENARIO_DISPLAY_NAMES = {
     "policy_mix": "MIX",
     "policy_sccgt_daccs": "S/CCGT (Fossil) + DACCS",
