@@ -27,9 +27,10 @@ from SPARQLWrapper import SPARQLWrapper, JSON
 
 from config import (
     CANTON_LANGUAGE, FOREIGN_CODES, CANTON_NAME_TO_CODE, CANTON_MERGES,
-    CAPACITY_DENSITY_GW_PER_KM2, OWNERSHIP_MAPPING, PRICE_MARGIN, PRICE_REFERENCE_YEAR,
+    CAPACITY_DENSITY_GW_PER_KM2, OWNERSHIP_MAPPING, PRICE_MARGIN, PRICE_REFERENCE_YEAR, PRICE_REFERENCE_DATE,
     TECH_SOURCE_MAPPING, PV_REFERENCE_TECHS, TRANSMISSION_REFERENCE_YEAR, CHOICE_MODEL_PATH,
-    SECTOR_COUPLING_ELEC_TECHS,
+    SECTOR_COUPLING_ELEC_TECHS, SCENARIO_DIR, CANTON_AREA_CSV_PATH, RAW_DIR, PROCESSED_DIR,
+    MELLOT_COST_CHANGE_PCT,
 )
 
 
@@ -246,9 +247,6 @@ def load_scenario_fuel_import(nc_path: str) -> pd.DataFrame:
     return fuel
 
 
-SCENARIO_DIR = "../data/raw/scenario_data/"
-
-
 def scenario_id_from_filename(filename: str) -> str:
     """Extrahiert eine kurze, lesbare Szenario-ID aus dem Dateinamen."""
     base = filename.removesuffix(".nc")
@@ -285,7 +283,7 @@ def extract_all_scenarios(scenario_dir: str = SCENARIO_DIR) -> dict[str, pd.Data
     return {k: pd.concat(v, ignore_index=True) for k, v in results.items()}
 
 
-def save_all_scenarios(scenario_dir: str = SCENARIO_DIR, out_dir: str = "../data/processed/") -> None:
+def save_all_scenarios(scenario_dir: str = SCENARIO_DIR, out_dir: str = PROCESSED_DIR) -> None:
     os.makedirs(out_dir, exist_ok=True)
     all_data = extract_all_scenarios(scenario_dir)
     for name, df in all_data.items():
@@ -293,7 +291,7 @@ def save_all_scenarios(scenario_dir: str = SCENARIO_DIR, out_dir: str = "../data
         print(f"Saved {name}: {len(df)} rows")
 
 
-def load_canton_area(csv_path: str) -> dict:
+def load_canton_area(csv_path: str = CANTON_AREA_CSV_PATH) -> dict:
     """Lädt Kantonsflächen (km²) aus der Statista-CSV und mappt sie auf Kantonscodes,
     inkl. Merge-Codes (AI_AR, BL_BS, NW_OW) aus Adriens Calliope-Daten."""
     df = pd.read_csv(csv_path, sep=";")
@@ -503,10 +501,12 @@ def load_scenario_system_cost(nc_path: str) -> float:
     return total  # Million EUR/Jahr
 
 
-def fetch_eur_to_chf() -> float:
-    """Aktueller EUR/CHF-Wechselkurs, live via Frankfurter API (basiert auf EZB-Referenzkursen),
-    statt hartcodiert."""
-    response = requests.get("https://api.frankfurter.dev/v1/latest", params={"from": "EUR", "to": "CHF"})
+def fetch_eur_to_chf(date: str = None) -> float:
+    """EUR/CHF-Wechselkurs via Frankfurter API (basiert auf EZB-Referenzkursen), statt hartcodiert.
+    date=None: aktueller Kurs (/latest, für explorative Läufe); date="YYYY-MM-DD": Kurs dieses
+    Datums (reproduzierbar, siehe PRICE_REFERENCE_DATE)."""
+    endpoint = date if date is not None else "latest"
+    response = requests.get(f"https://api.frankfurter.dev/v1/{endpoint}", params={"from": "EUR", "to": "CHF"})
     response.raise_for_status()
     return response.json()["rates"]["CHF"]
 
@@ -519,7 +519,7 @@ def compute_price_change(nc_path: str, year: int = PRICE_REFERENCE_YEAR, categor
     als z.B. bei Netto-Export."""
     system_cost = load_scenario_system_cost(nc_path)
     demand = aggregate_national(load_scenario_demand(nc_path), "demand_gwh")
-    eur_to_chf = eur_to_chf if eur_to_chf is not None else fetch_eur_to_chf()
+    eur_to_chf = eur_to_chf if eur_to_chf is not None else fetch_eur_to_chf(date=PRICE_REFERENCE_DATE)
     cost_per_kwh_chf = (system_cost / demand) * eur_to_chf
     simulated_rp_kwh = cost_per_kwh_chf * 100 * (1 + PRICE_MARGIN)
     ref = elcom_ref if elcom_ref is not None else get_elcom_reference_price(year, category)
@@ -553,15 +553,18 @@ def compute_all_attributes(nc_path: str, area_dict: dict, elcom_ref: dict, eur_t
         **compute_ownership_shares(capacity_df),
         **compute_technology_mix_shares(capacity_df),
         "price_change": compute_price_change(nc_path, elcom_ref=elcom_ref, eur_to_chf=eur_to_chf),
+        # Offizielle Kostenänderung ggü. EP2050+ (Mellot Table 3), kein Choice-Modell-Attribut;
+        # für den Vergleich Präferenz- vs. Kostenrang (NaN für baseline, nicht in Table 3)
+        "mellot_cost_change_pct": MELLOT_COST_CHANGE_PCT[scenario_id_from_filename(os.path.basename(nc_path))],
     }
 
 
-def compute_all_scenarios(scenario_dir: str = SCENARIO_DIR, area_csv_path: str = None) -> pd.DataFrame:
+def compute_all_scenarios(scenario_dir: str = SCENARIO_DIR, area_csv_path: str = CANTON_AREA_CSV_PATH) -> pd.DataFrame:
     """Läuft alle fertigen Attribut-Funktionen über alle Szenario-Dateien; ElCom-Referenzpreis und
     EUR/CHF-Kurs werden einmal geholt (nicht pro Szenario) und wiederverwendet."""
     area_dict = load_canton_area(area_csv_path)
     elcom_ref = get_elcom_reference_price()
-    eur_to_chf = fetch_eur_to_chf()
+    eur_to_chf = fetch_eur_to_chf(date=PRICE_REFERENCE_DATE)
 
     rows = []
     for filename in sorted(os.listdir(scenario_dir)):
@@ -596,7 +599,7 @@ def get_swissgrid_report_url(year: int) -> str:
     return match.group(1)
 
 
-def download_swissgrid_report(year: int = TRANSMISSION_REFERENCE_YEAR, out_dir: str = "../data/raw/") -> str:
+def download_swissgrid_report(year: int = TRANSMISSION_REFERENCE_YEAR, out_dir: str = RAW_DIR) -> str:
     """Lädt den Swissgrid-Jahresbericht für ein gegebenes Jahr herunter und speichert ihn lokal."""
     url = get_swissgrid_report_url(year)
     response = requests.get(url)

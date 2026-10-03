@@ -12,6 +12,12 @@ CHOICE_MODEL_PATH = PROJECT_ROOT / "data" / "raw" / "choice-model-jan-2026.nc"
 # -- nur noch von choice_model.py / 02_single_scenario.ipynb genutzt
 DATA_PATH = PROJECT_ROOT / "data" / "raw" / "choice-model-inference.nc"
 SCENARIOS_PATH = PROJECT_ROOT / "data" / "manual" / "scenarios.csv"
+RAW_DIR = PROJECT_ROOT / "data" / "raw"
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+# Calliope-Ergebnisse von Mellot et al., ein .nc pro Szenario
+SCENARIO_DIR = RAW_DIR / "scenario_data"
+# Kantonsflächen (km², Statista/BFS), für relative Landnutzung
+CANTON_AREA_CSV_PATH = RAW_DIR / "flache_der_schweiz_nach_kantonen_in_quadratkilometern.csv"
 
 ATTRIBUTE_MAX_VALUES = {
     "LAND": 0.08,
@@ -130,7 +136,13 @@ PV_REFERENCE_TECHS = ["roof_mounted_pv", "open_field_pv", "alpine_pv_subsidised"
 
 PRICE_MARGIN = 0.10          # Tröndle's assumed 10% revenue margin
 
+# Bereits reproduzierbar, kein Pinning nötig: ElCom-Tarife ändern sich nur einmal pro Jahr und
+# das Jahr ist fest -> get_elcom_reference_price() liefert bei jedem Lauf denselben Referenzpreis.
 PRICE_REFERENCE_YEAR = 2025  # Baseline-Jahr des Choice-Experiments ("...compared with 2022's levels")
+# EZB-Referenzkurs EUR/CHF für die Preisumrechnung, fest statt /latest (Snakemake-Reproduzierbarkeit).
+# Datum des Kurses (0.9461), mit dem die validierten Werte in scenario_attributes_summary.csv
+# berechnet wurden (aus den gespeicherten price_change zurückgerechnet, einziger Treffer im Zeitraum).
+PRICE_REFERENCE_DATE = "2026-09-29"
 TRANSMISSION_REFERENCE_YEAR = PRICE_REFERENCE_YEAR  # gleiche "heute"-Referenzjahr-Logik wie Price
 
 # Spalte in scenario_attributes_summary (compute_all_attributes) -> attribute-Koordinate im

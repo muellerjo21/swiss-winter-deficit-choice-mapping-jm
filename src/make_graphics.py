@@ -10,6 +10,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from pathlib import Path
 
 from config import (
     PROJECT_ROOT, CHOICE_MODEL_PATH, ATTRIBUTE_COLUMN_TO_MODEL_TERM, SCENARIO_DISPLAY_NAMES,
@@ -56,24 +57,27 @@ def display_name(scenario_id: str) -> str:
     return SCENARIO_DISPLAY_NAMES.get(scenario_id, scenario_id)
 
 
-def save(fig, name: str) -> None:
-    GRAPHICS_DIR.mkdir(exist_ok=True)
-    fig.savefig(GRAPHICS_DIR / f"{name}.png", dpi=300)
-    fig.savefig(GRAPHICS_DIR / f"{name}.pdf")
-    fig.savefig(GRAPHICS_DIR / f"{name}.svg")
+def save(fig, name: str, out_dir: Path = GRAPHICS_DIR) -> None:
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_dir / f"{name}.png", dpi=300)
+    # Ohne Zeitstempel in den Metadaten -> bytegleiche Dateien bei gleichem Input
+    fig.savefig(out_dir / f"{name}.pdf", metadata={"CreationDate": None})
+    fig.savefig(out_dir / f"{name}.svg", metadata={"Date": None})
     plt.close(fig)
 
 
-def load_results() -> tuple[pd.DataFrame, pd.DataFrame]:
-    attrs = pd.read_csv(PROCESSED_DIR / "scenario_attributes_summary.csv")
-    rankings = pd.read_csv(PROCESSED_DIR / "utility_rankings.csv")
+def load_results(attrs_path: Path = PROCESSED_DIR / "scenario_attributes_summary.csv",
+                 rankings_path: Path = PROCESSED_DIR / "utility_rankings.csv") -> tuple[pd.DataFrame, pd.DataFrame]:
+    attrs = pd.read_csv(attrs_path)
+    rankings = pd.read_csv(rankings_path)
     return attrs, rankings
 
 
 # ---------------------------------------------------------------------------
 # 1. Choice-Modell-Rang vs. Mellot-Kostenrang
 # ---------------------------------------------------------------------------
-def fig_rank_vs_cost(rankings: pd.DataFrame) -> None:
+def fig_rank_vs_cost(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR) -> None:
     df = rankings[rankings["scenario_id"] != REFERENCE_SCENARIO].copy()
     df["diff"] = df["rank_national"] - df["rank_mellot_cost"]
 
@@ -124,13 +128,13 @@ def fig_rank_vs_cost(rankings: pd.DataFrame) -> None:
     ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.11), ncol=2, frameon=False)
     fig.text(0, -0.13, f"Rank difference in brackets for |Δ| ≥ 2. Not shown: {display_name(REFERENCE_SCENARIO)} "
              "(not in Mellot Table 3; choice-model rank 12).", fontsize=8.5, color=TEXT_SECONDARY, ha="left")
-    save(fig, "fig1_rank_choice_vs_cost")
+    save(fig, "fig1_rank_choice_vs_cost", out_dir)
 
 
 # ---------------------------------------------------------------------------
 # 2. Forest Plot: Utility mit 94%-Credible-Interval
 # ---------------------------------------------------------------------------
-def fig_forest(rankings: pd.DataFrame) -> None:
+def fig_forest(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR) -> None:
     panels = [("DE_CH", "German-speaking Switzerland (DE-CH)"),
               ("FR_CH", "French-speaking Switzerland (FR-CH)"),
               ("national", "Switzerland, population-weighted")]
@@ -162,7 +166,7 @@ def fig_forest(rankings: pd.DataFrame) -> None:
     fig.text(0, -0.01, "Credible intervals reflect posterior uncertainty of the choice-model coefficients only. "
              f"Open marker: {display_name(REFERENCE_SCENARIO)}.", fontsize=8.5, color=TEXT_SECONDARY, ha="left")
     fig.tight_layout(h_pad=1.8)
-    save(fig, "fig2_utility_forest")
+    save(fig, "fig2_utility_forest", out_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -181,9 +185,10 @@ CONTRIBUTION_GROUPS = [  # (Label, Modell-Terme)
 CONTRIBUTION_COLORS = [SERIES[0], SERIES[1], SERIES[2], SERIES[3], SERIES[4], SERIES[6], NEUTRAL]
 
 
-def compute_contributions(attrs: pd.DataFrame, region: str, scale: dict) -> pd.DataFrame:
+def compute_contributions(attrs: pd.DataFrame, region: str, scale: dict,
+                          model_path: Path = CHOICE_MODEL_PATH) -> pd.DataFrame:
     """beta_mean * x_scaled pro Szenario und Beitragsgruppe."""
-    beta = load_beta_partworths_mean(CHOICE_MODEL_PATH, country=region).set_index("attribute")["beta_mean"]
+    beta = load_beta_partworths_mean(model_path, country=region).set_index("attribute")["beta_mean"]
     rows = {}
     for _, r in attrs.iterrows():
         per_term = scale_scenario_attributes(r, scale) * beta.loc[list(ATTRIBUTE_COLUMN_TO_MODEL_TERM.values())]
@@ -191,17 +196,18 @@ def compute_contributions(attrs: pd.DataFrame, region: str, scale: dict) -> pd.D
     return pd.DataFrame(rows).T
 
 
-def fig_contributions(attrs: pd.DataFrame, rankings: pd.DataFrame, centered: bool, name: str, note: str) -> None:
+def fig_contributions(attrs: pd.DataFrame, rankings: pd.DataFrame, centered: bool, name: str, note: str,
+        model_path: Path = CHOICE_MODEL_PATH, out_dir: Path = GRAPHICS_DIR) -> None:
     """centered=True: jedes Segment = Beitrag minus Mittel dieses Attributs über alle Szenarien
     (pro Region). Konstante Terme verschwinden, sichtbar bleibt, was die Utility-Unterschiede
     erklärt. Die Raute liegt dann bei U - mean(U) (= Summe der sichtbaren Segmente); die obere
     Achse ist um mean(U) verschoben und zeigt dort die echte Utility ab."""
-    scale = load_attribute_scale(CHOICE_MODEL_PATH)
+    scale = load_attribute_scale(model_path)
     order = rankings.sort_values("utility_national", ascending=True)["scenario_id"].tolist()  # beste oben
     regions = [("DE-CH", "DE-CH"), ("FR-CH", "FR-CH")]
     fig, axes = plt.subplots(1, 2, figsize=(10, 6.2), sharey=True)
     for ax, (region, title) in zip(axes, regions):
-        contrib = compute_contributions(attrs, region, scale)
+        contrib = compute_contributions(attrs, region, scale, model_path)
         offset = contrib.sum(axis=1).mean() if centered else 0.0  # mean(U) über die Szenarien
         if centered:
             contrib = contrib - contrib.mean(axis=0)
@@ -239,7 +245,7 @@ def fig_contributions(attrs: pd.DataFrame, rankings: pd.DataFrame, centered: boo
     fig.legend(handles, labels, loc="upper center", ncol=4, frameon=False, bbox_to_anchor=(0.55, 1.08))
     fig.text(0, -0.02, note, fontsize=8.5, color=TEXT_SECONDARY, ha="left", va="top")
     fig.tight_layout()
-    save(fig, name)
+    save(fig, name, out_dir)
 
 
 CONTRIBUTIONS_CENTERED_NOTE = (
@@ -258,7 +264,7 @@ CONTRIBUTIONS_ABSOLUTE_NOTE = (
 # ---------------------------------------------------------------------------
 # 4. Slope-Chart DE-CH vs. FR-CH
 # ---------------------------------------------------------------------------
-def fig_slope_regions(rankings: pd.DataFrame) -> None:
+def fig_slope_regions(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR) -> None:
     df = rankings.copy()
     fig, ax = plt.subplots(figsize=(6.5, 6.2))
     for _, r in df.iterrows():
@@ -290,20 +296,21 @@ def fig_slope_regions(rankings: pd.DataFrame) -> None:
         plt.Line2D([], [], color=NEUTRAL, lw=1.2, label="Same rank"),
     ]
     ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.02), ncol=3, frameon=False)
-    save(fig, "fig4_rank_de_vs_fr")
+    save(fig, "fig4_rank_de_vs_fr", out_dir)
 
 
 # ---------------------------------------------------------------------------
 # 5. Kosten vs. vorhergesagte Präferenz (aktualisierte Version von cost_vs_preference.png)
 # ---------------------------------------------------------------------------
-def fig_cost_vs_preference(attrs: pd.DataFrame) -> None:
+def fig_cost_vs_preference(attrs: pd.DataFrame,
+        model_path: Path = CHOICE_MODEL_PATH, out_dir: Path = GRAPHICS_DIR) -> None:
     """Oben: Mellot-Kostenänderung ggü. EP2050+; unten: Softmax-Choice-Share (national) über die
     11 Szenarien aus Mellot Table 3, mit 94%-Credible-Interval aus den Posterior-Samples."""
     df = attrs.dropna(subset=["mellot_cost_change_pct"]).sort_values("mellot_cost_change_pct").reset_index(drop=True)
-    scale = load_attribute_scale(CHOICE_MODEL_PATH)
+    scale = load_attribute_scale(model_path)
     national = 0
     for region, w in LANGUAGE_REGION_WEIGHTS.items():
-        beta_samples = load_beta_partworths_samples(CHOICE_MODEL_PATH, country=region)
+        beta_samples = load_beta_partworths_samples(model_path, country=region)
         national = national + w * np.stack([compute_utility_samples(r, beta_samples, scale) for _, r in df.iterrows()])
     shares = compute_choice_shares(dict(zip(df["scenario_id"], national)))
     share = np.array([100 * shares[s].mean() for s in df["scenario_id"]])
@@ -336,17 +343,23 @@ def fig_cost_vs_preference(attrs: pd.DataFrame) -> None:
              "scenarios (IIA assumption),\nbars = posterior mean, whiskers = 94% credible interval.",
              fontsize=8.5, color=TEXT_SECONDARY, ha="left")
     fig.tight_layout(h_pad=1.5)
-    save(fig, "fig5_cost_vs_preference")
+    save(fig, "fig5_cost_vs_preference", out_dir)
+
+
+def make_all(attrs: pd.DataFrame, rankings: pd.DataFrame, model_path: Path = CHOICE_MODEL_PATH,
+             out_dir: Path = GRAPHICS_DIR) -> None:
+    """Alle Thesis-Abbildungen nach out_dir (je png/pdf/svg; Liste im Snakefile: FIGURES)."""
+    fig_rank_vs_cost(rankings, out_dir=out_dir)
+    fig_forest(rankings, out_dir=out_dir)
+    fig_contributions(attrs, rankings, centered=True, name="fig3_utility_contributions",
+                      note=CONTRIBUTIONS_CENTERED_NOTE, model_path=model_path, out_dir=out_dir)
+    fig_contributions(attrs, rankings, centered=False, name="figA1_utility_contributions_absolute",
+                      note=CONTRIBUTIONS_ABSOLUTE_NOTE, model_path=model_path, out_dir=out_dir)
+    fig_slope_regions(rankings, out_dir=out_dir)
+    fig_cost_vs_preference(attrs, model_path=model_path, out_dir=out_dir)
 
 
 if __name__ == "__main__":
     attrs, rankings = load_results()
-    fig_rank_vs_cost(rankings)
-    fig_forest(rankings)
-    fig_contributions(attrs, rankings, centered=True, name="fig3_utility_contributions",
-                      note=CONTRIBUTIONS_CENTERED_NOTE)
-    fig_contributions(attrs, rankings, centered=False, name="figA1_utility_contributions_absolute",
-                      note=CONTRIBUTIONS_ABSOLUTE_NOTE)
-    fig_slope_regions(rankings)
-    fig_cost_vs_preference(attrs)
+    make_all(attrs, rankings)
     print(f"Saved graphics to {GRAPHICS_DIR}")

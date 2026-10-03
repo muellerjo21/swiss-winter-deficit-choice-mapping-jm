@@ -29,3 +29,8 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+
+# Snakemake
+build/
+.snakemake/
+dag.pdf

@@ -1,0 +1,16 @@
+name: report
+channels:
+    - conda-forge
+dependencies:
+    - python=3.12
+    - pango=1.56.3
+    - cairocffi=1.7.1
+    - psutil=7.0.0
+    - weasyprint=62.3
+    - pandoc=3.6.2
+    - pandoc-crossref=0.3.18.1
+    - katex=0.16.9
+    - brotlipy=0.7.0
+    - pip=25.1.1
+    - pip:
+        - pantable==0.14.2

@@ -1,0 +1,7 @@
+# The right place for all your configuration values.
+slope: 4
+x0: 5
+push:
+    from: build
+    to: archive
+    exclude-paths:

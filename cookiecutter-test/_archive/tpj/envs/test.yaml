@@ -1,0 +1,9 @@
+name: test
+channels:
+    - conda-forge
+dependencies:
+    - python=3.12
+    - numpy=2.3.0
+    - pandas=2.3.0
+    - pytest=8.4.1
+    - pytest-html=4.1.1

@@ -1,0 +1,35 @@
+# Konfiguration der Snakemake-Pipeline. Für die Pipeline massgeblich sind die Werte hier; die
+# gleichnamigen Konstanten in src/config.py bleiben die Defaults für Notebooks/interaktive Läufe.
+
+data:
+    scenario_dir: data/raw/scenario_data
+    canton_area: data/raw/flache_der_schweiz_nach_kantonen_in_quadratkilometern.csv
+    choice_model: data/raw/choice-model-jan-2026.nc
+
+price:
+    # ElCom-Referenzpreis: Jahresgranularität, dadurch bereits reproduzierbar
+    reference_year: 2025
+    category: H4
+    # EZB-Kurs EUR/CHF dieses Datums (0.9461), mit dem die Referenzwerte berechnet wurden
+    reference_date: "2026-09-29"
+
+# Szenario-ID (Wildcard) -> .nc-Dateiname in data.scenario_dir. Explizites Mapping statt Glob,
+# weil die Dateinamen Kommas enthalten.
+scenarios:
+    baseline: "barrier_baseline,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+    baseline_no_self_sufficiency_result_4H: "barrier_baseline_no_self_sufficiency_result_4H.nc"
+    policy_alpine_pv: "barrier_policy_alpine_pv,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+    policy_chp: "barrier_policy_chp,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+    policy_h2_imports_only: "barrier_policy_h2_imports_only,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+    policy_mix: "barrier_policy_mix,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+    policy_remix: "barrier_policy_remix,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+    policy_roof_pv: "barrier_policy_roof_pv,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+    policy_sccgt_daccs: "barrier_policy_sccgt_daccs,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+    policy_sccgt_no_h2: "barrier_policy_sccgt_no_h2,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+    policy_sccgt_plus_h2: "barrier_policy_sccgt_plus_h2,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+    policy_wind_x2: "barrier_policy_wind_x2,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+
+# Eingefrorene, validierte Referenzergebnisse für die Rule "test"
+reference:
+    attributes: data/processed/scenario_attributes_summary.csv
+    rankings: data/processed/utility_rankings.csv

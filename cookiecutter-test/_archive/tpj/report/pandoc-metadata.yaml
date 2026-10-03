@@ -1,0 +1,33 @@
+---
+title: test-project-josua
+author:
+    - josua mueller
+institute: ETH
+keywords:
+    - reproducible-research
+abstract: |
+    testing
+bibliography: literature.yaml
+csl: apa.csl
+link-citations: True
+css:
+    - reset.css
+    - https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css
+    - report.css
+lang: en-GB
+figureTemplate: <span>$$figureTitle$$ $$i$$$$titleDelim$$</span> $$t$$
+tableTemplate: <span>$$tableTitle$$ $$i$$$$titleDelim$$</span> $$t$$
+figPrefix:
+    - "Figure"
+    - "Figures"
+tblPrefix:
+    - "Table"
+    - "Tables"
+eqnPrefix:
+    - "Equation"
+    - "Equations"
+secPrefix:
+    - "Section"
+    - "Sections"
+linkReferences: True
+date: 2026-09-23---
