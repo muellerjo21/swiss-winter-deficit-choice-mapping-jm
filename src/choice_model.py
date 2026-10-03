@@ -1,12 +1,29 @@
+from functools import cache
+
 import pandas as pd
 import numpy as np
 
-from config import ATTRIBUTE_MAX_VALUES, SWISS_LAND_AREA_KM2, TECHNOLOGY_KEYS
+from config import ATTRIBUTE_MAX_VALUES, TECHNOLOGY_KEYS, CANTON_AREA_CSV_PATH, CANTON_MERGES
+from load_data import load_canton_area
+
+# Official total area of Switzerland (BFS), only used as a sanity check for the canton CSV
+OFFICIAL_SWISS_AREA_KM2 = 41_285
 
 # TECHNOLOGY_KEYS holds the fitted technologies (e.g. "TECHNOLOGY:Open-field PV").
 # "Rooftop PV" is the implicit reference category (beta = 0, no key in the model),
 # so it's added here explicitly as the one allowed value with no matching key.
 VALID_TECHNOLOGIES = {key.split(":", 1)[1] for key in TECHNOLOGY_KEYS} | {"Rooftop PV"}
+
+
+@cache
+def swiss_total_area_km2(csv_path=CANTON_AREA_CSV_PATH) -> float:
+    """Total area of Switzerland as the sum of the 26 individual cantons in the canton CSV.
+    load_canton_area() additionally contains the merged codes (AI_AR, BL_BS, NW_OW), which are
+    skipped here to avoid double counting."""
+    area = load_canton_area(csv_path)
+    total_area_km2 = sum(v for code, v in area.items() if code not in CANTON_MERGES)
+    assert abs(total_area_km2 - OFFICIAL_SWISS_AREA_KM2) < 50, f"Unexpected total area: {total_area_km2}"
+    return total_area_km2
 
 
 def scale_attribute(raw_value: float, attribute: str) -> float:
@@ -50,7 +67,7 @@ def compute_utility(
             f"got {dominant_technology!r}"
         )
 
-    land_share = scenario_row["land_use_km2_approx"] / SWISS_LAND_AREA_KM2
+    land_share = scenario_row["land_use_km2_approx"] / swiss_total_area_km2()
     land_scaled = scale_attribute(land_share, "LAND")
 
     price_raw_decimal = scenario_row["cost_change_pct_vs_ep2050"] / 100

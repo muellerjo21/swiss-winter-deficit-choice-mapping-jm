@@ -24,9 +24,9 @@ SCENARIO_DIR = RAW_DIR / "scenario_data"
 CANTON_AREA_CSV_PATH = RAW_DIR / "flache_der_schweiz_nach_kantonen_in_quadratkilometern.csv"
 
 # LEGACY (old model, only used by choice_model.py / 02_single_scenario.ipynb): attribute maxima
-# from Tröndle et al.'s paper, the national land area and the old technology keys. The current
-# pipeline reads the scaling from the model file (load_attribute_scale) and computes relative land
-# use per canton (CANTON_AREA_CSV_PATH).
+# from Tröndle et al.'s paper and the old technology keys. The current pipeline reads the scaling
+# from the model file (load_attribute_scale) and computes relative land use per canton
+# (CANTON_AREA_CSV_PATH).
 ATTRIBUTE_MAX_VALUES = {
     "LAND": 0.08,
     "PRICES": 0.60,
@@ -34,7 +34,6 @@ ATTRIBUTE_MAX_VALUES = {
     "TRANSMISSION": 0.75,
 }
 
-SWISS_LAND_AREA_KM2 = 41_285
 TECHNOLOGY_KEYS = ["TECHNOLOGY:Open-field PV", "TECHNOLOGY:Wind"]
 
 # Canton names (German) -> BFS abbreviations
