@@ -2,16 +2,13 @@
 Load and extract fitted coefficients from Tröndle, Mey & Lilliestam's (2025)
 discrete choice model.
 
-Two model files exist:
-- choice-model-jan-2026.nc (CHOICE_MODEL_PATH): the current model used throughout this
-  pipeline. 11 attributes, fitted per language region (country coord:
-  DA/DE/DE-CH/EN/FR/FR-CH/PL/PT/SO/SV). For Switzerland, select DE-CH or FR-CH per canton
-  via CANTON_LANGUAGE -- there is no generic "Switzerland" or "NOT_SAMPLED" level here.
-- choice-model-inference.nc (DATA_PATH): Tim's original published-paper model. 6 attributes,
-  fitted per country (country coord: DNK/DEU/PRT/POL/NOT_SAMPLED). Only used by
-  choice_model.py / 02_single_scenario.ipynb.
+The pipeline uses choice-model-jan-2026.nc (CHOICE_MODEL_PATH): 11 attributes, fitted per
+language region (country coord: DA/DE/DE-CH/EN/FR/FR-CH/PL/PT/SO/SV). For Switzerland, select
+DE-CH or FR-CH per canton via CANTON_LANGUAGE -- there is no generic "Switzerland" or
+"NOT_SAMPLED" level here. The older published-paper model (6 attributes, per country) is only
+used by the unmaintained first approach in legacy/.
 
-See CLAUDE.md and the project proposal for background on the model.
+See the project proposal for background on the model.
 """
 
 import os
@@ -42,11 +39,11 @@ def load_beta_partworths_mean(data_path, country: str) -> pd.DataFrame:
     Parameters
     ----------
     data_path : str or Path
-        Path to the .nc file (CHOICE_MODEL_PATH or DATA_PATH).
+        Path to the .nc file (CHOICE_MODEL_PATH, or legacy_config.DATA_PATH).
     country : str
         Which level of the model's `country` coordinate to select.
         For CHOICE_MODEL_PATH: one of DA/DE/DE-CH/EN/FR/FR-CH/PL/PT/SO/SV.
-        For DATA_PATH: one of DNK/DEU/PRT/POL/NOT_SAMPLED.
+        For legacy_config.DATA_PATH: one of DNK/DEU/PRT/POL/NOT_SAMPLED.
         No default on purpose -- the valid values differ between the two files,
         so picking a wrong implicit default silently gives the wrong region.
 
@@ -77,7 +74,7 @@ def load_beta_partworths_samples(data_path, country: str) -> dict:
     Parameters
     ----------
     data_path : str or Path
-        Path to the .nc file (CHOICE_MODEL_PATH or DATA_PATH).
+        Path to the .nc file (CHOICE_MODEL_PATH, or legacy_config.DATA_PATH).
     country : str
         See `load_beta_partworths_mean` for valid values per file.
 

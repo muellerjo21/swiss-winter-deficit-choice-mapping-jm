@@ -47,12 +47,16 @@ The two live data sources are pinned in `config/default.yaml`: the ElCom referen
 ├── src/               # mapping and prediction library code
 ├── data/
 │   ├── raw/           # downloaded Zenodo data (git-ignored)
-│   ├── manual/        # manually compiled scenario data
 │   └── processed/     # frozen, validated reference results
-├── notebooks/         # exploratory analysis
-├── graphics/          # frozen reference figures
+├── graphics/          # frozen thesis figures
+├── legacy/            # first approach and exploratory notebooks (not maintained, see legacy/README.md)
 └── build/             # workflow results (git-ignored)
 ```
+
+The regression tests only use `data/processed/scenario_attributes_summary.csv` and
+`data/processed/utility_rankings.csv`. The other files in `data/processed/`
+(`beta_real_units.csv`, `scenario_*.csv`) and `graphics/cost_vs_preference.png` are outdated
+intermediate products of the first approach in `legacy/`.
 
 ## Status
 

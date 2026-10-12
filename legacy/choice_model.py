@@ -3,7 +3,8 @@ from functools import cache
 import pandas as pd
 import numpy as np
 
-from config import ATTRIBUTE_MAX_VALUES, TECHNOLOGY_KEYS, CANTON_AREA_CSV_PATH, CANTON_MERGES
+from config import CANTON_AREA_CSV_PATH, CANTON_MERGES
+from legacy_config import ATTRIBUTE_MAX_VALUES, TECHNOLOGY_KEYS
 from load_data import load_canton_area
 
 # Official total area of Switzerland (BFS), only used as a sanity check for the canton CSV
