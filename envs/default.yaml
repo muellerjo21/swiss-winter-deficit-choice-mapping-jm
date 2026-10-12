@@ -17,3 +17,4 @@ dependencies:
     - requests=2.34.2
     - certifi
     - sparqlwrapper=2.0.0
+    - pyyaml=6.0.3

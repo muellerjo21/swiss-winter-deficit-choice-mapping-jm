@@ -1,5 +1,6 @@
-# Konfiguration der Snakemake-Pipeline. Für die Pipeline massgeblich sind die Werte hier; die
-# gleichnamigen Konstanten in src/config.py bleiben die Defaults für Notebooks/interaktive Läufe.
+# Konfiguration der Snakemake-Pipeline. Der Abschnitt "price" ist die einzige Quelle für die
+# Preisparameter: src/config.py liest PRICE_REFERENCE_YEAR, PRICE_CATEGORY und
+# PRICE_REFERENCE_DATE von hier, damit Notebooks und interaktive Läufe dieselben Werte nutzen.
 
 data:
     scenario_dir: data/raw/scenario_data
@@ -10,7 +11,8 @@ price:
     # ElCom-Referenzpreis: Jahresgranularität, dadurch bereits reproduzierbar
     reference_year: 2025
     category: H4
-    # EZB-Kurs EUR/CHF dieses Datums (0.9461), mit dem die Referenzwerte berechnet wurden
+    # EZB-Kurs EUR/CHF dieses Datums (0.9461), mit dem die Referenzwerte berechnet wurden.
+    # Gequotet lassen, sonst liest YAML ein date-Objekt statt eines Strings.
     reference_date: "2026-09-29"
 
 # Szenario-ID (Wildcard) -> .nc-Dateiname in data.scenario_dir. Explizites Mapping statt Glob,

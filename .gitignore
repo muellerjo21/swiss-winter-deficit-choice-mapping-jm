@@ -34,3 +34,7 @@ Thumbs.db
 build/
 .snakemake/
 dag.pdf
+
+# Legacy notebook outputs (see legacy/README.md)
+legacy/output/*
+!legacy/output/.gitkeep

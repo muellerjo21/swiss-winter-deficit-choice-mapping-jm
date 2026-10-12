@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import yaml
+
 # Directory containing config.py (src/)
 SRC_DIR = Path(__file__).resolve().parent
 
@@ -148,14 +150,22 @@ PV_REFERENCE_TECHS = ["roof_mounted_pv", "open_field_pv", "alpine_pv_subsidised"
 
 PRICE_MARGIN = 0.10          # Tröndle's assumed 10% revenue margin
 
-# Already reproducible, no pinning needed: ElCom tariffs change only once per year and the year
-# is fixed -> get_elcom_reference_price() returns the same reference price on every run.
-PRICE_REFERENCE_YEAR = 2025  # Baseline year of the choice experiment ("...compared with 2022's levels")
+# Price reference parameters: single source is config/default.yaml (section "price"), read here so
+# that notebooks and interactive runs use the same values as the Snakemake pipeline.
+_WORKFLOW_CONFIG = yaml.safe_load((PROJECT_ROOT / "config" / "default.yaml").read_text())
+
+# ElCom reference year. Already reproducible, no pinning needed: ElCom tariffs change only once per
+# year and the year is fixed -> get_elcom_reference_price() returns the same reference price on
+# every run. The base year of the price change in the Jan 2026 choice model is still to be
+# clarified with the supervisor.
+PRICE_REFERENCE_YEAR = _WORKFLOW_CONFIG["price"]["reference_year"]
+# ElCom consumption category (H4 = standard household)
+PRICE_CATEGORY = _WORKFLOW_CONFIG["price"]["category"]
 # ECB EUR/CHF reference rate for the price conversion, fixed instead of /latest (Snakemake
 # reproducibility). Date of the rate (0.9461) used to compute the validated values in
 # scenario_attributes_summary.csv (back-calculated from the stored price_change, the only
-# match in the period).
-PRICE_REFERENCE_DATE = "2026-09-29"
+# match in the period). Must stay quoted in the YAML, otherwise it is parsed as a date object.
+PRICE_REFERENCE_DATE = _WORKFLOW_CONFIG["price"]["reference_date"]
 TRANSMISSION_REFERENCE_YEAR = PRICE_REFERENCE_YEAR  # same "today" reference-year logic as price
 
 # Column in scenario_attributes_summary (compute_all_attributes) -> attribute coordinate in the

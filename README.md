@@ -32,7 +32,7 @@ Then run the entire workflow (attribute extraction -> utility -> figures -> regr
 
 Results go to `build/` (git-ignored). Each rule runs in its own conda environment (`envs/`), pinned to the versions the reference results were validated with. The rule `test` compares `build/` against the frozen reference results in `data/processed/`. Other useful rules: `snakemake --list`, `snakemake dag` (dependency graph as `build/dag.pdf`), `snakemake clean`.
 
-The two live data sources are pinned in `config/default.yaml`: the ElCom reference price by year, the ECB EUR/CHF rate by date.
+The two live data sources are pinned in `config/default.yaml`: the ElCom reference price by year, the ECB EUR/CHF rate by date. This file is the single source for these price parameters; `src/config.py` reads them from there, so notebooks and the pipeline use the same values.
 
 ## Repository structure
 

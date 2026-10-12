@@ -24,7 +24,7 @@ from SPARQLWrapper import SPARQLWrapper, JSON
 
 from config import (
     CANTON_LANGUAGE, FOREIGN_CODES, CANTON_NAME_TO_CODE, CANTON_MERGES,
-    CAPACITY_DENSITY_GW_PER_KM2, OWNERSHIP_MAPPING, PRICE_MARGIN, PRICE_REFERENCE_YEAR, PRICE_REFERENCE_DATE,
+    CAPACITY_DENSITY_GW_PER_KM2, OWNERSHIP_MAPPING, PRICE_MARGIN, PRICE_REFERENCE_YEAR, PRICE_REFERENCE_DATE, PRICE_CATEGORY,
     TECH_SOURCE_MAPPING, PV_REFERENCE_TECHS, TRANSMISSION_REFERENCE_YEAR, CHOICE_MODEL_PATH,
     SECTOR_COUPLING_ELEC_TECHS, SCENARIO_DIR, CANTON_AREA_CSV_PATH, RAW_DIR, PROCESSED_DIR,
     MELLOT_COST_CHANGE_PCT,
@@ -435,9 +435,10 @@ def compute_technology_mix_shares(capacity_df: pd.DataFrame, mapping: dict = TEC
 ELCOM_SPARQL_ENDPOINT = "https://lindas.admin.ch/query"
 
 
-def fetch_elcom_price(year: int, category: str = "H4", product: str = "standard") -> pd.DataFrame:
+def fetch_elcom_price(year: int, category: str, product: str = "standard") -> pd.DataFrame:
     """Holt ElCom-Strompreise (Rp./kWh) pro Gemeinde direkt via LINDAS-SPARQL-Endpoint,
-    statt Werte hart zu codieren. category='H4' = Standard-Haushaltskategorie."""
+    statt Werte hart zu codieren. category z.B. 'H4' = Standard-Haushaltskategorie
+    (PRICE_CATEGORY bzw. price.category in config/default.yaml)."""
     query = f"""
     PREFIX schema: <http://schema.org/>
     PREFIX cube: <https://cube.link/>
@@ -473,7 +474,7 @@ def fetch_elcom_price(year: int, category: str = "H4", product: str = "standard"
     return pd.DataFrame(rows)
 
 
-def get_elcom_reference_price(year: int = PRICE_REFERENCE_YEAR, category: str = "H4") -> dict:
+def get_elcom_reference_price(year: int, category: str) -> dict:
     """Nationaler Median-Strompreis und Steuer-/Abgaben-Komponente, direkt von ElCom via LINDAS
     (kein Hardcoding). Rückgabe in Rp./kWh."""
     df = fetch_elcom_price(year, category)
@@ -498,31 +499,27 @@ def load_scenario_system_cost(nc_path: str) -> float:
     return total  # Million EUR/Jahr
 
 
-def fetch_eur_to_chf(date: str = None) -> float:
+def fetch_eur_to_chf(date: str) -> float:
     """EUR/CHF-Wechselkurs via Frankfurter API (basiert auf EZB-Referenzkursen), statt hartcodiert.
-    date=None: aktueller Kurs (/latest, für explorative Läufe); date="YYYY-MM-DD": Kurs dieses
-    Datums (reproduzierbar, siehe PRICE_REFERENCE_DATE)."""
-    endpoint = date if date is not None else "latest"
-    response = requests.get(f"https://api.frankfurter.dev/v1/{endpoint}", params={"from": "EUR", "to": "CHF"})
+    date="YYYY-MM-DD": Kurs dieses Datums (reproduzierbar, siehe PRICE_REFERENCE_DATE)."""
+    response = requests.get(f"https://api.frankfurter.dev/v1/{date}", params={"from": "EUR", "to": "CHF"})
     response.raise_for_status()
     return response.json()["rates"]["CHF"]
 
 
-def compute_price_change(nc_path: str, year: int = PRICE_REFERENCE_YEAR, category: str = "H4",
-                          elcom_ref: dict = None, eur_to_chf: float = None) -> float:
+def compute_price_change(nc_path: str, elcom_ref: dict, eur_to_chf: float) -> float:
     """Relative Preisänderung ggü. ElCom-Referenzpreis. Bewusst NICHT auf >=0 geclippt
     (im Gegensatz zu Import) -- Price ist ein kontinuierliches, lineares Attribut, milde
     Extrapolation über den Trainingsbereich (0-60% Anstieg) hinaus ist hier vertretbarer
-    als z.B. bei Netto-Export."""
+    als z.B. bei Netto-Export.
+    elcom_ref: Rückgabe von get_elcom_reference_price; eur_to_chf: Rückgabe von fetch_eur_to_chf."""
     system_cost = load_scenario_system_cost(nc_path)
     demand = aggregate_national(load_scenario_demand(nc_path), "demand_gwh")
-    eur_to_chf = eur_to_chf if eur_to_chf is not None else fetch_eur_to_chf(date=PRICE_REFERENCE_DATE)
     cost_per_kwh_chf = (system_cost / demand) * eur_to_chf
     simulated_rp_kwh = cost_per_kwh_chf * 100 * (1 + PRICE_MARGIN)
-    ref = elcom_ref if elcom_ref is not None else get_elcom_reference_price(year, category)
     # Netznutzung (Verteilnetz) ist nicht in den Calliope-Systemkosten enthalten -> konstanter Zuschlag
-    simulated_rp_kwh += ref["taxes_levies_rp_kwh"] + ref["netznutzung_rp_kwh"]
-    return (simulated_rp_kwh - ref["total_rp_kwh"]) / ref["total_rp_kwh"]
+    simulated_rp_kwh += elcom_ref["taxes_levies_rp_kwh"] + elcom_ref["netznutzung_rp_kwh"]
+    return (simulated_rp_kwh - elcom_ref["total_rp_kwh"]) / elcom_ref["total_rp_kwh"]
 
 
 def compute_national_relative_land(nc_path: str, area_dict: dict) -> float:
@@ -560,8 +557,8 @@ def compute_all_scenarios(scenario_dir: str = SCENARIO_DIR, area_csv_path: str =
     """Läuft alle fertigen Attribut-Funktionen über alle Szenario-Dateien; ElCom-Referenzpreis und
     EUR/CHF-Kurs werden einmal geholt (nicht pro Szenario) und wiederverwendet."""
     area_dict = load_canton_area(area_csv_path)
-    elcom_ref = get_elcom_reference_price()
-    eur_to_chf = fetch_eur_to_chf(date=PRICE_REFERENCE_DATE)
+    elcom_ref = get_elcom_reference_price(PRICE_REFERENCE_YEAR, PRICE_CATEGORY)
+    eur_to_chf = fetch_eur_to_chf(PRICE_REFERENCE_DATE)
 
     rows = []
     for filename in sorted(os.listdir(scenario_dir)):
