@@ -1,13 +1,13 @@
-"""Regressionstest: Pipeline-Ergebnisse in build/ gegen die eingefrorenen, validierten
-Referenzen in data/processed/.
+"""Regression test: pipeline results in build/ against the frozen, validated
+references in data/processed/.
 
 Pytest fixtures are provided from within the test runner.
 """
 import numpy as np
 import pytest
 
-ATTRIBUTE_ATOL = 1e-9   # Attribute sind deterministisch (gepinnter EUR/CHF-Kurs) -> praktisch exakt
-UTILITY_ATOL = 0.005    # Utility, CI und P(Rang 1)
+ATTRIBUTE_ATOL = 1e-9   # attributes are deterministic (pinned EUR/CHF rate) -> practically exact
+UTILITY_ATOL = 0.005    # utility, CI and P(rank 1)
 
 
 def _max_abs_diff(actual, expected, columns):

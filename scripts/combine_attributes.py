@@ -1,4 +1,4 @@
-"""Fügt die Attribut-Zeilen aller Szenarien zu scenario_attributes_summary.csv zusammen."""
+"""Combines the attribute rows of all scenarios into scenario_attributes_summary.csv."""
 import pandas as pd
 
 

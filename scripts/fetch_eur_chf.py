@@ -1,4 +1,4 @@
-"""Holt den EZB-Referenzkurs EUR/CHF eines festen Datums (einmal pro Lauf, gecacht in build/)."""
+"""Fetches the ECB EUR/CHF reference rate of a fixed date (once per run, cached in build/)."""
 import json
 import sys
 from pathlib import Path

@@ -1,8 +1,8 @@
 """
-Thesis-Abbildungen (statisch, Matplotlib) aus data/processed/scenario_attributes_summary.csv und
-data/processed/utility_rankings.csv. Speichert jede Abbildung als PNG (300 dpi), PDF und SVG nach graphics/.
+Thesis figures (static, Matplotlib) from data/processed/scenario_attributes_summary.csv and
+data/processed/utility_rankings.csv. Saves each figure as PNG (300 dpi), PDF and SVG to graphics/.
 
-Aufruf (aus src/):  python make_graphics.py
+Usage (from src/):  python make_graphics.py
 """
 
 import matplotlib
@@ -16,7 +16,10 @@ from config import (
     PROJECT_ROOT, CHOICE_MODEL_PATH, ATTRIBUTE_COLUMN_TO_MODEL_TERM, SCENARIO_DISPLAY_NAMES,
     LANGUAGE_REGION_WEIGHTS,
 )
-from load_data import load_beta_partworths_mean, load_beta_partworths_samples
+from load_data import (
+    load_beta_partworths_mean, load_beta_partworths_samples,
+    load_mobile_partworths_mean, load_mobile_partworths_samples,
+)
 from utility import (
     load_attribute_scale, scale_scenario_attributes, compute_utility_samples, compute_choice_shares,
 )
@@ -24,14 +27,14 @@ from utility import (
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 GRAPHICS_DIR = PROJECT_ROOT / "graphics"
 
-# Kategoriale Palette (farbenblind-sicher validiert, feste Reihenfolge) + Text-/Neutraltöne
+# Categorical palette (validated colour-blind safe, fixed order) + text/neutral tones
 SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7"]
 TEXT_PRIMARY = "#0b0b0b"
 TEXT_SECONDARY = "#52514e"
 NEUTRAL = "#a3a29d"
 GRID = "#e4e3df"
 
-REFERENCE_SCENARIO = "baseline"  # nicht in Mellot Table 3
+REFERENCE_SCENARIO = "baseline"  # not in Mellot Table 3
 
 plt.rcParams.update({
     "font.size": 10.5,
@@ -48,7 +51,7 @@ plt.rcParams.update({
     "axes.spines.top": False,
     "axes.spines.right": False,
     "axes.grid": False,
-    "pdf.fonttype": 42,  # eingebettete TrueType-Fonts, im PDF editierbar/durchsuchbar
+    "pdf.fonttype": 42,  # embedded TrueType fonts, editable/searchable in the PDF
     "savefig.bbox": "tight",
 })
 
@@ -61,7 +64,7 @@ def save(fig, name: str, out_dir: Path = GRAPHICS_DIR) -> None:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_dir / f"{name}.png", dpi=300)
-    # Ohne Zeitstempel in den Metadaten -> bytegleiche Dateien bei gleichem Input
+    # No timestamp in the metadata -> byte-identical files for identical input
     fig.savefig(out_dir / f"{name}.pdf", metadata={"CreationDate": None})
     fig.savefig(out_dir / f"{name}.svg", metadata={"Date": None})
     plt.close(fig)
@@ -75,7 +78,7 @@ def load_results(attrs_path: Path = PROCESSED_DIR / "scenario_attributes_summary
 
 
 # ---------------------------------------------------------------------------
-# 1. Choice-Modell-Rang vs. Mellot-Kostenrang
+# 1. Choice-model rank vs. Mellot cost rank
 # ---------------------------------------------------------------------------
 def fig_rank_vs_cost(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR) -> None:
     df = rankings[rankings["scenario_id"] != REFERENCE_SCENARIO].copy()
@@ -85,12 +88,12 @@ def fig_rank_vs_cost(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR) -> No
     n = int(df[["rank_national", "rank_mellot_cost"]].max().max())
     ax.plot([0.5, n + 0.5], [0.5, n + 0.5], ls="--", lw=1, color=NEUTRAL, zorder=1)
 
-    # Farbe = Richtung der Abweichung (gleiche Codierung wie Abb. 4)
+    # Colour = direction of the deviation (same encoding as Fig. 4)
     colors = np.where(df["diff"] < 0, SERIES[0], np.where(df["diff"] > 0, SERIES[1], NEUTRAL))
     ax.scatter(df["rank_mellot_cost"], df["rank_national"], s=70, c=colors,
                edgecolors="white", linewidths=1.5, zorder=3)
 
-    # Direkte Labels; S/CCGT-Paar teilt den Kostenrang -> Labels versetzt
+    # Direct labels; the S/CCGT pair shares a cost rank -> labels offset
     offsets = {
         "policy_sccgt_no_h2": (8, 4, "left"),
         "policy_sccgt_plus_h2": (8, -4, "left"),
@@ -113,7 +116,7 @@ def fig_rank_vs_cost(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR) -> No
                     color=TEXT_PRIMARY if highlight else TEXT_SECONDARY)
 
     ax.set_xlim(0.5, n + 0.5)
-    ax.set_ylim(n + 0.5, 0.5)  # Rang 1 oben
+    ax.set_ylim(n + 0.5, 0.5)  # rank 1 at the top
     ax.set_xticks(range(1, n + 1))
     ax.set_yticks(range(1, n + 1))
     ax.set_xlabel("Cost rank, Mellot et al. (2024) Table 3 (1 = cheapest)")
@@ -132,7 +135,7 @@ def fig_rank_vs_cost(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR) -> No
 
 
 # ---------------------------------------------------------------------------
-# 2. Forest Plot: Utility mit 94%-Credible-Interval
+# 2. Forest plot: utility with 94% credible interval
 # ---------------------------------------------------------------------------
 def fig_forest(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR) -> None:
     panels = [("DE_CH", "German-speaking Switzerland (DE-CH)"),
@@ -141,13 +144,13 @@ def fig_forest(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR) -> None:
     fig, axes = plt.subplots(3, 1, figsize=(6.5, 11), sharex=True)
     for ax, (tag, title) in zip(axes, panels):
         col = f"utility_{tag}"
-        df = rankings.sort_values(col, ascending=True).reset_index(drop=True)  # höchste oben
+        df = rankings.sort_values(col, ascending=True).reset_index(drop=True)  # highest at the top
         y = np.arange(len(df))
         is_ref = (df["scenario_id"] == REFERENCE_SCENARIO).values
         color = np.where(is_ref, TEXT_SECONDARY, SERIES[0])
         for yi, (_, r), c in zip(y, df.iterrows(), color):
             ax.plot([r[f"{col}_ci94_low"], r[f"{col}_ci94_high"]], [yi, yi], color=c, lw=2, solid_capstyle="round")
-            if c == TEXT_SECONDARY:  # Referenzszenario: offener Marker
+            if c == TEXT_SECONDARY:  # reference scenario: open marker
                 ax.plot(r[col], yi, "o", color=c, markersize=7, mfc="white", mec=c, markeredgewidth=1.8)
             else:
                 ax.plot(r[col], yi, "o", color=c, markersize=7, markeredgecolor="white", markeredgewidth=1.5)
@@ -170,9 +173,9 @@ def fig_forest(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. Attribut-Beitragszerlegung (divergierend gestapelt)
+# 3. Attribute contribution breakdown (diverging stacked)
 # ---------------------------------------------------------------------------
-CONTRIBUTION_GROUPS = [  # (Label, Modell-Terme)
+CONTRIBUTION_GROUPS = [  # (label, model terms)
     ("Cost", ["cost"]),
     ("Import", ["import"]),
     ("Land", ["land"]),
@@ -181,14 +184,17 @@ CONTRIBUTION_GROUPS = [  # (Label, Modell-Terme)
     ("Ownership", ["ownership_commercial", "ownership_community"]),
     ("Other (biomass, coal, nuclear, transmission)", ["source_biomass", "source_coal", "source_nuclear", "transmission"]),
 ]
-# Ownership lila statt dunkelgrün (Kollision mit Land), Rest-Gruppe neutral grau; Palette validiert
+# Ownership purple instead of dark green (clash with Land), remaining group neutral grey; palette validated
 CONTRIBUTION_COLORS = [SERIES[0], SERIES[1], SERIES[2], SERIES[3], SERIES[4], SERIES[6], NEUTRAL]
 
 
 def compute_contributions(attrs: pd.DataFrame, region: str, scale: dict,
-                          model_path: Path = CHOICE_MODEL_PATH) -> pd.DataFrame:
-    """beta_mean * x_scaled pro Szenario und Beitragsgruppe."""
+                          model_path: Path = CHOICE_MODEL_PATH, mobile_share: float = 0.0) -> pd.DataFrame:
+    """(beta_mean + mobile_share * mobile_mean) * x_scaled per scenario and contribution group
+    (same coefficients as utility.compute_utility)."""
     beta = load_beta_partworths_mean(model_path, country=region).set_index("attribute")["beta_mean"]
+    if mobile_share != 0.0:
+        beta = beta + mobile_share * load_mobile_partworths_mean(model_path).set_index("attribute")["mobile_mean"]
     rows = {}
     for _, r in attrs.iterrows():
         per_term = scale_scenario_attributes(r, scale) * beta.loc[list(ATTRIBUTE_COLUMN_TO_MODEL_TERM.values())]
@@ -197,18 +203,18 @@ def compute_contributions(attrs: pd.DataFrame, region: str, scale: dict,
 
 
 def fig_contributions(attrs: pd.DataFrame, rankings: pd.DataFrame, centered: bool, name: str, note: str,
-        model_path: Path = CHOICE_MODEL_PATH, out_dir: Path = GRAPHICS_DIR) -> None:
-    """centered=True: jedes Segment = Beitrag minus Mittel dieses Attributs über alle Szenarien
-    (pro Region). Konstante Terme verschwinden, sichtbar bleibt, was die Utility-Unterschiede
-    erklärt. Die Raute liegt dann bei U - mean(U) (= Summe der sichtbaren Segmente); die obere
-    Achse ist um mean(U) verschoben und zeigt dort die echte Utility ab."""
+        model_path: Path = CHOICE_MODEL_PATH, out_dir: Path = GRAPHICS_DIR, mobile_share: float = 0.0) -> None:
+    """centered=True: each segment = contribution minus the mean of that attribute over all
+    scenarios (per region). Constant terms vanish; what remains visible is what explains the utility
+    differences. The diamond then sits at U - mean(U) (= sum of the visible segments); the top axis
+    is shifted by mean(U) and shows the true utility there."""
     scale = load_attribute_scale(model_path)
-    order = rankings.sort_values("utility_national", ascending=True)["scenario_id"].tolist()  # beste oben
+    order = rankings.sort_values("utility_national", ascending=True)["scenario_id"].tolist()  # best at the top
     regions = [("DE-CH", "DE-CH"), ("FR-CH", "FR-CH")]
     fig, axes = plt.subplots(1, 2, figsize=(10, 6.2), sharey=True)
     for ax, (region, title) in zip(axes, regions):
-        contrib = compute_contributions(attrs, region, scale, model_path)
-        offset = contrib.sum(axis=1).mean() if centered else 0.0  # mean(U) über die Szenarien
+        contrib = compute_contributions(attrs, region, scale, model_path, mobile_share)
+        offset = contrib.sum(axis=1).mean() if centered else 0.0  # mean(U) over the scenarios
         if centered:
             contrib = contrib - contrib.mean(axis=0)
         contrib = contrib.loc[order]
@@ -248,6 +254,13 @@ def fig_contributions(attrs: pd.DataFrame, rankings: pd.DataFrame, centered: boo
     save(fig, name, out_dir)
 
 
+def mobile_share_note(mobile_share: float) -> str:
+    """Footnote addition, only if the mobile effect is mixed in (at 0 the figure stays unchanged)."""
+    if mobile_share == 0.0:
+        return ""
+    return f"\nβ includes the mobile effect: β = beta_partworths + {mobile_share:g} × mobile_partworths."
+
+
 CONTRIBUTIONS_CENTERED_NOTE = (
     "Segments show the deviation from the scenario mean per attribute, not the absolute contribution "
     "(mean over all 12 scenarios, per region).\nTheir sum is U − mean(U); the diamond marks this sum and is "
@@ -262,7 +275,7 @@ CONTRIBUTIONS_ABSOLUTE_NOTE = (
 
 
 # ---------------------------------------------------------------------------
-# 4. Slope-Chart DE-CH vs. FR-CH
+# 4. Slope chart DE-CH vs. FR-CH
 # ---------------------------------------------------------------------------
 def fig_slope_regions(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR) -> None:
     df = rankings.copy()
@@ -300,18 +313,21 @@ def fig_slope_regions(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR) -> N
 
 
 # ---------------------------------------------------------------------------
-# 5. Kosten vs. vorhergesagte Präferenz (aktualisierte Version von cost_vs_preference.png)
+# 5. Cost vs. predicted preference (updated version of cost_vs_preference.png)
 # ---------------------------------------------------------------------------
 def fig_cost_vs_preference(attrs: pd.DataFrame,
-        model_path: Path = CHOICE_MODEL_PATH, out_dir: Path = GRAPHICS_DIR) -> None:
-    """Oben: Mellot-Kostenänderung ggü. EP2050+; unten: Softmax-Choice-Share (national) über die
-    11 Szenarien aus Mellot Table 3, mit 94%-Credible-Interval aus den Posterior-Samples."""
+        model_path: Path = CHOICE_MODEL_PATH, out_dir: Path = GRAPHICS_DIR, mobile_share: float = 0.0) -> None:
+    """Top: Mellot cost change vs. EP2050+; bottom: softmax choice share (national) over the
+    11 scenarios from Mellot Table 3, with 94% credible interval from the posterior samples."""
     df = attrs.dropna(subset=["mellot_cost_change_pct"]).sort_values("mellot_cost_change_pct").reset_index(drop=True)
     scale = load_attribute_scale(model_path)
+    mobile_samples = load_mobile_partworths_samples(model_path) if mobile_share != 0.0 else None
     national = 0
     for region, w in LANGUAGE_REGION_WEIGHTS.items():
         beta_samples = load_beta_partworths_samples(model_path, country=region)
-        national = national + w * np.stack([compute_utility_samples(r, beta_samples, scale) for _, r in df.iterrows()])
+        national = national + w * np.stack([compute_utility_samples(r, beta_samples, scale, mobile_samples=mobile_samples,
+                                                                    mobile_share=mobile_share)
+                                            for _, r in df.iterrows()])
     shares = compute_choice_shares(dict(zip(df["scenario_id"], national)))
     share = np.array([100 * shares[s].mean() for s in df["scenario_id"]])
     lo = np.array([100 * np.quantile(shares[s], 0.03) for s in df["scenario_id"]])
@@ -340,23 +356,28 @@ def fig_cost_vs_preference(attrs: pd.DataFrame,
         ax.set_axisbelow(True)
         ax.tick_params(axis="x", length=0)
     fig.text(0, -0.03, "Scenarios sorted by system cost (cheapest left). Choice shares: multinomial logit over the 11 "
-             "scenarios (IIA assumption),\nbars = posterior mean, whiskers = 94% credible interval.",
+             "scenarios (IIA assumption),\nbars = posterior mean, whiskers = 94% credible interval."
+             + mobile_share_note(mobile_share),
              fontsize=8.5, color=TEXT_SECONDARY, ha="left")
     fig.tight_layout(h_pad=1.5)
     save(fig, "fig5_cost_vs_preference", out_dir)
 
 
 def make_all(attrs: pd.DataFrame, rankings: pd.DataFrame, model_path: Path = CHOICE_MODEL_PATH,
-             out_dir: Path = GRAPHICS_DIR) -> None:
-    """Alle Thesis-Abbildungen nach out_dir (je png/pdf/svg; Liste im Snakefile: FIGURES)."""
+             out_dir: Path = GRAPHICS_DIR, mobile_share: float = 0.0) -> None:
+    """All thesis figures to out_dir (png/pdf/svg each; list in the Snakefile: FIGURES).
+    mobile_share must be the same value the rankings were computed with (fig3/A1/fig5 compute
+    the utility themselves from the betas)."""
     fig_rank_vs_cost(rankings, out_dir=out_dir)
     fig_forest(rankings, out_dir=out_dir)
     fig_contributions(attrs, rankings, centered=True, name="fig3_utility_contributions",
-                      note=CONTRIBUTIONS_CENTERED_NOTE, model_path=model_path, out_dir=out_dir)
+                      note=CONTRIBUTIONS_CENTERED_NOTE + mobile_share_note(mobile_share), model_path=model_path,
+                      out_dir=out_dir, mobile_share=mobile_share)
     fig_contributions(attrs, rankings, centered=False, name="figA1_utility_contributions_absolute",
-                      note=CONTRIBUTIONS_ABSOLUTE_NOTE, model_path=model_path, out_dir=out_dir)
+                      note=CONTRIBUTIONS_ABSOLUTE_NOTE + mobile_share_note(mobile_share), model_path=model_path,
+                      out_dir=out_dir, mobile_share=mobile_share)
     fig_slope_regions(rankings, out_dir=out_dir)
-    fig_cost_vs_preference(attrs, model_path=model_path, out_dir=out_dir)
+    fig_cost_vs_preference(attrs, model_path=model_path, out_dir=out_dir, mobile_share=mobile_share)
 
 
 if __name__ == "__main__":

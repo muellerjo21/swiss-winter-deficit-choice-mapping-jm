@@ -1,4 +1,4 @@
-"""Erzeugt alle Thesis-Abbildungen aus den Pipeline-Ergebnissen."""
+"""Creates all thesis figures from the pipeline results."""
 import sys
 from pathlib import Path
 
@@ -9,4 +9,4 @@ from make_graphics import load_results, make_all
 if __name__ == "__main__":
     attrs, rankings = load_results(snakemake.input.attributes, snakemake.input.rankings)
     make_all(attrs, rankings, model_path=snakemake.input.choice_model,
-             out_dir=Path(snakemake.output[0]).parent)
+             out_dir=Path(snakemake.output[0]).parent, mobile_share=snakemake.params.mobile_share)

@@ -4,8 +4,8 @@ from pathlib import Path
 configfile: "config/default.yaml"
 min_version("9.6")
 
-SCENARIOS = config["scenarios"]  # Szenario-ID -> .nc-Dateiname
-FIGURES = [  # von src/make_graphics.make_all erzeugt
+SCENARIOS = config["scenarios"]  # scenario ID -> .nc file name
+FIGURES = [  # created by src/make_graphics.make_all
     "fig1_rank_choice_vs_cost", "fig2_utility_forest", "fig3_utility_contributions",
     "fig4_rank_de_vs_fr", "fig5_cost_vs_preference", "figA1_utility_contributions_absolute",
 ]
@@ -61,7 +61,8 @@ rule compute_attributes:
 
 
 rule compute_utility:
-    message: "Compute utilities, credible intervals and rankings per language region."
+    message: "Compute utilities, credible intervals and rankings per language region (mobile_share={params.mobile_share})."
+    params: mobile_share = config["utility"]["mobile_share"]
     input:
         attributes = rules.compute_attributes.output[0],
         choice_model = config["data"]["choice_model"]
@@ -71,11 +72,12 @@ rule compute_utility:
 
 
 rule make_plots:
-    message: "Create figures."
+    message: "Create figures (mobile_share={params.mobile_share})."
+    params: mobile_share = config["utility"]["mobile_share"]
     input:
         attributes = rules.compute_attributes.output[0],
         rankings = rules.compute_utility.output[0],
-        choice_model = config["data"]["choice_model"]  # fig3/fig5 brauchen die Betas direkt
+        choice_model = config["data"]["choice_model"]  # fig3/fig5 need the betas directly
     output: expand("build/figures/{figure}.{fmt}", figure=FIGURES, fmt=FIGURE_FORMATS)
     conda: "envs/default.yaml"
     script: "scripts/make_plots.py"
@@ -106,7 +108,7 @@ rule clean: # removes all generated results
 
 
 rule test:
-    # Regressionstest gegen die eingefrorenen Referenzen in data/processed/.
+    # Regression test against the frozen references in data/processed/.
     # To add more tests, do
     # (1) Add to-be-tested workflow outputs as inputs to this rule.
     # (2) Turn them into pytest fixtures in tests/test_runner.py.

@@ -2,7 +2,7 @@ name: default
 channels:
     - conda-forge
 dependencies:
-    # Versionen exakt wie in der .venv, mit der die Referenzwerte in data/processed/ validiert wurden
+    # Versions exactly as in the .venv with which the reference values in data/processed/ were validated
     - python=3.13.15
     - numpy=2.5.3
     - pandas=3.0.6

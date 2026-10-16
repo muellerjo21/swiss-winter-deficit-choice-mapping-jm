@@ -1,6 +1,6 @@
-# Konfiguration der Snakemake-Pipeline. Der Abschnitt "price" ist die einzige Quelle für die
-# Preisparameter: src/config.py liest PRICE_REFERENCE_YEAR, PRICE_CATEGORY und
-# PRICE_REFERENCE_DATE von hier, damit Notebooks und interaktive Läufe dieselben Werte nutzen.
+# Configuration of the Snakemake pipeline. The "price" section is the single source for the
+# price parameters: src/config.py reads PRICE_REFERENCE_YEAR, PRICE_CATEGORY and
+# PRICE_REFERENCE_DATE from here, so that notebooks and interactive runs use the same values.
 
 data:
     scenario_dir: data/raw/scenario_data
@@ -8,15 +8,23 @@ data:
     choice_model: data/raw/choice-model-jan-2026.nc
 
 price:
-    # ElCom-Referenzpreis: Jahresgranularität, dadurch bereits reproduzierbar
+    # ElCom reference price: yearly granularity, therefore already reproducible
     reference_year: 2025
     category: H4
-    # EZB-Kurs EUR/CHF dieses Datums (0.9461), mit dem die Referenzwerte berechnet wurden.
-    # Gequotet lassen, sonst liest YAML ein date-Objekt statt eines Strings.
+    # ECB EUR/CHF rate of this date (0.9461), with which the reference values were computed.
+    # Keep it quoted, otherwise YAML parses a date object instead of a string.
     reference_date: "2026-09-29"
 
-# Szenario-ID (Wildcard) -> .nc-Dateiname in data.scenario_dir. Explizites Mapping statt Glob,
-# weil die Dateinamen Kommas enthalten.
+utility:
+    # Share mobile_share (0..1) with which mobile_partworths is added to beta_partworths:
+    # u = x_scaled · (beta_partworths + mobile_share · mobile_partworths). In the model, m is a
+    # 0/1 indicator per respondent (constant_data/m); "m=1 = answered on a mobile phone" is only
+    # inferred from the variable name. 0.0 = reference case m=0 (previous results),
+    # 1.0 = all m=1, 0.6184 = sample share of m=1 in DE-CH + FR-CH (478 of 773).
+    mobile_share: 0.0
+
+# Scenario ID (wildcard) -> .nc file name in data.scenario_dir. Explicit mapping instead of a glob,
+# because the file names contain commas.
 scenarios:
     baseline: "barrier_baseline,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
     baseline_no_self_sufficiency_result_4H: "barrier_baseline_no_self_sufficiency_result_4H.nc"
@@ -31,7 +39,7 @@ scenarios:
     policy_sccgt_plus_h2: "barrier_policy_sccgt_plus_h2,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
     policy_wind_x2: "barrier_policy_wind_x2,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
 
-# Eingefrorene, validierte Referenzergebnisse für die Rule "test"
+# Frozen, validated reference results for the rule "test"
 reference:
     attributes: data/processed/scenario_attributes_summary.csv
     rankings: data/processed/utility_rankings.csv

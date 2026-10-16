@@ -1,4 +1,4 @@
-"""Holt den nationalen ElCom-Referenzpreis (Median, Rp./kWh) eines Jahres via LINDAS."""
+"""Fetches the national ElCom reference price (median, Rp./kWh) of one year via LINDAS."""
 import json
 import sys
 from pathlib import Path

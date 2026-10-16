@@ -1,4 +1,4 @@
-"""Berechnet die Choice-Modell-Attribute (national) für ein Szenario."""
+"""Computes the choice-model attributes (national) for one scenario."""
 import json
 import sys
 from pathlib import Path
