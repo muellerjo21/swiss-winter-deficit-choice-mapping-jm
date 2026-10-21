@@ -13,6 +13,7 @@ See the project proposal for background on the model.
 
 import os
 import re
+from datetime import date
 import ssl, certifi
 os.environ["SSL_CERT_FILE"] = certifi.where()
 import arviz as az
@@ -24,7 +25,7 @@ from SPARQLWrapper import SPARQLWrapper, JSON
 
 from config import (
     CANTON_LANGUAGE, FOREIGN_CODES, CANTON_NAME_TO_CODE, CANTON_MERGES,
-    CAPACITY_DENSITY_GW_PER_KM2, OWNERSHIP_MAPPING, PRICE_MARGIN, PRICE_REFERENCE_YEAR, PRICE_REFERENCE_DATE, PRICE_CATEGORY,
+    CAPACITY_DENSITY_GW_PER_KM2, OWNERSHIP_MAPPING, PRICE_MARGIN, PRICE_REFERENCE_YEAR, PRICE_CATEGORY,
     TECH_SOURCE_MAPPING, PV_REFERENCE_TECHS, TRANSMISSION_REFERENCE_YEAR, CHOICE_MODEL_PATH,
     SECTOR_COUPLING_ELEC_TECHS, SCENARIO_DIR, CANTON_AREA_CSV_PATH, RAW_DIR, PROCESSED_DIR,
     MELLOT_COST_CHANGE_PCT,
@@ -334,7 +335,7 @@ def save_all_scenarios(scenario_dir: str = SCENARIO_DIR, out_dir: str = PROCESSE
 
 def load_canton_area(csv_path: str = CANTON_AREA_CSV_PATH) -> dict:
     """Loads canton areas (km²) from the Statista CSV and maps them to canton codes,
-    incl. the merged codes (AI_AR, BL_BS, NW_OW) from Adrien's Calliope data."""
+    incl. the merged codes (AI_AR, BL_BS, NW_OW) from Calliope data."""
     df = pd.read_csv(csv_path, sep=";")
     df.columns = ["canton_name", "area_km2"]
     df["canton_name"] = df["canton_name"].str.strip()
@@ -545,18 +546,29 @@ def load_scenario_system_cost(nc_path: str) -> float:
     return total  # million EUR/year
 
 
-def fetch_eur_to_chf(date: str) -> float:
-    """EUR/CHF exchange rate via the Frankfurter API (based on ECB reference rates) instead of hard-coded.
-    date="YYYY-MM-DD": rate of that date (reproducible, see PRICE_REFERENCE_DATE)."""
-    response = requests.get(f"https://api.frankfurter.dev/v1/{date}", params={"from": "EUR", "to": "CHF"})
+def fetch_eur_to_chf(year: int) -> tuple[float, int]:
+    """Annual mean EUR/CHF exchange rate of a completed calendar year: arithmetic mean of the daily ECB
+    reference rates via the Frankfurter API (time series {year}-01-01..{year}-12-31).
+    Returns (mean rate, number of trading days). The API also returns the last rate before 1 January,
+    so only dates within the year are used. year must be completed (< current year), otherwise
+    the mean would change from run to run."""
+    if year >= date.today().year:
+        raise ValueError(f"EUR/CHF annual mean needs a completed year, got {year} "
+                         f"(current year {date.today().year}); the mean would not be reproducible.")
+    response = requests.get(f"https://api.frankfurter.dev/v1/{year}-01-01..{year}-12-31",
+                            params={"from": "EUR", "to": "CHF"})
     response.raise_for_status()
-    return response.json()["rates"]["CHF"]
+    rates = [r["CHF"] for day, r in response.json()["rates"].items() if day.startswith(f"{year}-")]
+    if not rates:
+        raise ValueError(f"No EUR/CHF rates returned for {year}.")
+    return sum(rates) / len(rates), len(rates)
 
 
 def compute_price_change(nc_path: str, elcom_ref: dict, eur_to_chf: float) -> float:
     """Relative price change vs. the ElCom reference price. Deliberately NOT clipped to >=0
     (unlike import) -- price is a continuous, linear attribute, so mild extrapolation beyond the
-    training range (0-60% increase) is more defensible here than e.g. for net export.
+    training range (-25% to +100%, survey levels -25/0/+25/+50/+100%) is more defensible here than
+    e.g. for net export.
     elcom_ref: return value of get_elcom_reference_price; eur_to_chf: return value of fetch_eur_to_chf."""
     system_cost = load_scenario_system_cost(nc_path)
     demand = aggregate_national(load_scenario_demand(nc_path), "demand_gwh")
@@ -604,7 +616,7 @@ def compute_all_scenarios(scenario_dir: str = SCENARIO_DIR, area_csv_path: str =
     the EUR/CHF rate are fetched once (not per scenario) and reused."""
     area_dict = load_canton_area(area_csv_path)
     elcom_ref = get_elcom_reference_price(PRICE_REFERENCE_YEAR, PRICE_CATEGORY)
-    eur_to_chf = fetch_eur_to_chf(PRICE_REFERENCE_DATE)
+    eur_to_chf, _ = fetch_eur_to_chf(PRICE_REFERENCE_YEAR)
 
     rows = []
     for filename in sorted(os.listdir(scenario_dir)):

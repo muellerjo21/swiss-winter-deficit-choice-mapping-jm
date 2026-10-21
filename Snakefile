@@ -21,8 +21,8 @@ rule all:
 
 
 rule fetch_eur_chf:
-    message: "Fetch ECB EUR/CHF reference rate of {params.date}."
-    params: date = config["price"]["reference_date"]
+    message: "Fetch annual mean ECB EUR/CHF rate of {params.year}."
+    params: year = config["price"]["reference_year"]
     output: "build/data/reference/eur_chf.json"
     conda: "envs/default.yaml"
     script: "scripts/fetch_eur_chf.py"

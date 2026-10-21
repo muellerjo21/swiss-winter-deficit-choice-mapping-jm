@@ -1,6 +1,7 @@
 # Configuration of the Snakemake pipeline. The "price" section is the single source for the
-# price parameters: src/config.py reads PRICE_REFERENCE_YEAR, PRICE_CATEGORY and
-# PRICE_REFERENCE_DATE from here, so that notebooks and interactive runs use the same values.
+# price parameters: src/config.py reads PRICE_REFERENCE_YEAR and PRICE_CATEGORY from here, so that
+# notebooks and interactive runs use the same values. reference_year is the base year of both the
+# ElCom reference price and the EUR/CHF rate (annual mean of the daily ECB rates of that year).
 
 data:
     scenario_dir: data/raw/scenario_data
@@ -8,12 +9,11 @@ data:
     choice_model: data/raw/choice-model-jan-2026.nc
 
 price:
-    # ElCom reference price: yearly granularity, therefore already reproducible
+    # Base year for the ElCom reference price (yearly tariffs) and the EUR/CHF rate (annual mean of
+    # the daily ECB rates). Must be a completed calendar year, otherwise the annual mean is not
+    # reproducible.
     reference_year: 2025
     category: H4
-    # ECB EUR/CHF rate of this date (0.9461), with which the reference values were computed.
-    # Keep it quoted, otherwise YAML parses a date object instead of a string.
-    reference_date: "2026-09-29"
 
 utility:
     # Share mobile_share (0..1) with which mobile_partworths is added to beta_partworths:

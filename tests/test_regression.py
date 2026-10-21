@@ -6,7 +6,7 @@ Pytest fixtures are provided from within the test runner.
 import numpy as np
 import pytest
 
-ATTRIBUTE_ATOL = 1e-9   # attributes are deterministic (pinned EUR/CHF rate) -> practically exact
+ATTRIBUTE_ATOL = 1e-9   # attributes are deterministic (EUR/CHF annual mean of a completed year) -> practically exact
 UTILITY_ATOL = 0.005    # utility, CI and P(rank 1)
 
 
