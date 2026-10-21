@@ -360,10 +360,12 @@ def compute_relative_land(land_df: pd.DataFrame, area_dict: dict) -> pd.DataFram
 
 def compute_land_from_capacity(capacity_df: pd.DataFrame, area_dict: dict, density_dict: dict = CAPACITY_DENSITY_GW_PER_KM2) -> pd.DataFrame:
     """Computes land use from installed capacity via technology-specific capacity density
-    (MW/km²), following Tröndle et al.'s methodology (8 MW/km² wind, 80 MW/km² PV)."""
+    (GW/km²), following Tröndle et al.'s methodology (0.008 GW/km² = 8 MW/km² wind,
+    0.08 GW/km² = 80 MW/km² PV). Capacity (Calliope energy_cap) is in GW and density in GW/km²,
+    so GW / (GW/km²) = km²."""
     df = capacity_df[capacity_df["tech"].isin(density_dict.keys())].copy()
-    df["density_mw_per_km2"] = df["tech"].map(density_dict)
-    df["land_use_km2"] = df["capacity"] / df["density_mw_per_km2"]
+    df["density_gw_per_km2"] = df["tech"].map(density_dict)
+    df["land_use_km2"] = df["capacity"] / df["density_gw_per_km2"]
     df["canton_area_km2"] = df["canton"].map(area_dict)
     df["relative_land"] = df["land_use_km2"] / df["canton_area_km2"]
     return df
@@ -684,7 +686,3 @@ if __name__ == "__main__":
     for attr, values in samples.items():
         print(f"{attr}: {len(values)} samples, mean={values.mean():.4f}, "
               f"94% HDI=[{np.percentile(values, 3):.4f}, {np.percentile(values, 97):.4f}]")
-
-    print()
-    print("=== Extracting all scenario data ===")
-    save_all_scenarios()
