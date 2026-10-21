@@ -23,6 +23,25 @@ utility:
     # 1.0 = all m=1, 0.6184 = sample share of m=1 in DE-CH + FR-CH (478 of 773).
     mobile_share: 0.0
 
+# Sensitivity of the ranking to the ElCom reference price (rule sensitivity_reference_price, fig6).
+sensitivity:
+    # Curve: only total_rp_kwh varies (Rp./kWh); taxes/levies, grid usage and EUR/CHF rate stay at
+    # price.reference_year. The reference year's own total is added to the grid.
+    reference_price:
+        start: 20.0
+        stop: 35.0
+        step: 0.25
+    # Real base years with their own ElCom reference values and annual EUR/CHF rate. Must be
+    # completed calendar years.
+    base_years: [2022, 2023, 2024, 2025]
+    # Pair whose rank swap is located (posterior-mean utility equal), by bisection to this tolerance
+    # (Rp./kWh); the ranks are checked crossing_check_delta below and above the crossing point.
+    crossing_scenarios: [policy_alpine_pv, policy_sccgt_daccs]
+    crossing_tolerance: 1.0e-10
+    crossing_check_delta: 0.01
+    # Scenarios shown in fig6 (colour order of the palette)
+    figure_scenarios: [policy_alpine_pv, policy_sccgt_daccs, policy_mix]
+
 # Scenario ID (wildcard) -> .nc file name in data.scenario_dir. Explicit mapping instead of a glob,
 # because the file names contain commas.
 scenarios:
@@ -43,3 +62,7 @@ scenarios:
 reference:
     attributes: data/processed/scenario_attributes_summary.csv
     rankings: data/processed/utility_rankings.csv
+    sensitivity_curve: data/processed/reference_price_curve.csv
+    sensitivity_crossings: data/processed/reference_price_crossing_points.csv
+    sensitivity_base_years: data/processed/reference_price_base_years.csv
+    figure_sensitivity: graphics/fig6_p_rank1_vs_reference_price

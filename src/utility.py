@@ -109,6 +109,42 @@ def rank_scenarios(utilities: pd.DataFrame, column: str) -> pd.DataFrame:
     return ranked
 
 
+CI_QUANTILES = (0.03, 0.97)  # 94% credible interval, equal-tailed (not HDI)
+
+
+def probability_rank1(samples: pd.DataFrame) -> pd.Series:
+    """Share of posterior samples in which the scenario has the highest utility."""
+    best = samples.columns[np.argmax(samples.to_numpy(), axis=1)]
+    return pd.Series(best).value_counts(normalize=True).reindex(samples.columns, fill_value=0.0)
+
+
+def rank_with_uncertainty(attributes: pd.DataFrame, betas_mean: dict, betas_samples: dict, scale: dict,
+                          weights: dict = LANGUAGE_REGION_WEIGHTS, mobile_mean: pd.DataFrame = None,
+                          mobile_samples: dict = None, mobile_share: float = 0.0) -> pd.DataFrame:
+    """Utility, 94% credible interval, P(rank 1) and rank per scenario and region (keys of weights) plus
+    national, and the Mellot cost rank, for already loaded betas (see scripts/compute_utility.py).
+    Sorted by descending national utility."""
+    utilities, samples = compute_regional_utilities(attributes, betas_mean, betas_samples, scale, weights,
+                                                    mobile_mean, mobile_samples, mobile_share)
+    rankings = utilities.set_index("scenario_id")
+
+    for region in [*weights, "national"]:
+        tag = region.replace("-", "_")
+        col = f"utility_{tag}"
+        ranked = rank_scenarios(utilities, col).set_index("scenario_id")
+        ci = samples[region].quantile(list(CI_QUANTILES))
+        rankings[f"rank_{tag}"] = ranked["rank"]
+        rankings[f"{col}_ci94_low"] = ci.loc[CI_QUANTILES[0]]
+        rankings[f"{col}_ci94_high"] = ci.loc[CI_QUANTILES[1]]
+        rankings[f"p_rank1_{tag}"] = probability_rank1(samples[region])
+
+    # Cost rank: equal cost -> equal rank (S/CCGT pair), baseline (NaN) without a rank
+    rankings["mellot_cost_change_pct"] = attributes.set_index("scenario_id")["mellot_cost_change_pct"]
+    rankings["rank_mellot_cost"] = rankings["mellot_cost_change_pct"].rank(method="min")
+    rankings["rank_diff_national_vs_mellot"] = rankings["rank_national"] - rankings["rank_mellot_cost"]
+    return rankings.sort_values("utility_national", ascending=False).reset_index()
+
+
 def compute_pairwise_choice_probability(utility_a, utility_b):
     """P(scenario A is preferred over B), standard logit link -- identical to the link in the
     choice model (p_left = sigmoid(u_left - u_right), verified against the posterior).

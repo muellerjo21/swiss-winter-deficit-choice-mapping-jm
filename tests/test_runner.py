@@ -43,6 +43,35 @@ def _create_config_plugin(snakemake):
         def reference_rankings(self):
             return pd.read_csv(snakemake.input.reference_rankings).set_index("scenario_id")
 
+        @pytest.fixture()
+        def sensitivity_curve(self):
+            return pd.read_csv(snakemake.input.sensitivity_curve)
+
+        @pytest.fixture()
+        def reference_sensitivity_curve(self):
+            return pd.read_csv(snakemake.input.reference_sensitivity_curve)
+
+        @pytest.fixture()
+        def sensitivity_crossings(self):
+            return pd.read_csv(snakemake.input.sensitivity_crossings).set_index("region")
+
+        @pytest.fixture()
+        def reference_sensitivity_crossings(self):
+            return pd.read_csv(snakemake.input.reference_sensitivity_crossings).set_index("region")
+
+        @pytest.fixture()
+        def sensitivity_base_years(self):
+            return pd.read_csv(snakemake.input.sensitivity_base_years)
+
+        @pytest.fixture()
+        def reference_sensitivity_base_years(self):
+            return pd.read_csv(snakemake.input.reference_sensitivity_base_years)
+
+        @pytest.fixture()
+        def figure_sensitivity_pairs(self):
+            """(build file, frozen reference file) per format."""
+            return list(zip(snakemake.input.figure_sensitivity, snakemake.input.reference_figure_sensitivity))
+
     return SnakemakeConfigPlugin()
 
 

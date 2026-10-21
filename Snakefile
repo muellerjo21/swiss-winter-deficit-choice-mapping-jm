@@ -10,6 +10,10 @@ FIGURES = [  # created by src/make_graphics.make_all
     "fig4_rank_de_vs_fr", "fig5_cost_vs_preference", "figA1_utility_contributions_absolute",
 ]
 FIGURE_FORMATS = ["png", "pdf", "svg"]
+REFERENCE_YEAR = config["price"]["reference_year"]
+SENSITIVITY = config["sensitivity"]
+FIGURE_SENSITIVITY = "fig6_p_rank1_vs_reference_price"  # created by src/make_graphics.fig_reference_price_sensitivity
+SENSITIVITY_YEARS = sorted(set(SENSITIVITY["base_years"]) | {REFERENCE_YEAR})
 
 
 rule all:
@@ -17,23 +21,31 @@ rule all:
     input:
         "build/data/utility_rankings.csv",
         expand("build/figures/{figure}.{fmt}", figure=FIGURES, fmt=FIGURE_FORMATS),
+        "build/data/sensitivity/reference_price_curve.csv",
+        expand("build/figures/{figure}.{fmt}", figure=FIGURE_SENSITIVITY, fmt=FIGURE_FORMATS),
         "build/test.success"
 
 
+# Per year ({year} wildcard): the main chain requests price.reference_year, the sensitivity
+# analysis additionally the base years.
 rule fetch_eur_chf:
-    message: "Fetch annual mean ECB EUR/CHF rate of {params.year}."
-    params: year = config["price"]["reference_year"]
-    output: "build/data/reference/eur_chf.json"
+    message: "Fetch annual mean ECB EUR/CHF rate of {wildcards.year}."
+    params: year = lambda wildcards: int(wildcards.year)
+    output: "build/data/reference/eur_chf_{year}.json"
+    wildcard_constraints:
+        year = r"\d{4}"
     conda: "envs/default.yaml"
     script: "scripts/fetch_eur_chf.py"
 
 
 rule fetch_elcom_reference:
-    message: "Fetch ElCom reference price {params.year} ({params.category})."
+    message: "Fetch ElCom reference price {wildcards.year} ({params.category})."
     params:
-        year = config["price"]["reference_year"],
+        year = lambda wildcards: int(wildcards.year),
         category = config["price"]["category"]
-    output: "build/data/reference/elcom_price.json"
+    output: "build/data/reference/elcom_price_{year}.json"
+    wildcard_constraints:
+        year = r"\d{4}"
     conda: "envs/default.yaml"
     script: "scripts/fetch_elcom.py"
 
@@ -43,8 +55,8 @@ rule scenario_attributes:
     input:
         nc = lambda wildcards: Path(config["data"]["scenario_dir"]) / SCENARIOS[wildcards.scenario],
         canton_area = config["data"]["canton_area"],
-        eur_chf = rules.fetch_eur_chf.output[0],
-        elcom = rules.fetch_elcom_reference.output[0]
+        eur_chf = f"build/data/reference/eur_chf_{REFERENCE_YEAR}.json",
+        elcom = f"build/data/reference/elcom_price_{REFERENCE_YEAR}.json"
     output: "build/data/attributes/{scenario}.csv"
     wildcard_constraints:
         scenario = "|".join(SCENARIOS)
@@ -81,6 +93,45 @@ rule make_plots:
     output: expand("build/figures/{figure}.{fmt}", figure=FIGURES, fmt=FIGURE_FORMATS)
     conda: "envs/default.yaml"
     script: "scripts/make_plots.py"
+
+
+rule sensitivity_reference_price:
+    message: "Sensitivity to the ElCom reference price: curve, crossing points, base years {params.base_years}."
+    params:
+        scenario_ids = list(SCENARIOS),
+        reference_year = REFERENCE_YEAR,
+        base_years = SENSITIVITY["base_years"],
+        reference_price = SENSITIVITY["reference_price"],
+        crossing_scenarios = SENSITIVITY["crossing_scenarios"],
+        crossing_tolerance = SENSITIVITY["crossing_tolerance"],
+        crossing_check_delta = SENSITIVITY["crossing_check_delta"],
+        mobile_share = config["utility"]["mobile_share"]
+    input:
+        attributes = rules.compute_attributes.output[0],
+        choice_model = config["data"]["choice_model"],
+        nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS],
+        elcom = expand("build/data/reference/elcom_price_{year}.json", year=SENSITIVITY_YEARS),
+        eur_chf = expand("build/data/reference/eur_chf_{year}.json", year=SENSITIVITY_YEARS)
+    output:
+        curve = "build/data/sensitivity/reference_price_curve.csv",
+        crossings = "build/data/sensitivity/reference_price_crossing_points.csv",
+        base_years = "build/data/sensitivity/reference_price_base_years.csv"
+    conda: "envs/default.yaml"
+    script: "scripts/sensitivity_reference_price.py"
+
+
+rule plot_sensitivity:
+    message: "Create figure P(rank 1) vs. reference price."
+    params:
+        figure_scenarios = SENSITIVITY["figure_scenarios"],
+        crossing_scenarios = SENSITIVITY["crossing_scenarios"]
+    input:
+        curve = rules.sensitivity_reference_price.output.curve,
+        crossings = rules.sensitivity_reference_price.output.crossings,
+        base_years = rules.sensitivity_reference_price.output.base_years
+    output: expand("build/figures/{figure}.{fmt}", figure=FIGURE_SENSITIVITY, fmt=FIGURE_FORMATS)
+    conda: "envs/default.yaml"
+    script: "scripts/make_sensitivity_plot.py"
 
 
 rule dag_dot:
@@ -120,7 +171,15 @@ rule test:
         attributes = rules.compute_attributes.output[0],
         rankings = rules.compute_utility.output[0],
         reference_attributes = config["reference"]["attributes"],
-        reference_rankings = config["reference"]["rankings"]
+        reference_rankings = config["reference"]["rankings"],
+        sensitivity_curve = rules.sensitivity_reference_price.output.curve,
+        sensitivity_crossings = rules.sensitivity_reference_price.output.crossings,
+        sensitivity_base_years = rules.sensitivity_reference_price.output.base_years,
+        reference_sensitivity_curve = config["reference"]["sensitivity_curve"],
+        reference_sensitivity_crossings = config["reference"]["sensitivity_crossings"],
+        reference_sensitivity_base_years = config["reference"]["sensitivity_base_years"],
+        figure_sensitivity = expand("build/figures/{figure}.{fmt}", figure=FIGURE_SENSITIVITY, fmt=["png", "pdf"]),
+        reference_figure_sensitivity = expand("{path}.{fmt}", path=config["reference"]["figure_sensitivity"], fmt=["png", "pdf"])
     log: "build/test-report.html"
     output: "build/test.success"
     conda: "envs/test.yaml"

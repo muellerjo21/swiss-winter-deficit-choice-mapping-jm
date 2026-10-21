@@ -34,16 +34,28 @@ Results go to `build/` (git-ignored). Each rule runs in its own conda environmen
 
 The two live data sources are pinned in `config/default.yaml` by one base year (`price.reference_year`): the ElCom reference price of that year and the EUR/CHF rate as the annual mean of the daily ECB reference rates of the same year (the year must be completed). This file is the single source for these price parameters; `src/config.py` reads them from there, so notebooks and the pipeline use the same values.
 
+If a Python virtual environment (e.g. `.venv`) is active, run `deactivate` first: otherwise its `python` shadows the rules' conda environments.
+
+### Sensitivity to the reference price
+
+The rule `sensitivity_reference_price` (`src/sensitivity.py`) checks how the ranking depends on the ElCom reference price, with the settings in the `sensitivity` section of `config/default.yaml`:
+
+- a curve of rank and P(rank 1) of all scenarios over the reference price (default 20–35 Rp./kWh, step 0.25), with taxes/levies, grid usage and EUR/CHF rate of `price.reference_year`;
+- the reference price at which Alpine PV and S/CCGT (Fossil) + DACCS swap rank, per language region and national;
+- the real base years (default 2022–2025), each with its own ElCom reference values and annual EUR/CHF rate (the reference fetch rules run once per year).
+
+Results go to `build/data/sensitivity/`, the figure to `build/figures/fig6_p_rank1_vs_reference_price.*` (rule `plot_sensitivity`). Both are part of `snakemake` (rule `all`) and of the regression tests; to run only this part: `snakemake build/figures/fig6_p_rank1_vs_reference_price.png`.
+
 ## Repository structure
 
 ```
 .
 ├── Snakefile          # workflow definition
-├── config/            # workflow configuration (scenario mapping, price reference)
+├── config/            # workflow configuration (scenario mapping, price reference, sensitivity)
 ├── envs/              # conda environments per rule
 ├── profiles/          # Snakemake execution profile (conda, 1 core)
 ├── scripts/           # thin Snakemake wrappers around src/
-├── tests/             # regression tests against data/processed/
+├── tests/             # regression tests against data/processed/ and graphics/ (fig6)
 ├── src/               # mapping and prediction library code
 ├── data/
 │   ├── raw/           # downloaded Zenodo data (git-ignored)
@@ -53,8 +65,9 @@ The two live data sources are pinned in `config/default.yaml` by one base year (
 └── build/             # workflow results (git-ignored)
 ```
 
-The regression tests only use `data/processed/scenario_attributes_summary.csv` and
-`data/processed/utility_rankings.csv`. The other files in `data/processed/`
+The regression tests use `data/processed/scenario_attributes_summary.csv`,
+`data/processed/utility_rankings.csv`, `data/processed/reference_price_*.csv` and
+`graphics/fig6_p_rank1_vs_reference_price.{png,pdf}`. The other files in `data/processed/`
 (`beta_real_units.csv`, `scenario_*.csv`) and `graphics/cost_vs_preference.png` are outdated
 intermediate products of the first approach in `legacy/`.
 

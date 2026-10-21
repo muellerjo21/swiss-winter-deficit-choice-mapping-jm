@@ -569,9 +569,20 @@ def compute_price_change(nc_path: str, elcom_ref: dict, eur_to_chf: float) -> fl
     (unlike import) -- price is a continuous, linear attribute, so mild extrapolation beyond the
     training range (-25% to +100%, survey levels -25/0/+25/+50/+100%) is more defensible here than
     e.g. for net export.
-    elcom_ref: return value of get_elcom_reference_price; eur_to_chf: return value of fetch_eur_to_chf."""
-    system_cost = load_scenario_system_cost(nc_path)
-    demand = aggregate_national(load_scenario_demand(nc_path), "demand_gwh")
+    elcom_ref: return value of get_elcom_reference_price; eur_to_chf: rate (first element of fetch_eur_to_chf)."""
+    system_cost, demand = load_scenario_cost_and_demand(nc_path)
+    return price_change_from_cost(system_cost, demand, elcom_ref, eur_to_chf)
+
+
+def load_scenario_cost_and_demand(nc_path: str) -> tuple[float, float]:
+    """Total Swiss system cost (million EUR/year) and national electricity demand (GWh) of a scenario,
+    the two scenario inputs of price_change_from_cost."""
+    return load_scenario_system_cost(nc_path), aggregate_national(load_scenario_demand(nc_path), "demand_gwh")
+
+
+def price_change_from_cost(system_cost: float, demand: float, elcom_ref: dict, eur_to_chf: float) -> float:
+    """Price-change formula of compute_price_change for already loaded system cost and demand, so that
+    several reference prices / rates can be evaluated without re-reading the scenario file."""
     cost_per_kwh_chf = (system_cost / demand) * eur_to_chf
     simulated_rp_kwh = cost_per_kwh_chf * 100 * (1 + PRICE_MARGIN)
     # Grid usage (distribution grid) is not included in the Calliope system cost -> constant surcharge

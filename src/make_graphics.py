@@ -5,6 +5,8 @@ data/processed/utility_rankings.csv. Saves each figure as PNG (300 dpi), PDF and
 Usage (from src/):  python make_graphics.py
 """
 
+import textwrap
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -361,6 +363,112 @@ def fig_cost_vs_preference(attrs: pd.DataFrame,
              fontsize=8.5, color=TEXT_SECONDARY, ha="left")
     fig.tight_layout(h_pad=1.5)
     save(fig, "fig5_cost_vs_preference", out_dir)
+
+
+# ---------------------------------------------------------------------------
+# 6. P(rank 1) vs. ElCom reference price (sensitivity, src/sensitivity.py)
+# ---------------------------------------------------------------------------
+def _place_label(ax, text: str, candidates: list, obstacles: np.ndarray, placed: list, **style):
+    """Put text at the first candidate (x, y, ha, va) whose box overlaps neither obstacle points (data
+    coordinates), nor already placed labels, nor leaves the axes; falls back to the first candidate."""
+    renderer = ax.figure.canvas.get_renderer()
+    points = ax.transData.transform(obstacles) if len(obstacles) else np.empty((0, 2))
+    for x, y, ha, va in candidates:
+        t = ax.text(x, y, text, ha=ha, va=va, **style)
+        extent = t.get_window_extent(renderer)
+        box = extent.expanded(1.12, 1.3)  # small margin around the text
+        hit = ((points[:, 0] >= box.x0) & (points[:, 0] <= box.x1)
+               & (points[:, 1] >= box.y0) & (points[:, 1] <= box.y1)).any()
+        in_axes = ax.bbox.contains(extent.x0, extent.y0) and ax.bbox.contains(extent.x1, extent.y1)
+        if not hit and in_axes and not any(box.overlaps(b) for b in placed):
+            placed.append(box)
+            return t
+        t.remove()
+    x, y, ha, va = candidates[0]
+    xlim = ax.get_xlim()
+    ha = "left" if x <= xlim[0] else "right" if x >= xlim[1] else ha  # keep the fallback inside the axes
+    t = ax.text(x, y, text, ha=ha, va=va, **style)
+    placed.append(t.get_window_extent(renderer))
+    return t
+
+
+def fig_reference_price_sensitivity(curve: pd.DataFrame, crossings: pd.DataFrame, base_years: pd.DataFrame,
+                                    scenarios: list, crossing_scenarios: list, out_dir: Path = GRAPHICS_DIR) -> None:
+    """P(rank 1) of the given scenarios vs. the ElCom reference price, one panel per region. Lines: only
+    the reference price varies (surcharges and EUR/CHF of the reference year); markers: real base years
+    with their own surcharges and annual rate; dashed: rank swap of the crossing pair."""
+    colors = dict(zip(scenarios, SERIES))
+    panels = [("DE_CH", "DE-CH"), ("FR_CH", "FR-CH"), ("national", "Switzerland (pop.-weighted)")]
+    grid = curve[~curve["is_reference_year"]]
+    lo, hi = grid["total_rp_kwh"].min(), grid["total_rp_kwh"].max()
+    fig, axes = plt.subplots(1, 3, figsize=(13.5, 4.6), sharey=True)
+    for ax, (tag, title) in zip(axes, panels):
+        ax.set_title(title, loc="left", fontweight="bold", pad=20)
+        ax.set_xlim(lo, hi)
+        ax.set_ylim(-0.04, 1.07)
+        ax.set_xlabel("ElCom reference price, total (Rp./kWh)")
+        ax.yaxis.grid(True, color=GRID, lw=0.8)
+        ax.set_axisbelow(True)
+        ax.spines["left"].set_visible(False)
+        ax.tick_params(axis="y", length=0)
+    axes[0].set_ylabel("P(rank 1)")
+    fig.tight_layout(w_pad=2)  # layout first, so that label boxes are measured at their final position
+
+    for ax, (tag, title) in zip(axes, panels):
+        region = grid[grid["region"] == tag]
+        obstacles = []
+        for s in scenarios:
+            c = region[region["scenario_id"] == s].sort_values("total_rp_kwh")
+            ax.plot(c["total_rp_kwh"], c["p_rank1"], color=colors[s], lw=2, zorder=3, solid_capstyle="round")
+            xs = np.linspace(lo, hi, 400)  # densified curve as obstacle for labels
+            obstacles.append(np.column_stack([xs, np.interp(xs, c["total_rp_kwh"], c["p_rank1"])]))
+        xc = crossings.set_index("region").loc[tag, "crossing_rp_kwh"]
+        ax.axvline(xc, color=NEUTRAL, lw=1, ls="--", zorder=1)
+        swap_label = ax.text(xc, 1.075, f"rank swap {xc:.1f}", fontsize=8.5, color=TEXT_SECONDARY,
+                             va="bottom", ha="center")
+        obstacles.append(np.column_stack([np.full(400, xc), np.linspace(*ax.get_ylim(), 400)]))
+        years = base_years[base_years["region"] == tag]
+        markers = years[years["scenario_id"].isin(crossing_scenarios)]
+        for _, r in markers.iterrows():
+            ax.plot(r["total_rp_kwh"], r["p_rank1"], "o", color=colors[r["scenario_id"]], markersize=7,
+                    markeredgecolor="white", markeredgewidth=1.5, zorder=5)
+        obstacles.append(markers[["total_rp_kwh", "p_rank1"]].to_numpy())
+        obstacles = np.vstack(obstacles)
+        placed = [swap_label.get_window_extent(fig.canvas.get_renderer())]
+        # year labels next to the marker of the first crossing scenario
+        for _, r in markers[markers["scenario_id"] == crossing_scenarios[0]].iterrows():
+            x, y = r["total_rp_kwh"], r["p_rank1"]
+            ring = [(x + k * dx, y + k * dy, ha, va) for k in (1, 2, 3)  # increasingly further from the marker
+                    for dx, dy, ha, va in [(0, 0.04, "center", "bottom"), (-0.25, 0.03, "right", "bottom"),
+                                           (0.25, 0.03, "left", "bottom"), (0.25, -0.03, "left", "top"),
+                                           (-0.25, -0.03, "right", "top"), (0, -0.05, "center", "top")]]
+            _place_label(ax, str(int(r["year"])), ring, obstacles, placed, fontsize=8.5, color=TEXT_PRIMARY, zorder=6)
+        if tag == panels[0][0]:  # direct scenario labels in the first panel
+            for s in scenarios:
+                c = region[region["scenario_id"] == s].sort_values("total_rp_kwh", ascending=False)
+                # walk along the curve, starting at the end where it is highest
+                if c["p_rank1"].iloc[-1] > c["p_rank1"].iloc[0]:
+                    c = c.iloc[::-1]
+                cands = [(x, p + dy, ha, "bottom" if dy > 0 else "top")
+                         for dy in (0.02, 0.05, -0.03, -0.08, -0.15, -0.25)   # close to the curve first
+                         for x, p in zip(c["total_rp_kwh"], c["p_rank1"])
+                         for ha in ("center", "left", "right")]
+                cands = [(min(max(x, lo), hi), y, ha, va) for x, y, ha, va in cands]
+                _place_label(ax, textwrap.fill(display_name(s), 16), cands, obstacles, placed,  # long names on 2 lines
+                             fontsize=9, color=TEXT_PRIMARY, fontweight="bold")
+    taxes = crossings["taxes_levies_rp_kwh"].iloc[0]
+    grid_usage = crossings["netznutzung_rp_kwh"].iloc[0]
+    rate = crossings["eur_to_chf"].iloc[0]
+    year = int(crossings["reference_year"].iloc[0])
+    names = " / ".join(display_name(s) for s in crossing_scenarios)
+    fig.text(0, -0.06,
+             f"Lines: only the reference price varies; taxes/levies ({taxes:.2f} Rp./kWh), grid usage "
+             f"({grid_usage:.2f} Rp./kWh) and EUR/CHF ({rate:.4f}, annual mean) as in {year}.\n"
+             f"Markers: real base years with their own surcharges and annual EUR/CHF rate ({names}, same colours); "
+             "therefore not exactly on the lines.\n"
+             f"Dashed: reference price at which {names} swap rank (posterior-mean utility).",
+             fontsize=8.5, color=TEXT_SECONDARY, ha="left", va="top")
+    save(fig, "fig6_p_rank1_vs_reference_price", out_dir)
 
 
 def make_all(attrs: pd.DataFrame, rankings: pd.DataFrame, model_path: Path = CHOICE_MODEL_PATH,
