@@ -31,6 +31,10 @@ utility:
     # inferred from the variable name. 0.0 = reference case m=0 (previous results),
     # 1.0 = all m=1, 0.6184 = sample share of m=1 in DE-CH + FR-CH (478 of 773).
     mobile_share: 0.0
+    # Probability mass of the credible interval of utility (columns utility_*_ci94_low/high for 0.94).
+    # Equal-tailed interval between the (1-p)/2 and 1-(1-p)/2 quantiles of the posterior samples,
+    # not a highest-density interval (HDI).
+    credible_interval: 0.94
 
 # Sensitivity of the ranking to the ElCom reference price (rule sensitivity_reference_price, fig6).
 sensitivity:

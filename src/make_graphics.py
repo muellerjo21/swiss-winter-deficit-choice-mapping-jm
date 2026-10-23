@@ -16,7 +16,7 @@ from pathlib import Path
 
 from config import (
     PROJECT_ROOT, CHOICE_MODEL_PATH, ATTRIBUTE_COLUMN_TO_MODEL_TERM, SCENARIO_DISPLAY_NAMES,
-    LANGUAGE_REGION_WEIGHTS,
+    LANGUAGE_REGION_WEIGHTS, CREDIBLE_INTERVAL,
 )
 from load_data import (
     load_beta_partworths_mean, load_beta_partworths_samples,
@@ -24,6 +24,7 @@ from load_data import (
 )
 from utility import (
     load_attribute_scale, scale_scenario_attributes, compute_utility_samples, compute_choice_shares,
+    credible_interval_quantiles, credible_interval_tag,
 )
 
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
@@ -137,9 +138,11 @@ def fig_rank_vs_cost(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR) -> No
 
 
 # ---------------------------------------------------------------------------
-# 2. Forest plot: utility with 94% credible interval
+# 2. Forest plot: utility with credible interval (utility.credible_interval)
 # ---------------------------------------------------------------------------
-def fig_forest(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR) -> None:
+def fig_forest(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR,
+               credible_interval: float = CREDIBLE_INTERVAL) -> None:
+    ci_tag = credible_interval_tag(credible_interval)
     panels = [("DE_CH", "German-speaking Switzerland (DE-CH)"),
               ("FR_CH", "French-speaking Switzerland (FR-CH)"),
               ("national", "Switzerland, population-weighted")]
@@ -151,7 +154,8 @@ def fig_forest(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR) -> None:
         is_ref = (df["scenario_id"] == REFERENCE_SCENARIO).values
         color = np.where(is_ref, TEXT_SECONDARY, SERIES[0])
         for yi, (_, r), c in zip(y, df.iterrows(), color):
-            ax.plot([r[f"{col}_ci94_low"], r[f"{col}_ci94_high"]], [yi, yi], color=c, lw=2, solid_capstyle="round")
+            ax.plot([r[f"{col}_{ci_tag}_low"], r[f"{col}_{ci_tag}_high"]], [yi, yi], color=c, lw=2,
+                    solid_capstyle="round")
             if c == TEXT_SECONDARY:  # reference scenario: open marker
                 ax.plot(r[col], yi, "o", color=c, markersize=7, mfc="white", mec=c, markeredgewidth=1.8)
             else:
@@ -167,7 +171,7 @@ def fig_forest(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR) -> None:
         ax.set_axisbelow(True)
         ax.spines["left"].set_visible(False)
         ax.tick_params(axis="y", length=0)
-    axes[-1].set_xlabel("Utility (posterior mean, 94% credible interval)")
+    axes[-1].set_xlabel(f"Utility (posterior mean, {credible_interval * 100:g}% credible interval)")
     fig.text(0, -0.01, "Credible intervals reflect posterior uncertainty of the choice-model coefficients only. "
              f"Open marker: {display_name(REFERENCE_SCENARIO)}.", fontsize=8.5, color=TEXT_SECONDARY, ha="left")
     fig.tight_layout(h_pad=1.8)
@@ -318,9 +322,11 @@ def fig_slope_regions(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR) -> N
 # 5. Cost vs. predicted preference (updated version of cost_vs_preference.png)
 # ---------------------------------------------------------------------------
 def fig_cost_vs_preference(attrs: pd.DataFrame,
-        model_path: Path = CHOICE_MODEL_PATH, out_dir: Path = GRAPHICS_DIR, mobile_share: float = 0.0) -> None:
+        model_path: Path = CHOICE_MODEL_PATH, out_dir: Path = GRAPHICS_DIR, mobile_share: float = 0.0,
+        credible_interval: float = CREDIBLE_INTERVAL) -> None:
     """Top: Mellot cost change vs. EP2050+; bottom: softmax choice share (national) over the
-    11 scenarios from Mellot Table 3, with 94% credible interval from the posterior samples."""
+    11 scenarios from Mellot Table 3, with equal-tailed credible interval from the posterior samples."""
+    q_low, q_high = credible_interval_quantiles(credible_interval)
     df = attrs.dropna(subset=["mellot_cost_change_pct"]).sort_values("mellot_cost_change_pct").reset_index(drop=True)
     scale = load_attribute_scale(model_path)
     mobile_samples = load_mobile_partworths_samples(model_path) if mobile_share != 0.0 else None
@@ -332,8 +338,8 @@ def fig_cost_vs_preference(attrs: pd.DataFrame,
                                             for _, r in df.iterrows()])
     shares = compute_choice_shares(dict(zip(df["scenario_id"], national)))
     share = np.array([100 * shares[s].mean() for s in df["scenario_id"]])
-    lo = np.array([100 * np.quantile(shares[s], 0.03) for s in df["scenario_id"]])
-    hi = np.array([100 * np.quantile(shares[s], 0.97) for s in df["scenario_id"]])
+    lo = np.array([100 * np.quantile(shares[s], q_low) for s in df["scenario_id"]])
+    hi = np.array([100 * np.quantile(shares[s], q_high) for s in df["scenario_id"]])
 
     x = np.arange(len(df))
     fig, (ax_cost, ax_pref) = plt.subplots(2, 1, figsize=(6.5, 6.8), sharex=True, height_ratios=[1, 1.15])
@@ -358,7 +364,7 @@ def fig_cost_vs_preference(attrs: pd.DataFrame,
         ax.set_axisbelow(True)
         ax.tick_params(axis="x", length=0)
     fig.text(0, -0.03, "Scenarios sorted by system cost (cheapest left). Choice shares: multinomial logit over the 11 "
-             "scenarios (IIA assumption),\nbars = posterior mean, whiskers = 94% credible interval."
+             f"scenarios (IIA assumption),\nbars = posterior mean, whiskers = {credible_interval * 100:g}% credible interval."
              + mobile_share_note(mobile_share),
              fontsize=8.5, color=TEXT_SECONDARY, ha="left")
     fig.tight_layout(h_pad=1.5)
@@ -494,12 +500,14 @@ def fig_reference_price_sensitivity(curve: pd.DataFrame, crossings: pd.DataFrame
 
 
 def make_all(attrs: pd.DataFrame, rankings: pd.DataFrame, model_path: Path = CHOICE_MODEL_PATH,
-             out_dir: Path = GRAPHICS_DIR, mobile_share: float = 0.0) -> None:
+             out_dir: Path = GRAPHICS_DIR, mobile_share: float = 0.0,
+             credible_interval: float = CREDIBLE_INTERVAL) -> None:
     """All thesis figures to out_dir (png/pdf/svg each; list in the Snakefile: FIGURES).
+    credible_interval must be the value the rankings were computed with (fig2 reads its columns).
     mobile_share must be the same value the rankings were computed with (fig3/A1/fig5 compute
     the utility themselves from the betas)."""
     fig_rank_vs_cost(rankings, out_dir=out_dir)
-    fig_forest(rankings, out_dir=out_dir)
+    fig_forest(rankings, out_dir=out_dir, credible_interval=credible_interval)
     fig_contributions(attrs, rankings, centered=True, name="fig3_utility_contributions",
                       note=CONTRIBUTIONS_CENTERED_NOTE + mobile_share_note(mobile_share), model_path=model_path,
                       out_dir=out_dir, mobile_share=mobile_share)
@@ -507,7 +515,8 @@ def make_all(attrs: pd.DataFrame, rankings: pd.DataFrame, model_path: Path = CHO
                       note=CONTRIBUTIONS_ABSOLUTE_NOTE + mobile_share_note(mobile_share), model_path=model_path,
                       out_dir=out_dir, mobile_share=mobile_share)
     fig_slope_regions(rankings, out_dir=out_dir)
-    fig_cost_vs_preference(attrs, model_path=model_path, out_dir=out_dir, mobile_share=mobile_share)
+    fig_cost_vs_preference(attrs, model_path=model_path, out_dir=out_dir, mobile_share=mobile_share,
+                           credible_interval=credible_interval)
 
 
 if __name__ == "__main__":

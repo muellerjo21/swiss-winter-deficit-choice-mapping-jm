@@ -721,4 +721,5 @@ if __name__ == "__main__":
     samples = load_beta_partworths_samples(CHOICE_MODEL_PATH, country="DE-CH")
     for attr, values in samples.items():
         print(f"{attr}: {len(values)} samples, mean={values.mean():.4f}, "
-              f"94% HDI=[{np.percentile(values, 3):.4f}, {np.percentile(values, 97):.4f}]")
+              f"94% equal-tailed interval (3rd-97th percentile, not HDI)="
+              f"[{np.percentile(values, 3):.4f}, {np.percentile(values, 97):.4f}]")

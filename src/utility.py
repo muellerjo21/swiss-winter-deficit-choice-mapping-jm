@@ -16,7 +16,7 @@ import arviz as az
 import numpy as np
 import pandas as pd
 
-from config import ATTRIBUTE_COLUMN_TO_MODEL_TERM, LANGUAGE_REGION_WEIGHTS
+from config import ATTRIBUTE_COLUMN_TO_MODEL_TERM, LANGUAGE_REGION_WEIGHTS, CREDIBLE_INTERVAL
 
 
 def load_attribute_scale(data_path) -> dict:
@@ -109,7 +109,20 @@ def rank_scenarios(utilities: pd.DataFrame, column: str) -> pd.DataFrame:
     return ranked
 
 
-CI_QUANTILES = (0.03, 0.97)  # 94% credible interval, equal-tailed (not HDI)
+def credible_interval_quantiles(probability: float) -> tuple[float, float]:
+    """Lower and upper quantile of the equal-tailed (not HDI) credible interval with the given probability
+    mass: (1-p)/2 and 1-(1-p)/2. Rounded to 12 decimals, because e.g. (1-0.94)/2 is 0.030000000000000027 in
+    floating point; rounding gives exactly (0.03, 0.97) and thus unchanged quantiles."""
+    tail = (1 - probability) / 2
+    return round(tail, 12), round(1 - tail, 12)
+
+
+def credible_interval_tag(probability: float) -> str:
+    """Column tag of the interval, e.g. 'ci94' for 0.94 (utility_<region>_ci94_low/high)."""
+    return f"ci{probability * 100:g}"
+
+
+CI_QUANTILES = credible_interval_quantiles(CREDIBLE_INTERVAL)  # equal-tailed (not HDI), utility.credible_interval
 
 
 def probability_rank1(samples: pd.DataFrame) -> pd.Series:
@@ -120,10 +133,12 @@ def probability_rank1(samples: pd.DataFrame) -> pd.Series:
 
 def rank_with_uncertainty(attributes: pd.DataFrame, betas_mean: dict, betas_samples: dict, scale: dict,
                           weights: dict = LANGUAGE_REGION_WEIGHTS, mobile_mean: pd.DataFrame = None,
-                          mobile_samples: dict = None, mobile_share: float = 0.0) -> pd.DataFrame:
-    """Utility, 94% credible interval, P(rank 1) and rank per scenario and region (keys of weights) plus
-    national, and the Mellot cost rank, for already loaded betas (see scripts/compute_utility.py).
-    Sorted by descending national utility."""
+                          mobile_samples: dict = None, mobile_share: float = 0.0,
+                          credible_interval: float = CREDIBLE_INTERVAL) -> pd.DataFrame:
+    """Utility, equal-tailed credible interval (probability credible_interval), P(rank 1) and rank per
+    scenario and region (keys of weights) plus national, and the Mellot cost rank, for already loaded
+    betas (see scripts/compute_utility.py). Sorted by descending national utility."""
+    quantiles, ci_tag = credible_interval_quantiles(credible_interval), credible_interval_tag(credible_interval)
     utilities, samples = compute_regional_utilities(attributes, betas_mean, betas_samples, scale, weights,
                                                     mobile_mean, mobile_samples, mobile_share)
     rankings = utilities.set_index("scenario_id")
@@ -132,10 +147,10 @@ def rank_with_uncertainty(attributes: pd.DataFrame, betas_mean: dict, betas_samp
         tag = region.replace("-", "_")
         col = f"utility_{tag}"
         ranked = rank_scenarios(utilities, col).set_index("scenario_id")
-        ci = samples[region].quantile(list(CI_QUANTILES))
+        ci = samples[region].quantile(list(quantiles))
         rankings[f"rank_{tag}"] = ranked["rank"]
-        rankings[f"{col}_ci94_low"] = ci.loc[CI_QUANTILES[0]]
-        rankings[f"{col}_ci94_high"] = ci.loc[CI_QUANTILES[1]]
+        rankings[f"{col}_{ci_tag}_low"] = ci.loc[quantiles[0]]
+        rankings[f"{col}_{ci_tag}_high"] = ci.loc[quantiles[1]]
         rankings[f"p_rank1_{tag}"] = probability_rank1(samples[region])
 
     # Cost rank: equal cost -> equal rank (S/CCGT pair), baseline (NaN) without a rank

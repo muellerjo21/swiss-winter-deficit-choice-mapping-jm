@@ -75,7 +75,9 @@ rule compute_attributes:
 
 rule compute_utility:
     message: "Compute utilities, credible intervals and rankings per language region (mobile_share={params.mobile_share})."
-    params: mobile_share = config["utility"]["mobile_share"]
+    params:
+        mobile_share = config["utility"]["mobile_share"],
+        credible_interval = config["utility"]["credible_interval"]
     input:
         attributes = rules.compute_attributes.output[0],
         choice_model = config["data"]["choice_model"]
@@ -86,7 +88,9 @@ rule compute_utility:
 
 rule make_plots:
     message: "Create figures (mobile_share={params.mobile_share})."
-    params: mobile_share = config["utility"]["mobile_share"]
+    params:
+        mobile_share = config["utility"]["mobile_share"],
+        credible_interval = config["utility"]["credible_interval"]
     input:
         attributes = rules.compute_attributes.output[0],
         rankings = rules.compute_utility.output[0],
