@@ -1,4 +1,4 @@
 region,scenario_a,scenario_b,crossing_rp_kwh,rank_a_below,rank_b_below,rank_a_above,rank_b_above,reference_year,taxes_levies_rp_kwh,netznutzung_rp_kwh,eur_to_chf
-DE_CH,policy_alpine_pv,policy_sccgt_daccs,27.33869231832614,2,1,1,2,2025,3.13,13.1695,0.9370309803921569
-FR_CH,policy_alpine_pv,policy_sccgt_daccs,24.884108224096053,2,1,1,2,2025,3.13,13.1695,0.9370309803921569
-national,policy_alpine_pv,policy_sccgt_daccs,26.838131195154347,2,1,1,2,2025,3.13,13.1695,0.9370309803921569
+DE_CH,policy_alpine_pv,policy_sccgt_daccs,28.763155424758224,3,2,2,3,2025,3.13,13.1695,0.9370309803921569
+FR_CH,policy_alpine_pv,policy_sccgt_daccs,27.071984387575867,2,1,1,2,2025,3.13,13.1695,0.9370309803921569
+national,policy_alpine_pv,policy_sccgt_daccs,28.42737665317145,2,1,1,2,2025,3.13,13.1695,0.9370309803921569

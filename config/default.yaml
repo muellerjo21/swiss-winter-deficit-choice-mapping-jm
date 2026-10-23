@@ -15,6 +15,15 @@ price:
     reference_year: 2025
     category: H4
 
+land:
+    # Definition of the attribute relative_land (share of land used by wind and open-field PV):
+    # national_share = national land use (km², sum over all cantons) / national area (sum of the
+    #                  canton areas from data.canton_area); main definition, like all other attributes
+    #                  national. The survey attribute is a share of the country's land.
+    # canton_mean    = unweighted mean over the cantons of land use / canton area (previous
+    #                  definition, about twice the national share for most scenarios).
+    definition: national_share
+
 utility:
     # Share mobile_share (0..1) with which mobile_partworths is added to beta_partworths:
     # u = x_scaled · (beta_partworths + mobile_share · mobile_partworths). In the model, m is a

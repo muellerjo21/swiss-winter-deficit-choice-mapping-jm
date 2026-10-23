@@ -161,6 +161,9 @@ _WORKFLOW_CONFIG = yaml.safe_load((PROJECT_ROOT / "config" / "default.yaml").rea
 PRICE_REFERENCE_YEAR = _WORKFLOW_CONFIG["price"]["reference_year"]
 # ElCom consumption category (H4 = standard household)
 PRICE_CATEGORY = _WORKFLOW_CONFIG["price"]["category"]
+# Definition of relative_land (land.definition): national_share or canton_mean, see
+# load_data.RELATIVE_LAND_DEFINITIONS. The pipeline passes it via the rule's params.
+LAND_DEFINITION = _WORKFLOW_CONFIG["land"]["definition"]
 TRANSMISSION_REFERENCE_YEAR = PRICE_REFERENCE_YEAR  # same "today" reference-year logic as price
 
 # Column in scenario_attributes_summary (compute_all_attributes) -> attribute coordinate in the

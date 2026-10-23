@@ -34,6 +34,8 @@ Results go to `build/` (git-ignored). Each rule runs in its own conda environmen
 
 The two live data sources are pinned in `config/default.yaml` by one base year (`price.reference_year`): the ElCom reference price of that year and the EUR/CHF rate as the annual mean of the daily ECB reference rates of the same year (the year must be completed). This file is the single source for these price parameters; `src/config.py` reads them from there, so notebooks and the pipeline use the same values.
 
+The attribute `relative_land` (land used by wind and open-field PV) is by default the national share: national land use divided by the area of Switzerland (sum of the canton areas), like all other attributes national. The switch `land.definition` in `config/default.yaml` selects the previous definition `canton_mean` (unweighted mean of the cantons' shares, about twice as large for most scenarios) for comparison; the choice changes the ranking of the leading scenarios.
+
 If a Python virtual environment (e.g. `.venv`) is active, run `deactivate` first: otherwise its `python` shadows the rules' conda environments.
 
 ### Sensitivity to the reference price

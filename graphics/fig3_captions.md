@@ -7,7 +7,7 @@ Abweichung vom Szenario-Mittel je Attribut, nicht den absoluten Beitrag; die Rau
 Gesamt-Utility (obere Achse). Cost ist der dominante Treiber der Unterschiede zwischen den
 Szenarien. Ownership liefert einen grossen, aber nahezu konstanten negativen Beitrag (DE-CH ≈ −0.11
 bis −0.12, FR-CH ≈ −0.10), der für die Rangfolge praktisch irrelevant ist (Spannweite über alle
-Szenarien in DE-CH: 0.008 vs. 0.585 bei Cost; FR-CH: 0.010 vs. 0.361). Die absoluten Beiträge hängen
+Szenarien in DE-CH: 0.008 vs. 0.579 bei Cost; FR-CH: 0.010 vs. 0.358). Die absoluten Beiträge hängen
 von der gewählten Referenz ab – "public" als Dummy-Referenz für Ownership, der ElCom-2025-Preis als
 Referenz für Cost. Eine andere Codierung würde die absoluten Balkenlängen verändern, nicht aber die
 Rangfolge.

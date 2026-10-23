@@ -28,7 +28,7 @@ from config import (
     CAPACITY_DENSITY_GW_PER_KM2, OWNERSHIP_MAPPING, PRICE_MARGIN, PRICE_REFERENCE_YEAR, PRICE_CATEGORY,
     TECH_SOURCE_MAPPING, PV_REFERENCE_TECHS, TRANSMISSION_REFERENCE_YEAR, CHOICE_MODEL_PATH,
     SECTOR_COUPLING_ELEC_TECHS, SCENARIO_DIR, CANTON_AREA_CSV_PATH, RAW_DIR, PROCESSED_DIR,
-    MELLOT_COST_CHANGE_PCT,
+    MELLOT_COST_CHANGE_PCT, LAND_DEFINITION,
 )
 
 
@@ -592,10 +592,35 @@ def price_change_from_cost(system_cost: float, demand: float, elcom_ref: dict, e
     return (simulated_rp_kwh - elcom_ref["total_rp_kwh"]) / elcom_ref["total_rp_kwh"]
 
 
+def national_area_km2(capacity_df: pd.DataFrame, area_dict: dict) -> float:
+    """Area of Switzerland as the sum over the scenario's Swiss locations (Calliope cantons, incl. the
+    merged codes AI_AR, BL_BS, NW_OW). Checked against the sum of the individual cantons in the canton
+    CSV, so that a missing or double-counted location is caught."""
+    locations = capacity_df["canton"].unique()
+    total = sum(area_dict[c] for c in locations)
+    csv_total = sum(v for c, v in area_dict.items() if c not in CANTON_MERGES)
+    if not np.isclose(total, csv_total):
+        raise ValueError(f"Area of the scenario's locations ({total} km²) does not match the canton CSV "
+                         f"({csv_total} km²); locations: {sorted(locations)}")
+    return total
+
+
 def compute_national_relative_land(nc_path: str, area_dict: dict) -> float:
-    """National average of relative land use (unweighted mean over cantons).
-    For a later regional application of the model, the canton values are needed separately
-    (compute_land_from_capacity provides them at that granularity)."""
+    """Relative land use as a share of the national area (main definition, land.definition =
+    national_share): national land use (sum of land_use_km2 over all Swiss locations) divided by the
+    national area (national_area_km2). The survey attribute is a share of the country's land, and all
+    other attributes are national as well. A regional variant (land use per language region) is
+    deliberately not implemented, because all other attributes are national."""
+    capacity_df = load_scenario_capacity(nc_path)
+    land_df = compute_land_from_capacity(capacity_df, area_dict)
+    return land_df["land_use_km2"].sum() / national_area_km2(capacity_df, area_dict)
+
+
+def compute_mean_canton_relative_land(nc_path: str, area_dict: dict) -> float:
+    """Previous definition (land.definition = canton_mean): unweighted mean over the cantons of
+    land_use_km2 / canton area. Unlike compute_national_relative_land, every canton counts equally
+    regardless of its size, so small cantons with much land use weigh as much as large ones (values
+    are about twice the national share for most scenarios). Kept for comparison."""
     capacity_df = load_scenario_capacity(nc_path)
     land_df = compute_land_from_capacity(capacity_df, area_dict)
     per_canton_land = land_df.groupby("canton")["land_use_km2"].sum()
@@ -603,14 +628,25 @@ def compute_national_relative_land(nc_path: str, area_dict: dict) -> float:
     return (per_canton_land / per_canton_area).mean()
 
 
-def compute_all_attributes(nc_path: str, area_dict: dict, elcom_ref: dict, eur_to_chf: float) -> dict:
-    """Computes all 11 choice-model attributes (national) for one scenario."""
+# land.definition in config/default.yaml -> function computing relative_land
+RELATIVE_LAND_DEFINITIONS = {
+    "national_share": compute_national_relative_land,
+    "canton_mean": compute_mean_canton_relative_land,
+}
+
+
+def compute_all_attributes(nc_path: str, area_dict: dict, elcom_ref: dict, eur_to_chf: float,
+                           land_definition: str) -> dict:
+    """Computes all 11 choice-model attributes (national) for one scenario.
+    land_definition: key of RELATIVE_LAND_DEFINITIONS (land.definition in config/default.yaml)."""
+    if land_definition not in RELATIVE_LAND_DEFINITIONS:
+        raise ValueError(f"Unknown land definition {land_definition!r}, expected one of {list(RELATIVE_LAND_DEFINITIONS)}")
     capacity_df = load_scenario_capacity(nc_path)
     return {
         # Empirically verified, not a placeholder: the CH-foreign AC capacity is identical in all 12
         # scenarios (13.249 GW per direction); Mellot et al. do not expand transmission.
         "transmission_change": 0.0,
-        "relative_land": compute_national_relative_land(nc_path, area_dict),
+        "relative_land": RELATIVE_LAND_DEFINITIONS[land_definition](nc_path, area_dict),
         # import_share_extended (compute_import_share_extended) deliberately not included:
         # fuel and electricity GWh are not comparable; the choice model defines electricity import only.
         "import_share": compute_import_share(nc_path),
@@ -638,7 +674,7 @@ def compute_all_scenarios(scenario_dir: str = SCENARIO_DIR, area_csv_path: str =
         nc_path = os.path.join(scenario_dir, filename)
         sid = scenario_id_from_filename(filename)
         print(f"Processing {sid}...")
-        row = compute_all_attributes(nc_path, area_dict, elcom_ref, eur_to_chf)
+        row = compute_all_attributes(nc_path, area_dict, elcom_ref, eur_to_chf, LAND_DEFINITION)
         row["scenario_id"] = sid
         rows.append(row)
     return pd.DataFrame(rows)

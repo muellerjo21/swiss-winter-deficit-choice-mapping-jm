@@ -438,11 +438,20 @@ def fig_reference_price_sensitivity(curve: pd.DataFrame, crossings: pd.DataFrame
         # year labels next to the marker of the first crossing scenario
         for _, r in markers[markers["scenario_id"] == crossing_scenarios[0]].iterrows():
             x, y = r["total_rp_kwh"], r["p_rank1"]
-            ring = [(x + k * dx, y + k * dy, ha, va) for k in (1, 2, 3)  # increasingly further from the marker
+            ring = [(x + k * dx, y + k * dy, ha, va) for k in (1, 2)  # next to the marker
                     for dx, dy, ha, va in [(0, 0.04, "center", "bottom"), (-0.25, 0.03, "right", "bottom"),
                                            (0.25, 0.03, "left", "bottom"), (0.25, -0.03, "left", "top"),
                                            (-0.25, -0.03, "right", "top"), (0, -0.05, "center", "top")]]
-            _place_label(ax, str(int(r["year"])), ring, obstacles, placed, fontsize=8.5, color=TEXT_PRIMARY, zorder=6)
+            # wider search around the marker, nearest first; such labels get a leader line
+            span_x, span_y = (hi - lo) / 5, 0.3
+            far = sorted([(x + fx * span_x, y + fy * span_y, "center", "center")
+                          for fx in np.linspace(-1, 1, 13) for fy in np.linspace(-1, 1, 13)],
+                         key=lambda c: np.hypot((c[0] - x) / span_x, (c[1] - y) / span_y))
+            label = _place_label(ax, str(int(r["year"])), ring + far, obstacles, placed,
+                                 fontsize=8.5, color=TEXT_PRIMARY, zorder=6)
+            if label.get_position() not in [(cx, cy) for cx, cy, _, _ in ring]:
+                ax.annotate("", xy=(x, y), xytext=label.get_position(), zorder=4,
+                            arrowprops=dict(arrowstyle="-", lw=0.6, color=TEXT_SECONDARY, shrinkA=6, shrinkB=4))
         if tag == panels[0][0]:  # direct scenario labels in the first panel
             for s in scenarios:
                 c = region[region["scenario_id"] == s].sort_values("total_rp_kwh", ascending=False)

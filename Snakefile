@@ -51,7 +51,8 @@ rule fetch_elcom_reference:
 
 
 rule scenario_attributes:
-    message: "Compute choice-model attributes of scenario {wildcards.scenario}."
+    message: "Compute choice-model attributes of scenario {wildcards.scenario} (land: {params.land_definition})."
+    params: land_definition = config["land"]["definition"]
     input:
         nc = lambda wildcards: Path(config["data"]["scenario_dir"]) / SCENARIOS[wildcards.scenario],
         canton_area = config["data"]["canton_area"],
