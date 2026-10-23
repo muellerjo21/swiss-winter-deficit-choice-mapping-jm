@@ -46,7 +46,7 @@ The rule `sensitivity_reference_price` (`src/sensitivity.py`) checks how the ran
 - the reference price at which Alpine PV and S/CCGT (Fossil) + DACCS swap rank, per language region and national;
 - the real base years (default 2022–2025), each with its own ElCom reference values and annual EUR/CHF rate (the reference fetch rules run once per year).
 
-Results go to `build/data/sensitivity/`, the figure to `build/figures/fig6_p_rank1_vs_reference_price.*` (rule `plot_sensitivity`). Both are part of `snakemake` (rule `all`) and of the regression tests; to run only this part: `snakemake build/figures/fig6_p_rank1_vs_reference_price.png`.
+Fig6 marks the reference prices at which the rank-1 scenario changes (`reference_price_rank1_switches.csv`); the rank swap of the pair Alpine PV / S/CCGT (Fossil) + DACCS is kept as a separate CSV (`reference_price_crossing_points.csv`). Results go to `build/data/sensitivity/`, the figure to `build/figures/fig6_p_rank1_vs_reference_price.*` (rule `plot_sensitivity`). Both are part of `snakemake` (rule `all`) and of the regression tests; to run only this part: `snakemake build/figures/fig6_p_rank1_vs_reference_price.png`.
 
 ## Repository structure
 

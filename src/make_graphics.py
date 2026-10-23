@@ -392,13 +392,19 @@ def _place_label(ax, text: str, candidates: list, obstacles: np.ndarray, placed:
     return t
 
 
+# Colour order for the scenarios of fig6 (config sensitivity.figure_scenarios, in that order): blue, orange,
+# green, then violet instead of yellow -- yellow (#eda100) and orange (#eb6834) fail the normal-vision
+# separation check (dE 13.7 < 15); with violet all pairs pass (CVD dE >= 9.2, normal >= 16.3).
+SENSITIVITY_COLORS = [SERIES[0], SERIES[1], SERIES[2], SERIES[6], SERIES[4], SERIES[5]]
+
+
 def fig_reference_price_sensitivity(curve: pd.DataFrame, crossings: pd.DataFrame, base_years: pd.DataFrame,
                                     switches: pd.DataFrame, scenarios: list, out_dir: Path = GRAPHICS_DIR) -> None:
     """P(rank 1) of the given scenarios vs. the ElCom reference price, one panel per region. Lines: only
     the reference price varies (surcharges and EUR/CHF of the reference year); markers: real base years
     with their own surcharges and annual rate; dashed: changes of the rank-1 scenario (switches).
     crossings only provides the reference-year values for the footnote."""
-    colors = dict(zip(scenarios, SERIES))
+    colors = dict(zip(scenarios, SENSITIVITY_COLORS))
     panels = [("DE_CH", "DE-CH"), ("FR_CH", "FR-CH"), ("national", "Switzerland (pop.-weighted)")]
     grid = curve[~curve["is_reference_year"]]
     lo, hi = grid["total_rp_kwh"].min(), grid["total_rp_kwh"].max()
