@@ -376,7 +376,7 @@ def _place_label(ax, text: str, candidates: list, obstacles: np.ndarray, placed:
     for x, y, ha, va in candidates:
         t = ax.text(x, y, text, ha=ha, va=va, **style)
         extent = t.get_window_extent(renderer)
-        box = extent.expanded(1.12, 1.3)  # small margin around the text
+        box = extent.padded(3)  # fixed margin of 3 px around the text (independent of the text length)
         hit = ((points[:, 0] >= box.x0) & (points[:, 0] <= box.x1)
                & (points[:, 1] >= box.y0) & (points[:, 1] <= box.y1)).any()
         in_axes = ax.bbox.contains(extent.x0, extent.y0) and ax.bbox.contains(extent.x1, extent.y1)
@@ -393,10 +393,11 @@ def _place_label(ax, text: str, candidates: list, obstacles: np.ndarray, placed:
 
 
 def fig_reference_price_sensitivity(curve: pd.DataFrame, crossings: pd.DataFrame, base_years: pd.DataFrame,
-                                    scenarios: list, crossing_scenarios: list, out_dir: Path = GRAPHICS_DIR) -> None:
+                                    switches: pd.DataFrame, scenarios: list, out_dir: Path = GRAPHICS_DIR) -> None:
     """P(rank 1) of the given scenarios vs. the ElCom reference price, one panel per region. Lines: only
     the reference price varies (surcharges and EUR/CHF of the reference year); markers: real base years
-    with their own surcharges and annual rate; dashed: rank swap of the crossing pair."""
+    with their own surcharges and annual rate; dashed: changes of the rank-1 scenario (switches).
+    crossings only provides the reference-year values for the footnote."""
     colors = dict(zip(scenarios, SERIES))
     panels = [("DE_CH", "DE-CH"), ("FR_CH", "FR-CH"), ("national", "Switzerland (pop.-weighted)")]
     grid = curve[~curve["is_reference_year"]]
@@ -422,21 +423,27 @@ def fig_reference_price_sensitivity(curve: pd.DataFrame, crossings: pd.DataFrame
             ax.plot(c["total_rp_kwh"], c["p_rank1"], color=colors[s], lw=2, zorder=3, solid_capstyle="round")
             xs = np.linspace(lo, hi, 400)  # densified curve as obstacle for labels
             obstacles.append(np.column_stack([xs, np.interp(xs, c["total_rp_kwh"], c["p_rank1"])]))
-        xc = crossings.set_index("region").loc[tag, "crossing_rp_kwh"]
-        ax.axvline(xc, color=NEUTRAL, lw=1, ls="--", zorder=1)
-        swap_label = ax.text(xc, 1.075, f"rank swap {xc:.1f}", fontsize=8.5, color=TEXT_SECONDARY,
-                             va="bottom", ha="center")
-        obstacles.append(np.column_stack([np.full(400, xc), np.linspace(*ax.get_ylim(), 400)]))
+        region_switches = switches[switches["region"] == tag].sort_values("switch_rp_kwh")
+        for xc in region_switches["switch_rp_kwh"]:
+            ax.axvline(xc, color=NEUTRAL, lw=1, ls="--", zorder=1)
+            obstacles.append(np.column_stack([np.full(400, xc), np.linspace(*ax.get_ylim(), 400)]))
         years = base_years[base_years["region"] == tag]
-        markers = years[years["scenario_id"].isin(crossing_scenarios)]
+        markers = years[years["scenario_id"].isin(scenarios)]
         for _, r in markers.iterrows():
             ax.plot(r["total_rp_kwh"], r["p_rank1"], "o", color=colors[r["scenario_id"]], markersize=7,
                     markeredgecolor="white", markeredgewidth=1.5, zorder=5)
         obstacles.append(markers[["total_rp_kwh", "p_rank1"]].to_numpy())
         obstacles = np.vstack(obstacles)
-        placed = [swap_label.get_window_extent(fig.canvas.get_renderer())]
-        # year labels next to the marker of the first crossing scenario
-        for _, r in markers[markers["scenario_id"] == crossing_scenarios[0]].iterrows():
+        placed = []
+        # switch labels ("before -> after", price) next to their line, as high up as there is room
+        for _, sw in region_switches.iterrows():
+            xc = sw["switch_rp_kwh"]
+            text = f"{display_name(sw['scenario_before'])} →\n{display_name(sw['scenario_after'])} ({xc:.1f})"
+            cands = [(xc + dx, y, ha, "top") for y in np.arange(1.06, 0.3, -0.04)
+                     for dx, ha in [(0.15, "left"), (-0.15, "right")]]
+            _place_label(ax, text, cands, obstacles, placed, fontsize=8, color=TEXT_SECONDARY)
+        # year labels next to the marker of the first figure scenario
+        for _, r in markers[markers["scenario_id"] == scenarios[0]].iterrows():
             x, y = r["total_rp_kwh"], r["p_rank1"]
             ring = [(x + k * dx, y + k * dy, ha, va) for k in (1, 2)  # next to the marker
                     for dx, dy, ha, va in [(0, 0.04, "center", "bottom"), (-0.25, 0.03, "right", "bottom"),
@@ -469,13 +476,13 @@ def fig_reference_price_sensitivity(curve: pd.DataFrame, crossings: pd.DataFrame
     grid_usage = crossings["netznutzung_rp_kwh"].iloc[0]
     rate = crossings["eur_to_chf"].iloc[0]
     year = int(crossings["reference_year"].iloc[0])
-    names = " / ".join(display_name(s) for s in crossing_scenarios)
     fig.text(0, -0.06,
              f"Lines: only the reference price varies; taxes/levies ({taxes:.2f} Rp./kWh), grid usage "
              f"({grid_usage:.2f} Rp./kWh) and EUR/CHF ({rate:.4f}, annual mean) as in {year}.\n"
-             f"Markers: real base years with their own surcharges and annual EUR/CHF rate ({names}, same colours); "
-             "therefore not exactly on the lines.\n"
-             f"Dashed: reference price at which {names} swap rank (posterior-mean utility).",
+             "Markers: real base years (labelled at the Alpine PV marker) with their own surcharges and annual "
+             "EUR/CHF rate, same colours as the lines; therefore not exactly on the lines.\n"
+             "Dashed: reference price at which the rank-1 scenario changes (posterior-mean utility), "
+             "labelled 'before → after (price)'.",
              fontsize=8.5, color=TEXT_SECONDARY, ha="left", va="top")
     save(fig, "fig6_p_rank1_vs_reference_price", out_dir)
 

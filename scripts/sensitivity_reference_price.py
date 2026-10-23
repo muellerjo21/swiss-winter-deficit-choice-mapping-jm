@@ -12,7 +12,8 @@ from load_data import (
     load_mobile_partworths_mean, load_mobile_partworths_samples, load_scenario_cost_and_demand,
 )
 from sensitivity import (
-    check_completed_years, reference_price_grid, reference_price_curve, crossing_points, base_year_table,
+    check_completed_years, reference_price_grid, reference_price_curve, crossing_points, rank1_switches,
+    base_year_table,
 )
 from utility import load_attribute_scale
 
@@ -47,7 +48,8 @@ def sensitivity(path_to_attributes: str, path_to_choice_model: str, paths_to_nc:
                 paths_to_elcom: list[str], paths_to_eur_chf: list[str], reference_year: int, base_years: list[int],
                 reference_price: dict, crossing_scenarios: list[str], crossing_tolerance: float,
                 crossing_check_delta: float, mobile_share: float,
-                path_to_curve: str, path_to_crossings: str, path_to_base_years: str) -> None:
+                path_to_curve: str, path_to_crossings: str, path_to_base_years: str,
+                path_to_switches: str) -> None:
     check_completed_years(base_years)
     attributes = pd.read_csv(path_to_attributes)
     scenario_cost = {s: load_scenario_cost_and_demand(p) for s, p in zip(scenario_ids, paths_to_nc)}
@@ -56,7 +58,10 @@ def sensitivity(path_to_attributes: str, path_to_choice_model: str, paths_to_nc:
     ref, (rate, _) = elcom[reference_year], rates[reference_year]
 
     grid = reference_price_grid(reference_price["start"], reference_price["stop"], reference_price["step"])
-    reference_price_curve(attributes, scenario_cost, ref, rate, grid, model).to_csv(path_to_curve, index=False)
+    curve = reference_price_curve(attributes, scenario_cost, ref, rate, grid, model)
+    curve.to_csv(path_to_curve, index=False)
+    rank1_switches(attributes, scenario_cost, ref, rate, model, curve, tolerance=crossing_tolerance,
+                   check_delta=crossing_check_delta).to_csv(path_to_switches, index=False)
 
     crossings = crossing_points(attributes, scenario_cost, ref, rate, model, *crossing_scenarios,
                                 low=float(grid[0]), high=float(grid[-1]),
@@ -89,4 +94,5 @@ if __name__ == "__main__":
         path_to_curve=snakemake.output.curve,
         path_to_crossings=snakemake.output.crossings,
         path_to_base_years=snakemake.output.base_years,
+        path_to_switches=snakemake.output.switches,
     )

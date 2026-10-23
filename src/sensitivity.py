@@ -120,6 +120,44 @@ def crossing_points(attributes: pd.DataFrame, scenario_cost: dict, elcom_ref: di
     return pd.DataFrame(rows)
 
 
+def rank1_switches(attributes: pd.DataFrame, scenario_cost: dict, elcom_ref: dict, eur_to_chf: float,
+                   model: dict, curve: pd.DataFrame, tolerance: float, check_delta: float) -> pd.DataFrame:
+    """All changes of the rank-1 scenario (posterior-mean utility) over the curve's reference-price grid,
+    per region. Each grid interval whose rank-1 scenario differs at both ends is narrowed down by
+    bisection to the price where rank 1 changes; scenario_before / scenario_after are rank 1 just below /
+    above it, and their ranks are recorded check_delta below and above the switch."""
+    rows = []
+    grid = curve[~curve["is_reference_year"]]
+    for tag in region_tags(model["weights"]):
+        leader = (grid[(grid["region"] == tag) & (grid["rank"] == 1)]
+                  .set_index("total_rp_kwh")["scenario_id"].sort_index())
+        for (low, before), (high, after) in zip(leader.items(), list(leader.items())[1:]):
+            if before == after:
+                continue
+
+            def rank1(total):
+                rk = rankings_at(attributes, scenario_cost, {**elcom_ref, "total_rp_kwh": total}, eur_to_chf, model)
+                return rk[f"rank_{tag}"].idxmin(), rk
+
+            while high - low > tolerance:
+                mid = (low + high) / 2
+                leader_mid = rank1(mid)[0]
+                if leader_mid == before:
+                    low = mid
+                else:
+                    high, after = mid, leader_mid
+            x = (low + high) / 2
+            row = {"region": tag, "switch_rp_kwh": x, "scenario_before": before, "scenario_after": after}
+            for side, total in [("below", x - check_delta), ("above", x + check_delta)]:
+                _, rk = rank1(total)
+                row[f"rank_before_{side}"] = int(rk.loc[before, f"rank_{tag}"])
+                row[f"rank_after_{side}"] = int(rk.loc[after, f"rank_{tag}"])
+            rows.append(row)
+    return pd.DataFrame(rows, columns=["region", "switch_rp_kwh", "scenario_before", "scenario_after",
+                                       "rank_before_below", "rank_after_below", "rank_before_above",
+                                       "rank_after_above"])
+
+
 def base_year_table(attributes: pd.DataFrame, scenario_cost: dict, elcom_refs: dict, rates: dict,
                     model: dict) -> pd.DataFrame:
     """price_change, rank, P(rank 1) and utility per base year, scenario and region.

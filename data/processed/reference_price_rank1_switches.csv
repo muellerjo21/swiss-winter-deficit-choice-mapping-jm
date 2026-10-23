@@ -1,0 +1,5 @@
+region,switch_rp_kwh,scenario_before,scenario_after,rank_before_below,rank_after_below,rank_before_above,rank_after_above
+DE_CH,28.118987646506866,policy_sccgt_daccs,policy_remix,1,2,2,1
+DE_CH,30.142299477622146,policy_remix,policy_alpine_pv,1,2,2,1
+FR_CH,27.071984387614066,policy_sccgt_daccs,policy_alpine_pv,1,2,2,1
+national,28.42737665315508,policy_sccgt_daccs,policy_alpine_pv,1,2,2,1

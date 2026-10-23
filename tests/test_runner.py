@@ -68,6 +68,14 @@ def _create_config_plugin(snakemake):
             return pd.read_csv(snakemake.input.reference_sensitivity_base_years)
 
         @pytest.fixture()
+        def sensitivity_switches(self):
+            return pd.read_csv(snakemake.input.sensitivity_switches)
+
+        @pytest.fixture()
+        def reference_sensitivity_switches(self):
+            return pd.read_csv(snakemake.input.reference_sensitivity_switches)
+
+        @pytest.fixture()
         def figure_sensitivity_pairs(self):
             """(build file, frozen reference file) per format."""
             return list(zip(snakemake.input.figure_sensitivity, snakemake.input.reference_figure_sensitivity))

@@ -79,6 +79,28 @@ def test_crossing_in_range_and_ranks_swap(sensitivity_crossings, sensitivity_cur
     assert np.sign(below[a] - below[b]) == -np.sign(above[a] - above[b]) != 0
 
 
+def test_rank1_switches_regression(sensitivity_switches, reference_sensitivity_switches):
+    a, e = sensitivity_switches, reference_sensitivity_switches
+    assert list(a.columns) == list(e.columns)
+    keys = ["region", "scenario_before", "scenario_after"]
+    assert a[keys].values.tolist() == e[keys].values.tolist()
+    assert np.abs(a["switch_rp_kwh"] - e["switch_rp_kwh"]).max() < CROSSING_ATOL
+    rank_cols = [c for c in a.columns if c.startswith("rank_")]
+    assert (a[rank_cols] == e[rank_cols]).all().all()
+
+
+def test_rank1_switches_ranks_swap(sensitivity_switches, sensitivity_curve):
+    """At every switch, 'before' is rank 1 just below and 'after' rank 1 just above (crossing_check_delta),
+    and the switch lies inside the curve's range."""
+    grid = sensitivity_curve[~sensitivity_curve["is_reference_year"]]
+    for _, s in sensitivity_switches.iterrows():
+        where = f"{s['region']} at {s['switch_rp_kwh']:.4f}"
+        assert grid["total_rp_kwh"].min() <= s["switch_rp_kwh"] <= grid["total_rp_kwh"].max(), where
+        assert s["scenario_before"] != s["scenario_after"], where
+        assert s["rank_before_below"] == 1 and s["rank_after_below"] > 1, where
+        assert s["rank_after_above"] == 1 and s["rank_before_above"] > 1, where
+
+
 def test_figure_identical_to_reference(figure_sensitivity_pairs):
     """fig6 PNG and PDF are byte-reproducible (no timestamps) -> compare with graphics/."""
     for built, reference in figure_sensitivity_pairs:

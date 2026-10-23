@@ -116,7 +116,8 @@ rule sensitivity_reference_price:
     output:
         curve = "build/data/sensitivity/reference_price_curve.csv",
         crossings = "build/data/sensitivity/reference_price_crossing_points.csv",
-        base_years = "build/data/sensitivity/reference_price_base_years.csv"
+        base_years = "build/data/sensitivity/reference_price_base_years.csv",
+        switches = "build/data/sensitivity/reference_price_rank1_switches.csv"
     conda: "envs/default.yaml"
     script: "scripts/sensitivity_reference_price.py"
 
@@ -124,12 +125,12 @@ rule sensitivity_reference_price:
 rule plot_sensitivity:
     message: "Create figure P(rank 1) vs. reference price."
     params:
-        figure_scenarios = SENSITIVITY["figure_scenarios"],
-        crossing_scenarios = SENSITIVITY["crossing_scenarios"]
+        figure_scenarios = SENSITIVITY["figure_scenarios"]
     input:
         curve = rules.sensitivity_reference_price.output.curve,
         crossings = rules.sensitivity_reference_price.output.crossings,
-        base_years = rules.sensitivity_reference_price.output.base_years
+        base_years = rules.sensitivity_reference_price.output.base_years,
+        switches = rules.sensitivity_reference_price.output.switches
     output: expand("build/figures/{figure}.{fmt}", figure=FIGURE_SENSITIVITY, fmt=FIGURE_FORMATS)
     conda: "envs/default.yaml"
     script: "scripts/make_sensitivity_plot.py"
@@ -176,9 +177,11 @@ rule test:
         sensitivity_curve = rules.sensitivity_reference_price.output.curve,
         sensitivity_crossings = rules.sensitivity_reference_price.output.crossings,
         sensitivity_base_years = rules.sensitivity_reference_price.output.base_years,
+        sensitivity_switches = rules.sensitivity_reference_price.output.switches,
         reference_sensitivity_curve = config["reference"]["sensitivity_curve"],
         reference_sensitivity_crossings = config["reference"]["sensitivity_crossings"],
         reference_sensitivity_base_years = config["reference"]["sensitivity_base_years"],
+        reference_sensitivity_switches = config["reference"]["sensitivity_switches"],
         figure_sensitivity = expand("build/figures/{figure}.{fmt}", figure=FIGURE_SENSITIVITY, fmt=["png", "pdf"]),
         reference_figure_sensitivity = expand("{path}.{fmt}", path=config["reference"]["figure_sensitivity"], fmt=["png", "pdf"])
     log: "build/test-report.html"

@@ -45,11 +45,13 @@ sensitivity:
     base_years: [2022, 2023, 2024, 2025]
     # Pair whose rank swap is located (posterior-mean utility equal), by bisection to this tolerance
     # (Rp./kWh); the ranks are checked crossing_check_delta below and above the crossing point.
+    # The changes of the rank-1 scenario over the range (rank1_switches, marked in fig6) use the
+    # same tolerance and check distance.
     crossing_scenarios: [policy_alpine_pv, policy_sccgt_daccs]
     crossing_tolerance: 1.0e-10
     crossing_check_delta: 0.01
     # Scenarios shown in fig6 (colour order of the palette)
-    figure_scenarios: [policy_alpine_pv, policy_sccgt_daccs, policy_mix]
+    figure_scenarios: [policy_alpine_pv, policy_sccgt_daccs, policy_mix, policy_remix]
 
 # Scenario ID (wildcard) -> .nc file name in data.scenario_dir. Explicit mapping instead of a glob,
 # because the file names contain commas.
@@ -74,4 +76,5 @@ reference:
     sensitivity_curve: data/processed/reference_price_curve.csv
     sensitivity_crossings: data/processed/reference_price_crossing_points.csv
     sensitivity_base_years: data/processed/reference_price_base_years.csv
+    sensitivity_switches: data/processed/reference_price_rank1_switches.csv
     figure_sensitivity: graphics/fig6_p_rank1_vs_reference_price

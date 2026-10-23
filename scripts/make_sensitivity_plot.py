@@ -13,7 +13,7 @@ if __name__ == "__main__":
         curve=pd.read_csv(snakemake.input.curve),
         crossings=pd.read_csv(snakemake.input.crossings),
         base_years=pd.read_csv(snakemake.input.base_years),
+        switches=pd.read_csv(snakemake.input.switches),
         scenarios=snakemake.params.figure_scenarios,
-        crossing_scenarios=snakemake.params.crossing_scenarios,
         out_dir=Path(snakemake.output[0]).parent,
     )
