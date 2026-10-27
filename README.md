@@ -30,7 +30,7 @@ Then run the entire workflow (attribute extraction -> utility -> figures -> regr
 
     snakemake
 
-Results go to `build/` (git-ignored). Each rule runs in its own conda environment (`envs/`), pinned to the versions the reference results were validated with. The rule `test` compares `build/` against the frozen reference results in `data/processed/`. Other useful rules: `snakemake --list`, `snakemake dag` (dependency graph as `build/dag.pdf`), `snakemake clean`.
+Results go to `build/` (git-ignored); figures in `build/figures/` with one subfolder per format (`png/`, `pdf/`, `svg/`). Each rule runs in its own conda environment (`envs/`), pinned to the versions the reference results were validated with. The rule `test` compares `build/` against the frozen reference results in `data/processed/`. Other useful rules: `snakemake --list`, `snakemake dag` (dependency graph as `build/dag.pdf`), `snakemake clean`.
 
 The two live data sources are pinned in `config/default.yaml` by one base year (`price.reference_year`): the ElCom reference price of that year and the EUR/CHF rate as the annual mean of the daily ECB reference rates of the same year (the year must be completed). This file is the single source for these price parameters; `src/config.py` reads them from there, so notebooks and the pipeline use the same values.
 
@@ -46,7 +46,7 @@ The rule `sensitivity_reference_price` (`src/sensitivity.py`) checks how the ran
 - the reference price at which Alpine PV and S/CCGT (Fossil) + DACCS swap rank, per language region and national;
 - the real base years (default 2022–2025), each with its own ElCom reference values and annual EUR/CHF rate (the reference fetch rules run once per year).
 
-Fig6 marks the reference prices at which the rank-1 scenario changes (`reference_price_rank1_switches.csv`); the rank swap of the pair Alpine PV / S/CCGT (Fossil) + DACCS is kept as a separate CSV (`reference_price_crossing_points.csv`). Results go to `build/data/sensitivity/`, the figure to `build/figures/fig6_p_rank1_vs_reference_price.*` (rule `plot_sensitivity`). Both are part of `snakemake` (rule `all`) and of the regression tests; to run only this part: `snakemake build/figures/fig6_p_rank1_vs_reference_price.png`.
+Fig6 marks the reference prices at which the rank-1 scenario changes (`reference_price_rank1_switches.csv`); the rank swap of the pair Alpine PV / S/CCGT (Fossil) + DACCS is kept as a separate CSV (`reference_price_crossing_points.csv`). Results go to `build/data/sensitivity/`, the figure to `build/figures/{png,pdf,svg}/fig6_p_rank1_vs_reference_price.*` (rule `plot_sensitivity`). Both are part of `snakemake` (rule `all`) and of the regression tests; to run only this part: `snakemake build/figures/png/fig6_p_rank1_vs_reference_price.png`.
 
 ### Regional analysis (main analysis)
 
@@ -56,7 +56,7 @@ The main analysis runs on the 23 Swiss locations of the Calliope model (20 canto
 - utility per region with the coefficients of its language region (draw by draw), aggregated with the population (BFS STATPOP) to DE-CH, FR-CH and national; TI has no coefficients in the choice model and is excluded in the main regional analysis (sensitivities with DE-CH, FR-CH and mixed coefficients);
 - inputs (ElCom tariffs per municipality, LINDAS municipality register, STATPOP) are fetched by own rules for completed years only.
 
-Figures of the regional main analysis (rule `make_plots_regional`, `build/figures/*_regional.*`): fig1–fig5 and figA1 as in the national aggregate but with the regional rankings (fig3/figA1: population-weighted mean contributions per language region), fig6 P(rank 1) over a common shift of all regional reference prices, fig7 a schematic tile map of the rank-1 scenario per region, fig8 the population share per rank-1 scenario. They are not frozen yet.
+Figures of the regional main analysis (rule `make_plots_regional`, `build/figures/{png,pdf,svg}/*_regional.*`): fig1–fig5 and figA1 as in the national aggregate but with the regional rankings (fig3/figA1: population-weighted mean contributions per language region), fig6 P(rank 1) over a common shift of all regional reference prices, fig7 a schematic tile map of the rank-1 scenario per region, fig8 the population share per rank-1 scenario. They are not frozen yet.
 
 Regional results are written to files with the suffix `_regional` (`build/data/utility_rankings_regional.csv`, `build/data/regional/`, `build/data/sensitivity/*_regional.csv`) and tested against the frozen references `data/processed/*_regional.csv` and `data/processed/regional_attributes.csv`.
 

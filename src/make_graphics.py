@@ -65,12 +65,14 @@ def display_name(scenario_id: str) -> str:
 
 
 def save(fig, name: str, out_dir: Path = GRAPHICS_DIR) -> None:
+    """One subfolder per format: out_dir/png/name.png, out_dir/pdf/name.pdf, out_dir/svg/name.svg."""
     out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_dir / f"{name}.png", dpi=300)
+    for fmt in ("png", "pdf", "svg"):
+        (out_dir / fmt).mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_dir / "png" / f"{name}.png", dpi=300)
     # No timestamp in the metadata -> byte-identical files for identical input
-    fig.savefig(out_dir / f"{name}.pdf", metadata={"CreationDate": None})
-    fig.savefig(out_dir / f"{name}.svg", metadata={"Date": None})
+    fig.savefig(out_dir / "pdf" / f"{name}.pdf", metadata={"CreationDate": None})
+    fig.savefig(out_dir / "svg" / f"{name}.svg", metadata={"Date": None})
     plt.close(fig)
 
 

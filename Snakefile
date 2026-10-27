@@ -10,6 +10,7 @@ FIGURES = [  # created by src/make_graphics.make_all
     "fig4_rank_de_vs_fr", "fig5_cost_vs_preference", "figA1_utility_contributions_absolute",
 ]
 FIGURE_FORMATS = ["png", "pdf", "svg"]
+FIGURE_PATH = "build/figures/{fmt}/{figure}.{fmt}"  # one subfolder per format
 REFERENCE_YEAR = config["price"]["reference_year"]
 SENSITIVITY = config["sensitivity"]
 FIGURE_SENSITIVITY = "fig6_p_rank1_vs_reference_price"  # created by src/make_graphics.fig_reference_price_sensitivity
@@ -25,7 +26,7 @@ REGIONAL_OUTPUTS = [  # part of rule all only with spatial.resolution: regional
     "build/data/utility_rankings_regional.csv",
     "build/data/sensitivity/reference_price_curve_regional.csv",
     "build/data/sensitivity/reference_price_rank1_switches_regional.csv",
-    *expand("build/figures/{figure}.{fmt}", figure=FIGURES_REGIONAL, fmt=FIGURE_FORMATS),
+    *expand(FIGURE_PATH, figure=FIGURES_REGIONAL, fmt=FIGURE_FORMATS),
 ]
 
 
@@ -33,9 +34,9 @@ rule all:
     message: "Run entire analysis and tests."
     input:
         "build/data/utility_rankings.csv",
-        expand("build/figures/{figure}.{fmt}", figure=FIGURES, fmt=FIGURE_FORMATS),
+        expand(FIGURE_PATH, figure=FIGURES, fmt=FIGURE_FORMATS),
         "build/data/sensitivity/reference_price_curve.csv",
-        expand("build/figures/{figure}.{fmt}", figure=FIGURE_SENSITIVITY, fmt=FIGURE_FORMATS),
+        expand(FIGURE_PATH, figure=FIGURE_SENSITIVITY, fmt=FIGURE_FORMATS),
         REGIONAL_OUTPUTS if config["spatial"]["resolution"] == "regional" else [],
         "build/test.success"
 
@@ -220,7 +221,7 @@ rule make_plots:
         attributes = rules.compute_attributes.output[0],
         rankings = rules.compute_utility.output[0],
         choice_model = config["data"]["choice_model"]  # fig3/fig5 need the betas directly
-    output: expand("build/figures/{figure}.{fmt}", figure=FIGURES, fmt=FIGURE_FORMATS)
+    output: expand(FIGURE_PATH, figure=FIGURES, fmt=FIGURE_FORMATS)
     conda: "envs/default.yaml"
     script: "scripts/make_plots.py"
 
@@ -242,7 +243,7 @@ rule make_plots_regional:
         switches = rules.regional_reference_price.output.switches,
         elcom = f"build/data/reference/elcom_price_{REFERENCE_YEAR}.json",  # national median, fig6 top axis
         choice_model = config["data"]["choice_model"]
-    output: expand("build/figures/{figure}.{fmt}", figure=FIGURES_REGIONAL, fmt=FIGURE_FORMATS)
+    output: expand(FIGURE_PATH, figure=FIGURES_REGIONAL, fmt=FIGURE_FORMATS)
     conda: "envs/default.yaml"
     script: "scripts/make_plots_regional.py"
 
@@ -282,7 +283,7 @@ rule plot_sensitivity:
         crossings = rules.sensitivity_reference_price.output.crossings,
         base_years = rules.sensitivity_reference_price.output.base_years,
         switches = rules.sensitivity_reference_price.output.switches
-    output: expand("build/figures/{figure}.{fmt}", figure=FIGURE_SENSITIVITY, fmt=FIGURE_FORMATS)
+    output: expand(FIGURE_PATH, figure=FIGURE_SENSITIVITY, fmt=FIGURE_FORMATS)
     conda: "envs/default.yaml"
     script: "scripts/make_sensitivity_plot.py"
 
@@ -349,7 +350,7 @@ rule test:
         reference_sensitivity_crossings = config["reference"]["sensitivity_crossings"],
         reference_sensitivity_base_years = config["reference"]["sensitivity_base_years"],
         reference_sensitivity_switches = config["reference"]["sensitivity_switches"],
-        figure_sensitivity = expand("build/figures/{figure}.{fmt}", figure=FIGURE_SENSITIVITY, fmt=["png", "pdf"]),
+        figure_sensitivity = expand(FIGURE_PATH, figure=FIGURE_SENSITIVITY, fmt=["png", "pdf"]),
         reference_figure_sensitivity = expand("{path}.{fmt}", path=config["reference"]["figure_sensitivity"], fmt=["png", "pdf"])
     log: "build/test-report.html"
     output: "build/test.success"

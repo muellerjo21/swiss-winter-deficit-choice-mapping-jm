@@ -25,5 +25,5 @@ if __name__ == "__main__":
         pd.read_csv(snakemake.input.rank1_share), pd.read_csv(snakemake.input.curve),
         pd.read_csv(snakemake.input.switches), national,
         json.loads(Path(snakemake.input.elcom).read_text())["total_rp_kwh"], p.figure_scenarios,
-        model_path=snakemake.input.choice_model, out_dir=Path(snakemake.output[0]).parent,
+        model_path=snakemake.input.choice_model, out_dir=Path(snakemake.output[0]).parent.parent,
         mobile_share=p.mobile_share, credible_interval=p.credible_interval)
