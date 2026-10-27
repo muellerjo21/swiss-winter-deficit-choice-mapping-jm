@@ -56,6 +56,8 @@ The main analysis runs on the 23 Swiss locations of the Calliope model (20 canto
 - utility per region with the coefficients of its language region (draw by draw), aggregated with the population (BFS STATPOP) to DE-CH, FR-CH and national; TI has no coefficients in the choice model and is excluded in the main regional analysis (sensitivities with DE-CH, FR-CH and mixed coefficients);
 - inputs (ElCom tariffs per municipality, LINDAS municipality register, STATPOP) are fetched by own rules for completed years only.
 
+Figures of the regional main analysis (rule `make_plots_regional`, `build/figures/*_regional.*`): fig1–fig5 and figA1 as in the national aggregate but with the regional rankings (fig3/figA1: population-weighted mean contributions per language region), fig6 P(rank 1) over a common shift of all regional reference prices, fig7 a schematic tile map of the rank-1 scenario per region, fig8 the population share per rank-1 scenario. They are not frozen yet.
+
 Regional results are written to files with the suffix `_regional` (`build/data/utility_rankings_regional.csv`, `build/data/regional/`, `build/data/sensitivity/*_regional.csv`) and tested against the frozen references `data/processed/*_regional.csv` and `data/processed/regional_attributes.csv`.
 
 The national aggregate (attributes computed for Switzerland as a whole, utility per language region; files without suffix, figures fig1–fig6 and the reference-price sensitivity above) is always computed as a secondary analysis and keeps its own references. With `spatial.resolution: national` the rule `all` builds only the national aggregate (the regional outputs are still built for the tests).

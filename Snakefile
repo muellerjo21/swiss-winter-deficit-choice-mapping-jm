@@ -15,10 +15,17 @@ SENSITIVITY = config["sensitivity"]
 FIGURE_SENSITIVITY = "fig6_p_rank1_vs_reference_price"  # created by src/make_graphics.fig_reference_price_sensitivity
 SENSITIVITY_YEARS = sorted(set(SENSITIVITY["base_years"]) | {REFERENCE_YEAR})
 REGIONAL = config["spatial"]["regional"]
+FIGURES_REGIONAL = [  # created by src/make_graphics.make_all_regional
+    "fig1_rank_choice_vs_cost_regional", "fig2_utility_forest_regional", "fig3_utility_contributions_regional",
+    "fig4_rank_de_vs_fr_regional", "fig5_cost_vs_preference_regional", "figA1_utility_contributions_absolute_regional",
+    "fig6_p_rank1_vs_reference_price_shift_regional", "fig7_rank1_by_region_regional",
+    "fig8_rank1_population_share_regional",
+]
 REGIONAL_OUTPUTS = [  # part of rule all only with spatial.resolution: regional
     "build/data/utility_rankings_regional.csv",
     "build/data/sensitivity/reference_price_curve_regional.csv",
     "build/data/sensitivity/reference_price_rank1_switches_regional.csv",
+    *expand("build/figures/{figure}.{fmt}", figure=FIGURES_REGIONAL, fmt=FIGURE_FORMATS),
 ]
 
 
@@ -216,6 +223,28 @@ rule make_plots:
     output: expand("build/figures/{figure}.{fmt}", figure=FIGURES, fmt=FIGURE_FORMATS)
     conda: "envs/default.yaml"
     script: "scripts/make_plots.py"
+
+
+rule make_plots_regional:
+    message: "Create figures of the regional main analysis."
+    params:
+        exclude = REGIONAL["exclude_regions"],
+        figure_scenarios = SENSITIVITY["figure_scenarios"],
+        mobile_share = config["utility"]["mobile_share"],
+        credible_interval = config["utility"]["credible_interval"]
+    input:
+        attributes = rules.regional_attributes.output.attributes,
+        population = rules.regional_attributes.output.population,
+        rankings = rules.regional_utility.output.rankings,
+        regions = rules.regional_utility.output.regions,
+        rank1_share = rules.regional_utility.output.rank1_share,
+        curve = rules.regional_reference_price.output.curve,
+        switches = rules.regional_reference_price.output.switches,
+        elcom = f"build/data/reference/elcom_price_{REFERENCE_YEAR}.json",  # national median, fig6 top axis
+        choice_model = config["data"]["choice_model"]
+    output: expand("build/figures/{figure}.{fmt}", figure=FIGURES_REGIONAL, fmt=FIGURE_FORMATS)
+    conda: "envs/default.yaml"
+    script: "scripts/make_plots_regional.py"
 
 
 rule sensitivity_reference_price:
