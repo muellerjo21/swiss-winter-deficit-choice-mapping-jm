@@ -112,7 +112,7 @@ def load_mobile_partworths_mean(data_path) -> pd.DataFrame:
     """
     Posterior-MEAN of mobile_partworths, the additive shift of the partworths for respondents
     with m=1 (constant_data/m) in the Jan 2026 model (CHOICE_MODEL_PATH):
-        u = x_scaled . (beta_partworths[country] + m * mobile_partworths)
+        u = sum_k z_k / sigma_k * (beta_partworths[country, k] + m * mobile_partworths[k])
     verified against u_left/u_right in the posterior. Not region-specific (no country dim).
     The reading "m=1 = answered on a mobile device" rests on the variable name only; the
     file contains no further documentation of m.
@@ -155,15 +155,13 @@ def load_scenarios(scenarios_path: str) -> pd.DataFrame:
 
 #not in the pipeline
 def compute_beta_real_units(idata) -> pd.DataFrame:
-    """Scale full posterior beta_partworths to real units (beta / max_survey_value)."""
-    beta = idata.posterior["beta_partworths"]
-
-    raw_left = idata.constant_data["attribute_values_left"]
-    raw_right = idata.constant_data["attribute_values_right"]
-    max_per_attribute = xr.concat([raw_left, raw_right], dim="choice_situation").max(dim="choice_situation")
-
-    beta_real = beta / max_per_attribute
-
+    """Full posterior beta_partworths in real units, beta / sigma_k (utility per unit of the raw
+    attribute), with sigma_k from utility.attribute_scale_from_constant_data -- the same factor the
+    pipeline uses (utility.to_real_units). For the Jan 2026 model, sigma_k equals the maximum raw survey
+    value (scaled maximum is 1 for every attribute), as in the earlier definition of this function."""
+    from utility import attribute_scale_from_constant_data
+    sigma = pd.Series(attribute_scale_from_constant_data(idata.constant_data)).rename_axis("attribute").to_xarray()
+    beta_real = idata.posterior["beta_partworths"] / sigma
     return beta_real.to_dataframe(name="beta_real").reset_index()
 
 

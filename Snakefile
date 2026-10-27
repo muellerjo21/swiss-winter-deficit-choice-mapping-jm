@@ -86,6 +86,15 @@ rule compute_utility:
     script: "scripts/compute_utility.py"
 
 
+rule beta_real_units:
+    message: "Choice-model coefficients in real units (beta / sigma)."
+    params: mobile_share = config["utility"]["mobile_share"]
+    input: choice_model = config["data"]["choice_model"]
+    output: "build/data/beta_real_units.csv"
+    conda: "envs/default.yaml"
+    script: "scripts/beta_real_units.py"
+
+
 rule make_plots:
     message: "Create figures (mobile_share={params.mobile_share})."
     params:
@@ -176,6 +185,7 @@ rule test:
         tests = map(str, Path("tests").glob("**/test_*.py")),
         attributes = rules.compute_attributes.output[0],
         rankings = rules.compute_utility.output[0],
+        beta_real_units = rules.beta_real_units.output[0],
         reference_attributes = config["reference"]["attributes"],
         reference_rankings = config["reference"]["rankings"],
         sensitivity_curve = rules.sensitivity_reference_price.output.curve,

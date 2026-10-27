@@ -184,6 +184,22 @@ ATTRIBUTE_COLUMN_TO_MODEL_TERM = {
     "ownership_community": "ownership_community",
 }
 
+# Unit of the raw scenario attribute z_k per model attribute; beta_real_k = beta_k / sigma_k is the
+# utility per one unit of z_k (e.g. per 1.0 = 100 percentage points of a share).
+ATTRIBUTE_UNITS = {
+    "source_wind": "share of generation capacity excl. hydro (GW/GW, 0..1)",
+    "source_coal": "share of generation capacity excl. hydro (GW/GW, 0..1)",
+    "source_gas": "share of generation capacity excl. hydro (GW/GW, 0..1)",
+    "source_nuclear": "share of generation capacity excl. hydro (GW/GW, 0..1)",
+    "source_biomass": "share of generation capacity excl. hydro (GW/GW, 0..1)",
+    "cost": "relative change of the household price vs. the ElCom reference (-, 0.1 = +10 %)",
+    "import": "net electricity import / electricity demand (GWh/GWh, 0..1)",
+    "transmission": "relative change of the transmission capacity (-)",
+    "land": "land use of wind and open-field/alpine PV / area (km²/km²)",
+    "ownership_commercial": "share of generation capacity incl. hydro (GW/GW, 0..1)",
+    "ownership_community": "share of generation capacity incl. hydro (GW/GW, 0..1)",
+}
+
 # Source: Swiss Federal Statistical Office (BFS), "Sprachliche Praktiken in der Schweiz",
 # structural survey 2023. Main languages of the permanent resident population: German 61%,
 # French 23% (multiple answers possible). Normalised here to DE-CH/FR-CH only (analogous to

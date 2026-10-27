@@ -25,8 +25,9 @@ land:
     definition: national_share
 
 utility:
-    # Share mobile_share (0..1) with which mobile_partworths is added to beta_partworths:
-    # u = x_scaled · (beta_partworths + mobile_share · mobile_partworths). In the model, m is a
+    # Share mobile_share (0..1) with which mobile_partworths (gamma) is added to beta_partworths:
+    # u = sum_k z_k · (beta_k + mobile_share · gamma_k) / sigma_k, with raw attributes z and the
+    # coefficients converted to real units by the survey scale sigma_k (see src/utility.py). In the model, m is a
     # 0/1 indicator per respondent (constant_data/m); "m=1 = answered on a mobile phone" is only
     # inferred from the variable name. 0.0 = reference case m=0 (previous results),
     # 1.0 = all m=1, 0.6184 = sample share of m=1 in DE-CH + FR-CH (478 of 773).

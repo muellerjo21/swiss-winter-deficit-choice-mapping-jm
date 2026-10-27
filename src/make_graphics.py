@@ -23,7 +23,7 @@ from load_data import (
     load_mobile_partworths_mean, load_mobile_partworths_samples,
 )
 from utility import (
-    load_attribute_scale, scale_scenario_attributes, compute_utility_samples, compute_choice_shares,
+    load_attribute_scale, raw_attributes, to_real_units, compute_utility_samples, compute_choice_shares,
     credible_interval_quantiles, credible_interval_tag,
 )
 
@@ -196,14 +196,17 @@ CONTRIBUTION_COLORS = [SERIES[0], SERIES[1], SERIES[2], SERIES[3], SERIES[4], SE
 
 def compute_contributions(attrs: pd.DataFrame, region: str, scale: dict,
                           model_path: Path = CHOICE_MODEL_PATH, mobile_share: float = 0.0) -> pd.DataFrame:
-    """(beta_mean + mobile_share * mobile_mean) * x_scaled per scenario and contribution group
-    (same coefficients as utility.compute_utility)."""
-    beta = load_beta_partworths_mean(model_path, country=region).set_index("attribute")["beta_mean"]
+    """z_k * (beta_real_k + mobile_share * gamma_real_k) per scenario and contribution group, with raw
+    attributes z and coefficients in real units (same as utility.compute_utility)."""
+    terms = list(ATTRIBUTE_COLUMN_TO_MODEL_TERM.values())
+    beta = pd.Series(to_real_units(load_beta_partworths_mean(model_path, country=region).set_index("attribute")["beta_mean"],
+                                   scale, terms))
     if mobile_share != 0.0:
-        beta = beta + mobile_share * load_mobile_partworths_mean(model_path).set_index("attribute")["mobile_mean"]
+        beta = beta + mobile_share * pd.Series(to_real_units(
+            load_mobile_partworths_mean(model_path).set_index("attribute")["mobile_mean"], scale, terms))
     rows = {}
     for _, r in attrs.iterrows():
-        per_term = scale_scenario_attributes(r, scale) * beta.loc[list(ATTRIBUTE_COLUMN_TO_MODEL_TERM.values())]
+        per_term = raw_attributes(r) * beta.loc[terms]
         rows[r["scenario_id"]] = {label: per_term[terms].sum() for label, terms in CONTRIBUTION_GROUPS}
     return pd.DataFrame(rows).T
 

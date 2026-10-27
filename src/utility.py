@@ -1,15 +1,20 @@
 """
 Utility computation for the Mellot scenarios with the Jan 2026 choice model (CHOICE_MODEL_PATH).
 
-The model is fitted on scaled attribute values (constant_data/attribute_values_*_scaled =
-raw value / survey maximum, e.g. import/0.9, land/0.08, transmission/2.0). The scenario attributes
-(raw values, as in scenario_attributes_summary) are therefore divided by the same factors before
-being multiplied by beta -- verified against u_right in the posterior (deviation ~1e-15):
-    u = sum_k x_scaled[k] * (beta_partworths[country, k] + m * mobile_partworths[k])
-(m in constant_data, 0/1 per respondent; also verified against u_left/u_right, ~1e-16).
-beta_partworths alone is the reference case m=0. Optionally, mobile_partworths is mixed in with the
-share mobile_share (0..1, config/default.yaml utility.mobile_share); default 0.0 = reference case.
-left_intercept (left/right position effect) is deliberately not used.
+The model is fitted on scaled attribute values z / sigma_k (constant_data/attribute_values_*_scaled =
+raw value / survey maximum sigma_k, e.g. import 0.9, land 0.08, transmission 2.0; read from the model
+file by load_attribute_scale). Instead of scaling the scenario attributes, the coefficients are
+converted back to real units, which is mathematically identical (z / sigma * beta = z * (beta / sigma)):
+    beta_real_k  = beta_partworths[country, k] / sigma_k   (utility per unit of the raw attribute)
+    gamma_real_k = mobile_partworths[k] / sigma_k
+    u = sum_k z_k * (beta_real_k + mobile_share * gamma_real_k)
+with z the raw scenario attributes as in scenario_attributes_summary (shares 0..1, relative price
+change, land share). The model form u = sum_k z_k / sigma_k * (beta + m * gamma) was verified against
+u_left/u_right in the posterior (deviation ~1e-16; m in constant_data, 0/1 per respondent).
+beta alone is the reference case m=0; mobile_share (0..1, config/default.yaml utility.mobile_share)
+mixes in gamma, default 0.0. left_intercept (left/right position effect) is deliberately not used.
+The equivalence holds because no attribute is clipped to the survey range after scaling (import_share
+is clipped to [0, 1] on the raw value, before any coefficient is applied).
 """
 
 import arviz as az
@@ -19,20 +24,30 @@ import pandas as pd
 from config import ATTRIBUTE_COLUMN_TO_MODEL_TERM, LANGUAGE_REGION_WEIGHTS, CREDIBLE_INTERVAL
 
 
-def load_attribute_scale(data_path) -> dict:
-    """Scaling factor per model attribute (raw value / scaled value), read directly from the
-    survey data in the model file instead of hard-coded."""
-    constant = az.from_netcdf(data_path).constant_data
+def attribute_scale_from_constant_data(constant) -> dict:
+    """Scaling factor sigma_k per model attribute (raw value / scaled value of the survey attributes,
+    in the unit of the raw attribute), from the constant_data group of the model file."""
     raw = constant["attribute_values_left"].max(dim="choice_situation")
     scaled = constant["attribute_values_left_scaled"].max(dim="choice_situation")
     return (raw / scaled).to_series().to_dict()
 
 
-def scale_scenario_attributes(scenario_row: pd.Series, scale: dict,
-                              mapping: dict = ATTRIBUTE_COLUMN_TO_MODEL_TERM) -> pd.Series:
-    """Raw scenario values -> scaled values, indexed by model attribute name."""
-    return pd.Series({term: scenario_row[col] / scale[term] for col, term in mapping.items()})
+def load_attribute_scale(data_path) -> dict:
+    """sigma_k per model attribute, read directly from the survey data in the model file instead of
+    hard-coded (see attribute_scale_from_constant_data)."""
+    return attribute_scale_from_constant_data(az.from_netcdf(data_path).constant_data)
 
+
+def raw_attributes(scenario_row: pd.Series, mapping: dict = ATTRIBUTE_COLUMN_TO_MODEL_TERM) -> pd.Series:
+    """Raw scenario attributes z (as in scenario_attributes_summary), indexed by model attribute name."""
+    return pd.Series({term: scenario_row[col] for col, term in mapping.items()})
+
+
+def to_real_units(coefficients, scale: dict, terms) -> dict:
+    """Coefficients per model attribute (beta or gamma, utility per unit of the scaled attribute) ->
+    real units (utility per unit of the raw attribute): coefficient_k / sigma_k. coefficients: mapping
+    term -> float or array (posterior samples, order unchanged)."""
+    return {t: coefficients[t] / scale[t] for t in terms}
 
 def _check_mobile_share(mobile_share: float, mobile) -> None:
     if not 0.0 <= mobile_share <= 1.0:
@@ -44,30 +59,33 @@ def _check_mobile_share(mobile_share: float, mobile) -> None:
 def compute_utility(scenario_row: pd.Series, beta: pd.DataFrame, scale: dict,
                     mapping: dict = ATTRIBUTE_COLUMN_TO_MODEL_TERM,
                     mobile: pd.DataFrame = None, mobile_share: float = 0.0) -> float:
-    """Point estimate: sum((beta_mean + mobile_share * mobile_mean) * x_scaled) over all 11
-    attributes. beta as returned by load_beta_partworths_mean() (columns attribute, beta_mean), mobile
-    as returned by load_mobile_partworths_mean() (columns attribute, mobile_mean); only needed if
-    mobile_share > 0."""
+    """Point estimate: sum_k z_k * (beta_real_k + mobile_share * gamma_real_k) over all 11 attributes,
+    with raw attributes z and coefficients in real units (to_real_units). beta as returned by
+    load_beta_partworths_mean() (columns attribute, beta_mean), mobile as returned by
+    load_mobile_partworths_mean() (columns attribute, mobile_mean); only needed if mobile_share > 0."""
     _check_mobile_share(mobile_share, mobile)
-    x = scale_scenario_attributes(scenario_row, scale, mapping)
-    coef = beta.set_index("attribute")["beta_mean"].loc[x.index]
+    z = raw_attributes(scenario_row, mapping)
+    coef = pd.Series(to_real_units(beta.set_index("attribute")["beta_mean"], scale, z.index))
     if mobile_share != 0.0:
-        coef = coef + mobile_share * mobile.set_index("attribute")["mobile_mean"].loc[x.index]
-    return float((x * coef).sum())
+        coef = coef + mobile_share * pd.Series(to_real_units(mobile.set_index("attribute")["mobile_mean"], scale, z.index))
+    return float((z * coef).sum())
 
 
 def compute_utility_samples(scenario_row: pd.Series, beta_samples: dict, scale: dict,
                             mapping: dict = ATTRIBUTE_COLUMN_TO_MODEL_TERM,
                             mobile_samples: dict = None, mobile_share: float = 0.0) -> np.ndarray:
     """Utility per posterior sample (array of length chains*draws), same sample order as
-    beta_samples (from load_beta_partworths_samples()). If mobile_share > 0, per sample i:
-    x * (beta[i] + mobile_share * mobile[i]); mobile_samples from load_mobile_partworths_samples()
-    is stacked the same way, so sample i belongs to the same posterior draw across all attributes."""
+    beta_samples (from load_beta_partworths_samples()): per sample i,
+    sum_k z_k * (beta_real_k[i] + mobile_share * gamma_real_k[i]) with raw attributes z and
+    coefficients in real units. mobile_samples from load_mobile_partworths_samples() is stacked the
+    same way, so sample i belongs to the same posterior draw across all attributes."""
     _check_mobile_share(mobile_share, mobile_samples)
-    x = scale_scenario_attributes(scenario_row, scale, mapping)
+    z = raw_attributes(scenario_row, mapping)
+    beta_real = to_real_units(beta_samples, scale, z.index)
     if mobile_share == 0.0:
-        return sum(x[term] * beta_samples[term] for term in x.index)
-    return sum(x[term] * (beta_samples[term] + mobile_share * mobile_samples[term]) for term in x.index)
+        return sum(z[term] * beta_real[term] for term in z.index)
+    gamma_real = to_real_units(mobile_samples, scale, z.index)
+    return sum(z[term] * (beta_real[term] + mobile_share * gamma_real[term]) for term in z.index)
 
 
 def compute_regional_utilities(scenarios: pd.DataFrame, betas_mean: dict, betas_samples: dict,

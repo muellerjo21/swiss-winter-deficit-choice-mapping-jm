@@ -44,6 +44,10 @@ def _create_config_plugin(snakemake):
             return pd.read_csv(snakemake.input.reference_rankings).set_index("scenario_id")
 
         @pytest.fixture()
+        def beta_real_units(self):
+            return pd.read_csv(snakemake.input.beta_real_units)
+
+        @pytest.fixture()
         def sensitivity_curve(self):
             return pd.read_csv(snakemake.input.sensitivity_curve)
 
