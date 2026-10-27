@@ -1,0 +1,13 @@
+scenario_id,population_share_rank1
+baseline,0.0
+baseline_no_self_sufficiency_result_4H,0.0
+policy_alpine_pv,0.357859745705481
+policy_chp,0.0
+policy_h2_imports_only,0.0
+policy_mix,0.2366123086572836
+policy_remix,0.1125133252785337
+policy_roof_pv,0.0
+policy_sccgt_daccs,0.2930146203587016
+policy_sccgt_no_h2,0.0
+policy_sccgt_plus_h2,0.0
+policy_wind_x2,0.0

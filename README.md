@@ -34,7 +34,7 @@ Results go to `build/` (git-ignored). Each rule runs in its own conda environmen
 
 The two live data sources are pinned in `config/default.yaml` by one base year (`price.reference_year`): the ElCom reference price of that year and the EUR/CHF rate as the annual mean of the daily ECB reference rates of the same year (the year must be completed). This file is the single source for these price parameters; `src/config.py` reads them from there, so notebooks and the pipeline use the same values.
 
-The attribute `relative_land` (land used by wind and open-field PV) is by default the national share: national land use divided by the area of Switzerland (sum of the canton areas), like all other attributes national. The switch `land.definition` in `config/default.yaml` selects the previous definition `canton_mean` (unweighted mean of the cantons' shares, about twice as large for most scenarios) for comparison; the choice changes the ranking of the leading scenarios.
+In the national aggregate, the attribute `relative_land` (land used by wind and open-field PV) is by default the national share: national land use divided by the area of Switzerland (sum of the canton areas), like all other attributes national. The switch `land.definition` in `config/default.yaml` selects the previous definition `canton_mean` (unweighted mean of the cantons' shares, about twice as large for most scenarios) for comparison; the choice changes the ranking of the leading scenarios. In the regional main analysis it is the land share of the own region.
 
 If a Python virtual environment (e.g. `.venv`) is active, run `deactivate` first: otherwise its `python` shadows the rules' conda environments.
 
@@ -48,15 +48,17 @@ The rule `sensitivity_reference_price` (`src/sensitivity.py`) checks how the ran
 
 Fig6 marks the reference prices at which the rank-1 scenario changes (`reference_price_rank1_switches.csv`); the rank swap of the pair Alpine PV / S/CCGT (Fossil) + DACCS is kept as a separate CSV (`reference_price_crossing_points.csv`). Results go to `build/data/sensitivity/`, the figure to `build/figures/fig6_p_rank1_vs_reference_price.*` (rule `plot_sensitivity`). Both are part of `snakemake` (rule `all`) and of the regression tests; to run only this part: `snakemake build/figures/fig6_p_rank1_vs_reference_price.png`.
 
-### Regional analysis
+### Regional analysis (main analysis)
 
-With `spatial.resolution: regional` in `config/default.yaml` (default: `national`), the workflow additionally runs the analysis on the 23 Swiss locations of the Calliope model (20 cantons, the merged regions AI_AR, BL_BS and NW_OW, and TI; `src/regional.py`):
+The main analysis runs on the 23 Swiss locations of the Calliope model (20 cantons, the merged regions AI_AR, BL_BS and NW_OW, and TI; `src/regional.py`), set by `spatial.resolution: regional` in `config/default.yaml`:
 
 - land use (regional area), technology and ownership shares are computed from each region's own capacities; the price change uses the national system cost per kWh with the region's ElCom reference price and surcharges (median of its municipalities); the import share stays national (import from abroad); transmission is 0;
 - utility per region with the coefficients of its language region (draw by draw), aggregated with the population (BFS STATPOP) to DE-CH, FR-CH and national; TI has no coefficients in the choice model and is excluded in the main regional analysis (sensitivities with DE-CH, FR-CH and mixed coefficients);
 - inputs (ElCom tariffs per municipality, LINDAS municipality register, STATPOP) are fetched by own rules for completed years only.
 
-Regional results are written to files with the suffix `_regional` (`build/data/utility_rankings_regional.csv`, `build/data/regional/`, `build/data/sensitivity/*_regional.csv`). They can always be built explicitly, e.g. `snakemake build/data/utility_rankings_regional.csv`; the consistency checks of the regional analysis are part of the tests. Frozen references for the regional results are added after approval.
+Regional results are written to files with the suffix `_regional` (`build/data/utility_rankings_regional.csv`, `build/data/regional/`, `build/data/sensitivity/*_regional.csv`) and tested against the frozen references `data/processed/*_regional.csv` and `data/processed/regional_attributes.csv`.
+
+The national aggregate (attributes computed for Switzerland as a whole, utility per language region; files without suffix, figures fig1–fig6 and the reference-price sensitivity above) is always computed as a secondary analysis and keeps its own references. With `spatial.resolution: national` the rule `all` builds only the national aggregate (the regional outputs are still built for the tests).
 
 ## Repository structure
 

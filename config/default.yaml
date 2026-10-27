@@ -37,14 +37,15 @@ utility:
     # not a highest-density interval (HDI).
     credible_interval: 0.94
 
-# Spatial resolution of the main analysis. national: attributes computed nationally, utility per
-# language region (current main results). regional: additionally the analysis on the 23 Calliope regions
+# Spatial resolution of the main analysis. regional (main): analysis on the 23 Calliope regions
 # (20 cantons, AI_AR, BL_BS, NW_OW, TI) with their own land use, technology and ownership shares and
 # ElCom reference price, utility with the coefficients of the region's language region and population-
-# weighted aggregation; results in files with the suffix _regional. The regional outputs are part of the
-# rule all only with resolution: regional (they can always be built explicitly).
+# weighted aggregation; results in files with the suffix _regional. national: only the national aggregate
+# (attributes computed nationally, utility per language region), which is always computed as secondary
+# analysis (files without suffix, figures fig1-fig6). The regional outputs are part of the rule all only
+# with resolution: regional (they can always be built explicitly and are part of the tests).
 spatial:
-    resolution: national
+    resolution: regional
     regional:
         # STATPOP permanent resident population on 31 Dec of this (completed) year, BFS PxWeb table
         population_year: 2024
@@ -109,4 +110,11 @@ reference:
     sensitivity_base_years: data/processed/reference_price_base_years.csv
     sensitivity_switches: data/processed/reference_price_rank1_switches.csv
     figure_sensitivity: graphics/fig6_p_rank1_vs_reference_price
-    # Regional results (_regional) get frozen references only after they are approved.
+    # regional main analysis
+    regional_attributes: data/processed/regional_attributes.csv
+    rankings_regional: data/processed/utility_rankings_regional.csv
+    region_rankings_regional: data/processed/region_rankings_regional.csv
+    rank1_share_regional: data/processed/rank1_population_share_regional.csv
+    sensitivities_regional: data/processed/sensitivity_regional.csv
+    sensitivity_curve_regional: data/processed/reference_price_curve_regional.csv
+    sensitivity_switches_regional: data/processed/reference_price_rank1_switches_regional.csv

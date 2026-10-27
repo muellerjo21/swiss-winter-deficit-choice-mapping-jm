@@ -56,6 +56,58 @@ def _create_config_plugin(snakemake):
             return pd.read_csv(snakemake.input.regional_checks)
 
         @pytest.fixture()
+        def rankings_regional(self):
+            return pd.read_csv(snakemake.input.rankings_regional)
+
+        @pytest.fixture()
+        def region_rankings_regional(self):
+            return pd.read_csv(snakemake.input.region_rankings_regional)
+
+        @pytest.fixture()
+        def rank1_share_regional(self):
+            return pd.read_csv(snakemake.input.rank1_share_regional)
+
+        @pytest.fixture()
+        def sensitivities_regional(self):
+            return pd.read_csv(snakemake.input.sensitivities_regional)
+
+        @pytest.fixture()
+        def sensitivity_curve_regional(self):
+            return pd.read_csv(snakemake.input.sensitivity_curve_regional)
+
+        @pytest.fixture()
+        def sensitivity_switches_regional(self):
+            return pd.read_csv(snakemake.input.sensitivity_switches_regional)
+
+        @pytest.fixture()
+        def reference_rankings_regional(self):
+            return pd.read_csv(snakemake.input.reference_rankings_regional)
+
+        @pytest.fixture()
+        def reference_region_rankings_regional(self):
+            return pd.read_csv(snakemake.input.reference_region_rankings_regional)
+
+        @pytest.fixture()
+        def reference_rank1_share_regional(self):
+            return pd.read_csv(snakemake.input.reference_rank1_share_regional)
+
+        @pytest.fixture()
+        def reference_sensitivities_regional(self):
+            return pd.read_csv(snakemake.input.reference_sensitivities_regional)
+
+        @pytest.fixture()
+        def reference_sensitivity_curve_regional(self):
+            return pd.read_csv(snakemake.input.reference_sensitivity_curve_regional)
+
+        @pytest.fixture()
+        def reference_sensitivity_switches_regional(self):
+            return pd.read_csv(snakemake.input.reference_sensitivity_switches_regional)
+
+        @pytest.fixture()
+        def reference_regional_attributes(self):
+            return pd.read_csv(snakemake.input.reference_regional_attributes)
+
+        @pytest.fixture()
         def sensitivity_curve(self):
             return pd.read_csv(snakemake.input.sensitivity_curve)
 

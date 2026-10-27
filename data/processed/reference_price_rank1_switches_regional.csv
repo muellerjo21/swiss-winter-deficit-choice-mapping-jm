@@ -1,0 +1,4 @@
+region,switch_shift_rp_kwh,scenario_before,scenario_after,rank1_below,rank1_above
+DE_CH,-2.016820800345158,policy_sccgt_daccs,policy_alpine_pv,policy_sccgt_daccs,policy_alpine_pv
+FR_CH,-3.382741658220766,policy_sccgt_daccs,policy_alpine_pv,policy_sccgt_daccs,policy_alpine_pv
+national,-2.2844786166970152,policy_sccgt_daccs,policy_alpine_pv,policy_sccgt_daccs,policy_alpine_pv
