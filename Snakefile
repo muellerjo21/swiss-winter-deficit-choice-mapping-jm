@@ -14,6 +14,12 @@ REFERENCE_YEAR = config["price"]["reference_year"]
 SENSITIVITY = config["sensitivity"]
 FIGURE_SENSITIVITY = "fig6_p_rank1_vs_reference_price"  # created by src/make_graphics.fig_reference_price_sensitivity
 SENSITIVITY_YEARS = sorted(set(SENSITIVITY["base_years"]) | {REFERENCE_YEAR})
+REGIONAL = config["spatial"]["regional"]
+REGIONAL_OUTPUTS = [  # part of rule all only with spatial.resolution: regional
+    "build/data/utility_rankings_regional.csv",
+    "build/data/sensitivity/reference_price_curve_regional.csv",
+    "build/data/sensitivity/reference_price_rank1_switches_regional.csv",
+]
 
 
 rule all:
@@ -23,6 +29,7 @@ rule all:
         expand("build/figures/{figure}.{fmt}", figure=FIGURES, fmt=FIGURE_FORMATS),
         "build/data/sensitivity/reference_price_curve.csv",
         expand("build/figures/{figure}.{fmt}", figure=FIGURE_SENSITIVITY, fmt=FIGURE_FORMATS),
+        REGIONAL_OUTPUTS if config["spatial"]["resolution"] == "regional" else [],
         "build/test.success"
 
 
@@ -48,6 +55,37 @@ rule fetch_elcom_reference:
         year = r"\d{4}"
     conda: "envs/default.yaml"
     script: "scripts/fetch_elcom.py"
+
+
+rule fetch_elcom_municipal:
+    message: "Fetch ElCom tariff rows of all municipalities {wildcards.year} ({params.category})."
+    params:
+        year = lambda wildcards: int(wildcards.year),
+        category = config["price"]["category"]
+    output: "build/data/reference/elcom_municipal_{year}.csv"
+    wildcard_constraints:
+        year = r"\d{4}"
+    conda: "envs/default.yaml"
+    script: "scripts/fetch_elcom_municipal.py"
+
+
+rule fetch_municipality_cantons:
+    message: "Fetch municipality -> canton assignment (LINDAS register)."
+    output: "build/data/reference/municipality_cantons.csv"
+    conda: "envs/default.yaml"
+    script: "scripts/fetch_municipality_cantons.py"
+
+
+rule fetch_statpop:
+    message: "Fetch STATPOP population per municipality, 31 Dec {wildcards.year}."
+    params:
+        year = lambda wildcards: int(wildcards.year),
+        table = REGIONAL["statpop_table"]
+    output: "build/data/reference/statpop_{year}.csv"
+    wildcard_constraints:
+        year = r"\d{4}"
+    conda: "envs/default.yaml"
+    script: "scripts/fetch_statpop.py"
 
 
 rule scenario_attributes:
@@ -84,6 +122,77 @@ rule compute_utility:
     output: "build/data/utility_rankings.csv"
     conda: "envs/default.yaml"
     script: "scripts/compute_utility.py"
+
+
+rule regional_attributes:
+    message: "Attributes per Calliope region (regional analysis)."
+    params:
+        scenario_ids = list(SCENARIOS),
+        overrides = REGIONAL["municipality_canton_overrides"]
+    input:
+        nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS],
+        canton_area = config["data"]["canton_area"],
+        national = rules.compute_attributes.output[0],
+        prices = f"build/data/reference/elcom_municipal_{REFERENCE_YEAR}.csv",
+        cantons = rules.fetch_municipality_cantons.output[0],
+        statpop = f"build/data/reference/statpop_{REGIONAL['population_year']}.csv",
+        eur_chf = f"build/data/reference/eur_chf_{REFERENCE_YEAR}.json"
+    output:
+        attributes = "build/data/regional/regional_attributes.csv",
+        elcom = "build/data/regional/elcom_by_region.csv",
+        population = "build/data/regional/population_by_region.csv"
+    conda: "envs/default.yaml"
+    script: "scripts/regional_attributes.py"
+
+
+rule regional_utility:
+    message: "Regional main analysis, sensitivities and checks (excluded regions: {params.exclude})."
+    params:
+        exclude = REGIONAL["exclude_regions"],
+        excluded_coefficients = REGIONAL["excluded_region_coefficients"],
+        overrides = REGIONAL["municipality_canton_overrides"],
+        mobile_share = config["utility"]["mobile_share"],
+        credible_interval = config["utility"]["credible_interval"]
+    input:
+        attributes = rules.regional_attributes.output.attributes,
+        population = rules.regional_attributes.output.population,
+        national = rules.compute_attributes.output[0],
+        choice_model = config["data"]["choice_model"],
+        canton_area = config["data"]["canton_area"],
+        cantons = rules.fetch_municipality_cantons.output[0],
+        statpop = f"build/data/reference/statpop_{REGIONAL['population_year']}.csv"
+    output:
+        rankings = "build/data/utility_rankings_regional.csv",
+        regions = "build/data/regional/region_rankings_regional.csv",
+        rank1_share = "build/data/regional/rank1_population_share_regional.csv",
+        sensitivities = "build/data/regional/sensitivity_regional.csv",
+        checks = "build/data/regional/checks_regional.csv"
+    conda: "envs/default.yaml"
+    script: "scripts/regional_utility.py"
+
+
+rule regional_reference_price:
+    message: "Regional reference-price sweep (common shift of all regional reference prices)."
+    params:
+        scenario_ids = list(SCENARIOS),
+        exclude = REGIONAL["exclude_regions"],
+        shift = REGIONAL["reference_price_shift"],
+        tolerance = SENSITIVITY["crossing_tolerance"],
+        check_delta = SENSITIVITY["crossing_check_delta"],
+        mobile_share = config["utility"]["mobile_share"],
+        credible_interval = config["utility"]["credible_interval"]
+    input:
+        attributes = rules.regional_attributes.output.attributes,
+        population = rules.regional_attributes.output.population,
+        elcom = rules.regional_attributes.output.elcom,
+        eur_chf = f"build/data/reference/eur_chf_{REFERENCE_YEAR}.json",
+        nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS],
+        choice_model = config["data"]["choice_model"]
+    output:
+        curve = "build/data/sensitivity/reference_price_curve_regional.csv",
+        switches = "build/data/sensitivity/reference_price_rank1_switches_regional.csv"
+    conda: "envs/default.yaml"
+    script: "scripts/regional_reference_price.py"
 
 
 rule beta_real_units:
@@ -186,6 +295,8 @@ rule test:
         attributes = rules.compute_attributes.output[0],
         rankings = rules.compute_utility.output[0],
         beta_real_units = rules.beta_real_units.output[0],
+        regional_attributes = rules.regional_attributes.output.attributes,
+        regional_checks = rules.regional_utility.output.checks,
         reference_attributes = config["reference"]["attributes"],
         reference_rankings = config["reference"]["rankings"],
         sensitivity_curve = rules.sensitivity_reference_price.output.curve,

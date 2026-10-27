@@ -48,6 +48,14 @@ def _create_config_plugin(snakemake):
             return pd.read_csv(snakemake.input.beta_real_units)
 
         @pytest.fixture()
+        def regional_attributes(self):
+            return pd.read_csv(snakemake.input.regional_attributes)
+
+        @pytest.fixture()
+        def regional_checks(self):
+            return pd.read_csv(snakemake.input.regional_checks)
+
+        @pytest.fixture()
         def sensitivity_curve(self):
             return pd.read_csv(snakemake.input.sensitivity_curve)
 

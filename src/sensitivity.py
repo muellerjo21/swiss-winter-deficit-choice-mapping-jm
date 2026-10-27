@@ -120,6 +120,19 @@ def crossing_points(attributes: pd.DataFrame, scenario_cost: dict, elcom_ref: di
     return pd.DataFrame(rows)
 
 
+def bisect_change(value_at, low: float, high: float, value_low, value_high, tolerance: float) -> tuple:
+    """Narrows [low, high] (value_at(low) = value_low != value_at(high) = value_high) by bisection down to
+    tolerance; returns the midpoint and the value just above the change."""
+    while high - low > tolerance:
+        mid = (low + high) / 2
+        value_mid = value_at(mid)
+        if value_mid == value_low:
+            low = mid
+        else:
+            high, value_high = mid, value_mid
+    return (low + high) / 2, value_high
+
+
 def rank1_switches(attributes: pd.DataFrame, scenario_cost: dict, elcom_ref: dict, eur_to_chf: float,
                    model: dict, curve: pd.DataFrame, tolerance: float, check_delta: float) -> pd.DataFrame:
     """All changes of the rank-1 scenario (posterior-mean utility) over the curve's reference-price grid,
@@ -139,14 +152,7 @@ def rank1_switches(attributes: pd.DataFrame, scenario_cost: dict, elcom_ref: dic
                 rk = rankings_at(attributes, scenario_cost, {**elcom_ref, "total_rp_kwh": total}, eur_to_chf, model)
                 return rk[f"rank_{tag}"].idxmin(), rk
 
-            while high - low > tolerance:
-                mid = (low + high) / 2
-                leader_mid = rank1(mid)[0]
-                if leader_mid == before:
-                    low = mid
-                else:
-                    high, after = mid, leader_mid
-            x = (low + high) / 2
+            x, after = bisect_change(lambda total: rank1(total)[0], low, high, before, after, tolerance)
             row = {"region": tag, "switch_rp_kwh": x, "scenario_before": before, "scenario_after": after}
             for side, total in [("below", x - check_delta), ("above", x + check_delta)]:
                 _, rk = rank1(total)

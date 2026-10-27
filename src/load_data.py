@@ -521,15 +521,67 @@ def fetch_elcom_price(year: int, category: str, product: str = "standard") -> pd
     return pd.DataFrame(rows)
 
 
-def get_elcom_reference_price(year: int, category: str) -> dict:
-    """National median electricity price and the taxes/levies component, directly from ElCom via
-    LINDAS (no hard-coding). Returned in Rp./kWh."""
-    df = fetch_elcom_price(year, category)
+def fetch_municipality_cantons() -> pd.DataFrame:
+    """Municipality (BFS number, incl. historical municipalities) -> canton abbreviation, from the LINDAS
+    register of the Federal Statistical Office (graph fso/register). Municipalities without a canton in the
+    register (e.g. Moutier after its change from BE to JU) are missing and are added via
+    spatial.regional.municipality_canton_overrides."""
+    query = """
+    SELECT ?municipality ?canton WHERE { GRAPH <https://lindas.admin.ch/fso/register> {
+      ?m a <https://schema.ld.admin.ch/Municipality> ; <http://schema.org/identifier> ?municipality ;
+         <http://schema.org/containedInPlace> ?c .
+      ?c a <https://schema.ld.admin.ch/Canton> ; <http://schema.org/alternateName> ?canton } }
+    """
+    sparql = SPARQLWrapper(ELCOM_SPARQL_ENDPOINT)
+    sparql.setQuery(query)
+    sparql.setReturnFormat(JSON)
+    rows = sparql.query().convert()["results"]["bindings"]
+    df = pd.DataFrame({"bfs_nr": [int(r["municipality"]["value"]) for r in rows],
+                       "canton": [r["canton"]["value"] for r in rows]})
+    return df.drop_duplicates().sort_values("bfs_nr").reset_index(drop=True)
+
+
+STATPOP_API = "https://www.pxweb.bfs.admin.ch/api/v1/de/{table}/{table}.px"
+
+
+def fetch_statpop(year: int, table: str) -> pd.DataFrame:
+    """Permanent resident population per municipality on 31 December of a completed year (BFS STATPOP via
+    the PxWeb API, municipalities in the table's current boundaries). Returns bfs_nr, name, population."""
+    if year >= date.today().year:
+        raise ValueError(f"STATPOP needs a completed year, got {year} (current year {date.today().year}).")
+    url = STATPOP_API.format(table=table)
+    meta = requests.get(url, timeout=60)
+    meta.raise_for_status()
+    geo = next(v for v in meta.json()["variables"] if v["code"].startswith("Kanton"))
+    municipalities = [(c, t) for c, t in zip(geo["values"], geo["valueTexts"]) if t.startswith("......")]
+    total = {"Staatsangehörigkeit (Kategorie)": "-99999", "Geschlecht": "-99999", "Alter": "-99999"}
+    query = [{"code": "Jahr", "selection": {"filter": "item", "values": [str(year)]}},
+             {"code": geo["code"], "selection": {"filter": "item", "values": [c for c, _ in municipalities]}},
+             {"code": "Bevölkerungstyp", "selection": {"filter": "item", "values": ["1"]}}]  # permanent residents
+    query += [{"code": k, "selection": {"filter": "item", "values": [v]}} for k, v in total.items()]
+    response = requests.post(url, json={"query": query, "response": {"format": "json"}}, timeout=300)
+    response.raise_for_status()
+    names = dict(municipalities)
+    rows = [{"bfs_nr": int(d["key"][1]), "name": names[d["key"][1]].lstrip("."), "population": float(d["values"][0])}
+            for d in response.json()["data"]]
+    return pd.DataFrame(rows).sort_values("bfs_nr").reset_index(drop=True)
+
+
+def elcom_reference_from_prices(df: pd.DataFrame) -> dict:
+    """Reference price (median of the total price), taxes/levies (median of charge + aid fee) and grid usage
+    (median) over the given ElCom tariff rows (as returned by fetch_elcom_price), in Rp./kWh. Used for the
+    national reference and, per Calliope region, for the regional analysis."""
     return {
         "total_rp_kwh": df["total"].median(),
         "taxes_levies_rp_kwh": (df["charge"] + df["aidfee"]).median(),
         "netznutzung_rp_kwh": df["grid"].median(),
     }
+
+
+def get_elcom_reference_price(year: int, category: str) -> dict:
+    """National median electricity price and the taxes/levies component, directly from ElCom via
+    LINDAS (no hard-coding). Returned in Rp./kWh."""
+    return elcom_reference_from_prices(fetch_elcom_price(year, category))
 
 
 def load_scenario_system_cost(nc_path: str) -> float:

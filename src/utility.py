@@ -156,12 +156,20 @@ def rank_with_uncertainty(attributes: pd.DataFrame, betas_mean: dict, betas_samp
     """Utility, equal-tailed credible interval (probability credible_interval), P(rank 1) and rank per
     scenario and region (keys of weights) plus national, and the Mellot cost rank, for already loaded
     betas (see scripts/compute_utility.py). Sorted by descending national utility."""
-    quantiles, ci_tag = credible_interval_quantiles(credible_interval), credible_interval_tag(credible_interval)
     utilities, samples = compute_regional_utilities(attributes, betas_mean, betas_samples, scale, weights,
                                                     mobile_mean, mobile_samples, mobile_share)
+    return rankings_from_utilities(utilities, samples, [*weights, "national"], attributes, credible_interval)
+
+
+def rankings_from_utilities(utilities: pd.DataFrame, samples: dict, groups: list, attributes: pd.DataFrame,
+                            credible_interval: float = CREDIBLE_INTERVAL) -> pd.DataFrame:
+    """Rank, equal-tailed credible interval and P(rank 1) per group (columns utility_<group> in utilities,
+    posterior samples in samples[group]) plus the Mellot cost rank; used for the national and the regional
+    analysis. Sorted by descending national utility."""
+    quantiles, ci_tag = credible_interval_quantiles(credible_interval), credible_interval_tag(credible_interval)
     rankings = utilities.set_index("scenario_id")
 
-    for region in [*weights, "national"]:
+    for region in groups:
         tag = region.replace("-", "_")
         col = f"utility_{tag}"
         ranked = rank_scenarios(utilities, col).set_index("scenario_id")

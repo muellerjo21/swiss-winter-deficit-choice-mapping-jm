@@ -37,6 +37,32 @@ utility:
     # not a highest-density interval (HDI).
     credible_interval: 0.94
 
+# Spatial resolution of the main analysis. national: attributes computed nationally, utility per
+# language region (current main results). regional: additionally the analysis on the 23 Calliope regions
+# (20 cantons, AI_AR, BL_BS, NW_OW, TI) with their own land use, technology and ownership shares and
+# ElCom reference price, utility with the coefficients of the region's language region and population-
+# weighted aggregation; results in files with the suffix _regional. The regional outputs are part of the
+# rule all only with resolution: regional (they can always be built explicitly).
+spatial:
+    resolution: national
+    regional:
+        # STATPOP permanent resident population on 31 Dec of this (completed) year, BFS PxWeb table
+        population_year: 2024
+        statpop_table: px-x-0102010000_101
+        # Regions without coefficients of the choice model (TI: Italian-speaking) are excluded in the
+        # main regional analysis; the population weights of the other regions are renormalised.
+        exclude_regions: [TI]
+        # Sensitivity: TI included with these coefficients (mixed = draw-wise LANGUAGE_REGION_WEIGHTS mix)
+        excluded_region_coefficients: [DE-CH, FR-CH, mixed]
+        # Municipalities without a canton in the LINDAS register (BFS number: canton in the price year);
+        # Moutier moved from BE to JU on 1 Jan 2026.
+        municipality_canton_overrides: {700: BE}
+        # Reference-price sweep: common additive shift of all regional reference prices (Rp./kWh)
+        reference_price_shift:
+            start: -9.0
+            stop: 6.0
+            step: 0.25
+
 # Sensitivity of the ranking to the ElCom reference price (rule sensitivity_reference_price, fig6).
 sensitivity:
     # Curve: only total_rp_kwh varies (Rp./kWh); taxes/levies, grid usage and EUR/CHF rate stay at
@@ -83,3 +109,4 @@ reference:
     sensitivity_base_years: data/processed/reference_price_base_years.csv
     sensitivity_switches: data/processed/reference_price_rank1_switches.csv
     figure_sensitivity: graphics/fig6_p_rank1_vs_reference_price
+    # Regional results (_regional) get frozen references only after they are approved.
