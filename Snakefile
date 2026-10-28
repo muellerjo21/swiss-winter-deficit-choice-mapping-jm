@@ -417,6 +417,17 @@ rule dag:
         "dot -Tpdf {input} -o build/dag.pdf"
 
 
+rule pipeline_map:
+    message: "Interactive pipeline map (open build/pipeline_map.html in a browser)."
+    input:
+        rulegraph = rules.dag_dot.output[0],
+        texts = "docs/pipeline_map.yaml",
+        template = "docs/pipeline_map_template.html"
+    output: "build/pipeline_map.html"
+    conda: "envs/default.yaml"
+    script: "scripts/pipeline_map.py"
+
+
 rule clean: # removes all generated results
     message: "Remove all build results but keep downloaded data."
     run:

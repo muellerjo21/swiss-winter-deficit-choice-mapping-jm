@@ -1,0 +1,152 @@
+# Texts of the interactive pipeline map (rule pipeline_map -> build/pipeline_map.html). The arrows come from
+# `snakemake --rulegraph`; every rule of the workflow needs an entry here, otherwise the build fails.
+#   group      data | attr | util | out | check (colour and legend)
+#   min_layer  optional: lowest row of the rule in the map (rows are otherwise the longest path from the raw data)
+#   national   true: only national aggregate (appendix); hidden with "Nur regionale Hauptanalyse"
+#   ask        optional: open question for the supervisor
+groups:
+  data: Daten holen
+  attr: Attribute
+  util: Utility und Analyse
+  out: Abbildungen
+  check: Tests und Ziel
+layer_labels: [Daten holen, Attribute, "", Regionale Attribute, Utility, Abbildungen, Tests, Ziel]
+start_hint: >-
+  Noch nichts gewählt. Beginne zum Beispiel mit <b>import_shares</b>: Hier liegt die wichtigste offene Frage an
+  Tim. Oder klicke <b>all</b>, um zu sehen, was alles dazugehört.
+
+rules:
+  fetch_elcom_reference:
+    group: data
+    text: >-
+      Holt die ElCom-Referenztarife der Schweiz (nationaler Median pro Jahr, 2022 bis 2025). Daraus kommt der
+      Referenzpreis von 28.97 Rp./kWh für 2025.
+    ask: >-
+      Auf welches Jahr bezieht sich die Preisänderung der Umfrage: ElCom 2025 oder 2022? Im nationalen Aggregat
+      führt mit 2022 und 2023 DACCS, mit 2024 und 2025 Alpine PV.
+  fetch_eur_chf:
+    group: data
+    text: >-
+      Holt den Jahresmittelwert des Wechselkurses EUR/CHF (0.9370 für 2025). Die Systemkosten aus Mellot et al.
+      sind in Euro angegeben.
+  fetch_statpop:
+    group: data
+    text: >-
+      Holt die Bevölkerung pro Gemeinde (BFS STATPOP, Stand 31.12.2024). Daraus entstehen die
+      Bevölkerungsgewichte der Regionen.
+  fetch_municipality_cantons:
+    group: data
+    text: >-
+      Ordnet jede Gemeinde einem Kanton zu (Moutier gehört zu BE). Damit lassen sich Gemeinde-Daten den 23
+      Calliope-Regionen zuweisen.
+  fetch_elcom_municipal:
+    group: data
+    text: >-
+      Holt die ElCom-Tarife pro Gemeinde. Daraus der regionale Referenzpreis: Median über alle Tarifeinträge der
+      Gemeinden einer Region, ohne Gewichtung (21.28 Rp./kWh in LU bis 32.59 in SO).
+    ask: Welche Preisbasis gilt in der Umfrage (2025 oder 2022)? Gleiche Frage wie beim Referenzpreis.
+  fetch_boundaries:
+    group: data
+    text: >-
+      Holt die Kantonsgrenzen von swisstopo (swissBOUNDARIES3D, Release 2025-01) mit Prüfsumme. Wird nur für die
+      Karten gebraucht.
+
+  scenario_attributes:
+    group: attr
+    text: >-
+      Rechnet pro Szenario die Rohgrössen aus den Calliope-Ergebnissen und dem Preis (Systemkosten pro kWh,
+      EUR/CHF).
+    ask: >-
+      Ist der Preis als Gesamtsystemkosten geteilt durch den Stromverbrauch als Einschränkung in Ordnung? Eine
+      genaue Kostenverteilung auf die Energieträger wurde nicht gemacht.
+  import_shares:
+    group: attr
+    min_layer: 1
+    text: >-
+      Importanteil pro Szenario: (Netto-Stromimport, je nach Einstellung plus Brennstoffimporte) geteilt durch den
+      Verbrauch, Jahressumme, auf 0 bis 1 begrenzt. Einstellung: imports.definition in der Config.
+    ask: >-
+      Zählen Brennstoffimporte (Gas, Wasserstoff, Methan) zu den Importen? Ist der Strom ein Nettoimport? Jahr
+      oder Winter? Das Modell kennt Import nur ab 0.1, Alpine PV exportiert netto.
+  beta_real_units:
+    group: check
+    min_layer: 1
+    text: >-
+      Rechnet die Betas des Modellfiles in Originaleinheiten um (β̃ = β/σ). Im Graph hängt dieser Schritt nur an
+      den Tests.
+
+  compute_attributes:
+    group: attr
+    text: >-
+      Macht aus den Szenario-Rohgrössen die Attribute des Choice-Modells. Wird von der nationalen und der
+      regionalen Analyse benutzt.
+
+  regional_attributes:
+    group: attr
+    text: >-
+      Berechnet die Attribute pro Region (alle 23 Regionen; das Tessin fällt erst bei der Utility weg): Land der
+      eigenen Region, Technologieanteile (installierte Leistung ohne Wasserkraft), Eigentümeranteile (mit
+      Wasserkraft), regionaler Preis. Import ist national.
+    ask: >-
+      Land: Ist der Landanteil der eigenen Region (so rechnen wir) oder national? Anteile: installierte Leistung
+      oder Erzeugung, Wasserkraft im Nenner, wie behandeln wir hydrogen_electricity_storage, und darf PV den
+      kommerziellen und Wind den Gemeinschafts-Eigentümern zugeordnet werden?
+  sensitivity_reference_price:
+    group: util
+    national: true
+    text: "Nationales Aggregat: Sensitivität auf den Referenzpreis der Basisjahre 2022 bis 2025."
+  compute_utility:
+    group: util
+    national: true
+    text: "Nationales Aggregat (Anhang): Utility und Ranking aus den Betas und den nationalen Attributen."
+
+  regional_utility:
+    group: util
+    text: >-
+      Hauptanalyse. Utility pro Region mit den Betas der Sprachregion (DE-CH oder FR-CH), bevölkerungsgewichtet
+      über 22 Regionen (ohne Tessin). Ergibt Ranking, P(Rang 1) und das 96-%-HDI sowie die Sensitivitätstabelle.
+    ask: >-
+      Tessin: Warum gibt es im Modell keine italienischsprachige Gruppe? Wir schliessen TI aus (4 % der
+      Bevölkerung). Handy-Term: m = 0 oder Stichprobenanteil 0.618?
+  regional_reference_price:
+    group: util
+    text: >-
+      Verschiebt alle regionalen Referenzpreise um denselben Betrag Δ und rechnet P(Rang 1) neu. Der Wechsel von
+      DACCS zu Alpine PV liegt bei Δ = −2.3 Rp./kWh.
+  pairwise_regional:
+    group: util
+    text: >-
+      Paarweise Wahlwahrscheinlichkeit nach Tröndle et al.: pro Draw und Region, danach bevölkerungsgewichtet.
+      132 Paare für Matrix und Karten.
+
+  make_plots:
+    group: out
+    national: true
+    min_layer: 5
+    text: Abbildungen des nationalen Aggregats (Anhang).
+  plot_sensitivity:
+    group: out
+    national: true
+    min_layer: 5
+    text: Abbildung der nationalen Sensitivität auf den Referenzpreis mit den realen Basisjahren.
+  make_plots_regional:
+    group: out
+    text: >-
+      Hauptabbildungen der regionalen Analyse: Waldplot, Attributbeiträge, Rang gegen Kosten, Rang 1 pro Region,
+      Preissensitivität.
+  choice_maps:
+    group: out
+    text: Karten der paarweisen Wahlwahrscheinlichkeit pro Region, mit Farbbereich 0 bis 100 % und 40 bis 60 %.
+  plot_pairwise:
+    group: out
+    text: Paarmatrix der Wahlwahrscheinlichkeiten, wie in Tröndle et al.
+
+  test:
+    group: check
+    text: >-
+      146 Tests: Vergleich mit eingefrorenen Referenzen, Rechenkontrollen, Einheiten und einzelne Funktionen. Sie
+      prüfen fast jeden Schritt darüber.
+  all:
+    group: check
+    text: >-
+      Das Ziel. Die Pipeline ist fertig, wenn alle Ergebnisse und Abbildungen da sind und die Tests bestehen.
