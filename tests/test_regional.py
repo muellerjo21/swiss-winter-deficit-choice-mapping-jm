@@ -9,7 +9,7 @@ import pytest
 
 CHECKS = ["weights sum to 1", "negative weights", "NaN in regional attributes", "NaN in shares of a region without capacity",
           "population total = STATPOP total", "artificial: utility = national DE-CH",
-          "artificial: P(rank 1) = national DE-CH", "artificial: ranks = national DE-CH"]
+          "artificial: P(rank 1) = national DE-CH", "artificial: ranks = national DE-CH", "HDI = arviz.hdi"]
 
 
 @pytest.mark.parametrize("name", CHECKS)

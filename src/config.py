@@ -171,8 +171,10 @@ PRICE_CATEGORY = _WORKFLOW_CONFIG["price"]["category"]
 # Definition of relative_land (land.definition): national_share or canton_mean, see
 # load_data.RELATIVE_LAND_DEFINITIONS. The pipeline passes it via the rule's params.
 LAND_DEFINITION = _WORKFLOW_CONFIG["land"]["definition"]
-# Credible interval of utility (utility.credible_interval), equal-tailed; see utility.credible_interval_quantiles.
+# Credible interval (utility.credible_interval: probability mass, utility.interval_type: hdi or equal_tailed);
+# see src/intervals.py.
 CREDIBLE_INTERVAL = _WORKFLOW_CONFIG["utility"]["credible_interval"]
+INTERVAL_TYPE = _WORKFLOW_CONFIG["utility"]["interval_type"]
 TRANSMISSION_REFERENCE_YEAR = PRICE_REFERENCE_YEAR  # same "today" reference-year logic as price
 
 # Column in scenario_attributes_summary (compute_all_attributes) -> attribute coordinate in the

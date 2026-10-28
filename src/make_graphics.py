@@ -17,7 +17,7 @@ from pathlib import Path
 
 from config import (
     PROJECT_ROOT, CHOICE_MODEL_PATH, ATTRIBUTE_COLUMN_TO_MODEL_TERM, SCENARIO_DISPLAY_NAMES,
-    LANGUAGE_REGION_WEIGHTS, CREDIBLE_INTERVAL, CANTON_LANGUAGE,
+    LANGUAGE_REGION_WEIGHTS, CREDIBLE_INTERVAL, INTERVAL_TYPE, CANTON_LANGUAGE,
 )
 from load_data import (
     load_beta_partworths_mean, load_beta_partworths_samples,
@@ -25,8 +25,8 @@ from load_data import (
 )
 from utility import (
     load_attribute_scale, raw_attributes, to_real_units, compute_utility_samples, compute_choice_shares,
-    credible_interval_quantiles, credible_interval_tag,
 )
+from intervals import credible_interval as interval_of, credible_interval_label, credible_interval_tag
 
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 GRAPHICS_DIR = PROJECT_ROOT / "graphics"
@@ -111,8 +111,9 @@ def fig_rank_vs_cost(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR, name:
 # 2. Forest plot: utility with credible interval (utility.credible_interval)
 # ---------------------------------------------------------------------------
 def fig_forest(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR,
-               credible_interval: float = CREDIBLE_INTERVAL, name: str = "fig2_utility_forest") -> None:
-    ci_tag = credible_interval_tag(credible_interval)
+               credible_interval: float = CREDIBLE_INTERVAL, name: str = "fig2_utility_forest",
+               interval_type: str = INTERVAL_TYPE) -> None:
+    ci_tag = credible_interval_tag(credible_interval, interval_type)
     panels = [("DE_CH", "German-speaking Switzerland (DE-CH)"),
               ("FR_CH", "French-speaking Switzerland (FR-CH)"),
               ("national", "Switzerland, population-weighted")]
@@ -141,7 +142,7 @@ def fig_forest(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR,
         ax.set_axisbelow(True)
         ax.spines["left"].set_visible(False)
         ax.tick_params(axis="y", length=0)
-    axes[-1].set_xlabel(f"Utility (posterior mean, {credible_interval * 100:g}% credible interval)")
+    axes[-1].set_xlabel(f"Utility (posterior mean, {credible_interval_label(credible_interval, interval_type)})")
     fig.text(0, -0.01, "Credible intervals reflect posterior uncertainty of the choice-model coefficients only. "
              f"Open marker: {display_name(REFERENCE_SCENARIO)}.", fontsize=8.5, color=TEXT_SECONDARY, ha="left")
     fig.tight_layout(h_pad=1.8)
@@ -301,12 +302,11 @@ def fig_slope_regions(rankings: pd.DataFrame, out_dir: Path = GRAPHICS_DIR, name
 def fig_cost_vs_preference(attrs: pd.DataFrame,
         model_path: Path = CHOICE_MODEL_PATH, out_dir: Path = GRAPHICS_DIR, mobile_share: float = 0.0,
         credible_interval: float = CREDIBLE_INTERVAL, national_samples: dict = None,
-        name: str = "fig5_cost_vs_preference") -> None:
+        name: str = "fig5_cost_vs_preference", interval_type: str = INTERVAL_TYPE) -> None:
     """Top: Mellot cost change vs. EP2050+; bottom: softmax choice share (national) over the
-    11 scenarios from Mellot Table 3, with equal-tailed credible interval from the posterior samples.
+    11 scenarios from Mellot Table 3, with credible interval (src/intervals.py) from the posterior samples.
     national_samples: national utility samples per scenario (e.g. of the regional analysis); default:
     computed from the national attributes with LANGUAGE_REGION_WEIGHTS."""
-    q_low, q_high = credible_interval_quantiles(credible_interval)
     df = attrs.dropna(subset=["mellot_cost_change_pct"]).sort_values("mellot_cost_change_pct").reset_index(drop=True)
     if national_samples is None:
         scale = load_attribute_scale(model_path)
@@ -321,8 +321,9 @@ def fig_cost_vs_preference(attrs: pd.DataFrame,
         national = np.stack([np.asarray(national_samples[s], dtype=float) for s in df["scenario_id"]])
     shares = compute_choice_shares(dict(zip(df["scenario_id"], national)))
     share = np.array([100 * shares[s].mean() for s in df["scenario_id"]])
-    lo = np.array([100 * np.quantile(shares[s], q_low) for s in df["scenario_id"]])
-    hi = np.array([100 * np.quantile(shares[s], q_high) for s in df["scenario_id"]])
+    bounds = [interval_of(shares[s], credible_interval, interval_type) for s in df["scenario_id"]]
+    lo = np.array([100 * b[0] for b in bounds])
+    hi = np.array([100 * b[1] for b in bounds])
 
     x = np.arange(len(df))
     fig, (ax_cost, ax_pref) = plt.subplots(2, 1, figsize=(6.5, 6.8), sharex=True, height_ratios=[1, 1.15])
@@ -347,7 +348,7 @@ def fig_cost_vs_preference(attrs: pd.DataFrame,
         ax.set_axisbelow(True)
         ax.tick_params(axis="x", length=0)
     fig.text(0, -0.03, "Scenarios sorted by system cost (cheapest left). Choice shares: multinomial logit over the 11 "
-             f"scenarios (IIA assumption),\nbars = posterior mean, whiskers = {credible_interval * 100:g}% credible interval."
+             f"scenarios (IIA assumption),\nbars = posterior mean, whiskers = {credible_interval_label(credible_interval, interval_type)}."
              + mobile_share_note(mobile_share),
              fontsize=8.5, color=TEXT_SECONDARY, ha="left")
     fig.tight_layout(h_pad=1.5)
@@ -666,12 +667,13 @@ def make_all_regional(attributes: pd.DataFrame, weights: pd.Series, rankings: pd
                       regions: pd.DataFrame, share: pd.DataFrame, curve: pd.DataFrame, switches: pd.DataFrame,
                       national_samples: dict, national_reference: float, scenarios: list,
                       model_path: Path = CHOICE_MODEL_PATH, out_dir: Path = GRAPHICS_DIR, mobile_share: float = 0.0,
-                      credible_interval: float = CREDIBLE_INTERVAL) -> None:
+                      credible_interval: float = CREDIBLE_INTERVAL, interval_type: str = INTERVAL_TYPE) -> None:
     """Figures of the regional main analysis (suffix _regional; list in the Snakefile: FIGURES_REGIONAL)."""
     by_language = {l: regional_mean_attributes(attributes, weights, l) for l in ("DE-CH", "FR-CH")}
     first = attributes.drop_duplicates("scenario_id")[["scenario_id", "mellot_cost_change_pct"]]
     fig_rank_vs_cost(rankings, out_dir=out_dir, name="fig1_rank_choice_vs_cost_regional")
-    fig_forest(rankings, out_dir=out_dir, credible_interval=credible_interval, name="fig2_utility_forest_regional")
+    fig_forest(rankings, out_dir=out_dir, credible_interval=credible_interval, name="fig2_utility_forest_regional",
+               interval_type=interval_type)
     fig_contributions(first, rankings, centered=True, name="fig3_utility_contributions_regional",
                       note=CONTRIBUTIONS_CENTERED_NOTE + CONTRIBUTIONS_REGIONAL_NOTE + mobile_share_note(mobile_share),
                       model_path=model_path, out_dir=out_dir, mobile_share=mobile_share, attrs_by_region=by_language)
@@ -681,7 +683,7 @@ def make_all_regional(attributes: pd.DataFrame, weights: pd.Series, rankings: pd
     fig_slope_regions(rankings, out_dir=out_dir, name="fig4_rank_de_vs_fr_regional")
     fig_cost_vs_preference(first, model_path=model_path, out_dir=out_dir, mobile_share=mobile_share,
                            credible_interval=credible_interval, national_samples=national_samples,
-                           name="fig5_cost_vs_preference_regional")
+                           name="fig5_cost_vs_preference_regional", interval_type=interval_type)
     fig_reference_price_shift(curve, switches, scenarios, national_reference, out_dir=out_dir)
     fig_rank1_by_region(regions, scenarios, out_dir=out_dir)
     fig_rank1_population_share(share, rankings, scenarios, out_dir=out_dir)
@@ -699,7 +701,7 @@ def pairwise_order_note(order: list, cost: pd.Series, by_cost: bool) -> str:
 # ---------------------------------------------------------------------------
 # Pairwise choice probability matrix (as in Tröndle et al. 2025, Fig. 2/4; src/pairwise.py)
 # ---------------------------------------------------------------------------
-def fig_pairwise_matrix(matrix: pd.DataFrame, credible_interval: float, out_dir: Path = GRAPHICS_DIR,
+def fig_pairwise_matrix(matrix: pd.DataFrame, credible_interval: float, interval_type: str, out_dir: Path = GRAPHICS_DIR,
                         order_note: str = "", decimals: int = 1, name: str = "fig9_pairwise_choice_probability_regional",
                         formats=("png", "pdf")) -> None:
     """Lower triangle incl. diagonal: P(scenario 1 (row) > scenario 2 (column)) in %, expected value large,
@@ -734,7 +736,7 @@ def fig_pairwise_matrix(matrix: pd.DataFrame, credible_interval: float, out_dir:
     bar.outline.set_visible(False)
     fig.text(0.02, 0.01, "Probability that scenario 1 (row) is chosen over scenario 2 (column) in a pairwise "
              "comparison; posterior mean over the draws,\n"
-             f"in brackets the {credible_interval * 100:g}% equal-tailed credible interval. Regional analysis: "
+             f"in brackets the {credible_interval_label(credible_interval, interval_type)}. Regional analysis: "
              "population-weighted mean of the regional choice probabilities (TI excluded).\n" + order_note,
              fontsize=8.5, color=TEXT_SECONDARY, ha="left", va="top")
     save(fig, name, out_dir, formats)
@@ -742,13 +744,13 @@ def fig_pairwise_matrix(matrix: pd.DataFrame, credible_interval: float, out_dir:
 
 def make_all(attrs: pd.DataFrame, rankings: pd.DataFrame, model_path: Path = CHOICE_MODEL_PATH,
              out_dir: Path = GRAPHICS_DIR, mobile_share: float = 0.0,
-             credible_interval: float = CREDIBLE_INTERVAL) -> None:
+             credible_interval: float = CREDIBLE_INTERVAL, interval_type: str = INTERVAL_TYPE) -> None:
     """All thesis figures to out_dir (png/pdf/svg each; list in the Snakefile: FIGURES).
     credible_interval must be the value the rankings were computed with (fig2 reads its columns).
     mobile_share must be the same value the rankings were computed with (fig3/A1/fig5 compute
     the utility themselves from the betas)."""
     fig_rank_vs_cost(rankings, out_dir=out_dir)
-    fig_forest(rankings, out_dir=out_dir, credible_interval=credible_interval)
+    fig_forest(rankings, out_dir=out_dir, credible_interval=credible_interval, interval_type=interval_type)
     fig_contributions(attrs, rankings, centered=True, name="fig3_utility_contributions",
                       note=CONTRIBUTIONS_CENTERED_NOTE + mobile_share_note(mobile_share), model_path=model_path,
                       out_dir=out_dir, mobile_share=mobile_share)
@@ -757,7 +759,7 @@ def make_all(attrs: pd.DataFrame, rankings: pd.DataFrame, model_path: Path = CHO
                       out_dir=out_dir, mobile_share=mobile_share)
     fig_slope_regions(rankings, out_dir=out_dir)
     fig_cost_vs_preference(attrs, model_path=model_path, out_dir=out_dir, mobile_share=mobile_share,
-                           credible_interval=credible_interval)
+                           credible_interval=credible_interval, interval_type=interval_type)
 
 
 if __name__ == "__main__":

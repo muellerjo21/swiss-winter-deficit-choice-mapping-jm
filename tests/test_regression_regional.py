@@ -12,6 +12,14 @@ UTILITY_ATOL = 0.005    # utility, CI and P(rank 1)
 SWITCH_ATOL = 1e-6      # switch point (Rp./kWh shift); bisection tolerance is far below
 CONSISTENCY_ATOL = 1e-12
 
+
+def _interval_tag(table):
+    """Tag of the interval columns (utility_national_<tag>_low), e.g. hdi96; set by the config."""
+    tags = {c[len("utility_national_"):-len("_low")] for c in table.columns
+            if c.startswith("utility_national_") and c.endswith("_low")}
+    assert len(tags) == 1, tags
+    return tags.pop()
+
 TAGS = ["DE_CH", "FR_CH", "national"]
 ATTRIBUTE_COLUMNS = [
     "relative_land", "import_share", "ownership_commercial", "ownership_community", "ownership_public",
@@ -31,8 +39,8 @@ def _max_abs_diff(a, e, columns):
     return np.nanmax(np.abs(a[columns].to_numpy(float) - e[columns].to_numpy(float)))
 
 
-def _ranking_columns(tag):
-    return [f"utility_{tag}", f"utility_{tag}_ci94_low", f"utility_{tag}_ci94_high", f"p_rank1_{tag}"]
+def _ranking_columns(tag, ci):
+    return [f"utility_{tag}", f"utility_{tag}_{ci}_low", f"utility_{tag}_{ci}_high", f"p_rank1_{tag}"]
 
 
 def test_regional_attributes_keys(regional_attributes, reference_regional_attributes):
@@ -54,7 +62,7 @@ def test_rankings_regional_order(rankings_regional, reference_rankings_regional)
 @pytest.mark.parametrize("tag", TAGS)
 def test_rankings_regional_values(rankings_regional, reference_rankings_regional, tag):
     a, e = _aligned(rankings_regional, reference_rankings_regional, ["scenario_id"])
-    assert _max_abs_diff(a, e, _ranking_columns(tag)) < UTILITY_ATOL
+    assert _max_abs_diff(a, e, _ranking_columns(tag, _interval_tag(a))) < UTILITY_ATOL
     assert (a[f"rank_{tag}"] == e[f"rank_{tag}"]).all()
 
 
@@ -82,7 +90,7 @@ def test_rank1_population_share(rank1_share_regional, reference_rank1_share_regi
 @pytest.mark.parametrize("tag", TAGS)
 def test_sensitivities_regional(sensitivities_regional, reference_sensitivities_regional, tag):
     a, e = _aligned(sensitivities_regional, reference_sensitivities_regional, ["variant", "scenario_id"])
-    assert _max_abs_diff(a, e, _ranking_columns(tag)) < UTILITY_ATOL
+    assert _max_abs_diff(a, e, _ranking_columns(tag, _interval_tag(a))) < UTILITY_ATOL
     assert (a[f"rank_{tag}"] == e[f"rank_{tag}"]).all()
 
 

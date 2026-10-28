@@ -130,7 +130,8 @@ rule compute_utility:
     message: "Compute utilities, credible intervals and rankings per language region (mobile_share={params.mobile_share})."
     params:
         mobile_share = config["utility"]["mobile_share"],
-        credible_interval = config["utility"]["credible_interval"]
+        credible_interval = config["utility"]["credible_interval"],
+        interval_type = config["utility"]["interval_type"]
     input:
         attributes = rules.compute_attributes.output[0],
         choice_model = config["data"]["choice_model"]
@@ -167,7 +168,8 @@ rule regional_utility:
         excluded_coefficients = REGIONAL["excluded_region_coefficients"],
         overrides = REGIONAL["municipality_canton_overrides"],
         mobile_share = config["utility"]["mobile_share"],
-        credible_interval = config["utility"]["credible_interval"]
+        credible_interval = config["utility"]["credible_interval"],
+        interval_type = config["utility"]["interval_type"]
     input:
         attributes = rules.regional_attributes.output.attributes,
         population = rules.regional_attributes.output.population,
@@ -195,7 +197,8 @@ rule regional_reference_price:
         tolerance = SENSITIVITY["crossing_tolerance"],
         check_delta = SENSITIVITY["crossing_check_delta"],
         mobile_share = config["utility"]["mobile_share"],
-        credible_interval = config["utility"]["credible_interval"]
+        credible_interval = config["utility"]["credible_interval"],
+        interval_type = config["utility"]["interval_type"]
     input:
         attributes = rules.regional_attributes.output.attributes,
         population = rules.regional_attributes.output.population,
@@ -223,7 +226,8 @@ rule make_plots:
     message: "Create figures (mobile_share={params.mobile_share})."
     params:
         mobile_share = config["utility"]["mobile_share"],
-        credible_interval = config["utility"]["credible_interval"]
+        credible_interval = config["utility"]["credible_interval"],
+        interval_type = config["utility"]["interval_type"]
     input:
         attributes = rules.compute_attributes.output[0],
         rankings = rules.compute_utility.output[0],
@@ -239,7 +243,8 @@ rule make_plots_regional:
         exclude = REGIONAL["exclude_regions"],
         figure_scenarios = SENSITIVITY["figure_scenarios"],
         mobile_share = config["utility"]["mobile_share"],
-        credible_interval = config["utility"]["credible_interval"]
+        credible_interval = config["utility"]["credible_interval"],
+        interval_type = config["utility"]["interval_type"]
     input:
         attributes = rules.regional_attributes.output.attributes,
         population = rules.regional_attributes.output.population,
@@ -263,7 +268,8 @@ rule pairwise_regional:
         order = PAIRWISE["scenario_order"],
         map_pairs = PAIRWISE["map_pairs"],
         mobile_share = config["utility"]["mobile_share"],
-        credible_interval = config["utility"]["credible_interval"]
+        credible_interval = config["utility"]["credible_interval"],
+        interval_type = config["utility"]["interval_type"]
     input:
         attributes = rules.regional_attributes.output.attributes,
         population = rules.regional_attributes.output.population,
@@ -284,6 +290,7 @@ rule plot_pairwise:
         order = PAIRWISE["scenario_order"],
         decimals = PAIRWISE["decimals"],
         credible_interval = config["utility"]["credible_interval"],
+        interval_type = config["utility"]["interval_type"],
         name = FIGURE_PAIRWISE,
         formats = PAIRWISE_FORMATS
     input:
@@ -312,6 +319,7 @@ rule choice_maps:
         tolerance = MAPS["simplify_tolerance_m"],
         exclude = REGIONAL["exclude_regions"],
         credible_interval = config["utility"]["credible_interval"],
+        interval_type = config["utility"]["interval_type"],
         names = FIGURES_MAPS,
         formats = PAIRWISE_FORMATS,
         figure_dir = "build/figures"

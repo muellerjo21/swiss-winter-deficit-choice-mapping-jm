@@ -14,6 +14,6 @@ if __name__ == "__main__":
     attributes = pd.read_csv(snakemake.input.attributes)
     cost = attributes.drop_duplicates("scenario_id").set_index("scenario_id")["mellot_cost_change_pct"]
     order = matrix.sort_values("row").drop_duplicates("row")["scenario_1"].tolist()
-    fig_pairwise_matrix(matrix, p.credible_interval, out_dir=Path(snakemake.output[0]).parent.parent,
+    fig_pairwise_matrix(matrix, p.credible_interval, p.interval_type, out_dir=Path(snakemake.output[0]).parent.parent,
                         order_note=pairwise_order_note(order, cost, not p.order), decimals=p.decimals,
                         name=p.name, formats=p.formats)

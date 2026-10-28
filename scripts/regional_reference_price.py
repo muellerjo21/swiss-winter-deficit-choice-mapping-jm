@@ -16,7 +16,7 @@ from sensitivity import reference_price_grid
 
 def sweep(path_to_attributes, path_to_population, path_to_elcom, path_to_eur_chf, paths_to_nc, scenario_ids,
           path_to_choice_model, exclude, shift, tolerance, check_delta, mobile_share, credible_interval,
-          path_to_curve, path_to_switches):
+          interval_type, path_to_curve, path_to_switches):
     attributes = pd.read_csv(path_to_attributes)
     population = pd.read_csv(path_to_population).set_index("region")["population"]
     elcom = pd.read_csv(path_to_elcom).set_index("region")
@@ -28,7 +28,7 @@ def sweep(path_to_attributes, path_to_population, path_to_elcom, path_to_eur_chf
 
     def rank_at(a):
         u, s, _, _ = regional_utilities(a, weights, coefficients, **model)
-        return regional_rankings(a, u, s, credible_interval)
+        return regional_rankings(a, u, s, credible_interval, interval_type)
 
     def leader_at(a, tag):
         u, _, _, _ = regional_utilities(a, weights, coefficients, **model, with_samples=False)
@@ -45,4 +45,4 @@ if __name__ == "__main__":
     p = snakemake.params
     sweep(snakemake.input.attributes, snakemake.input.population, snakemake.input.elcom, snakemake.input.eur_chf,
           list(snakemake.input.nc), p.scenario_ids, snakemake.input.choice_model, p.exclude, p.shift, p.tolerance,
-          p.check_delta, p.mobile_share, p.credible_interval, snakemake.output.curve, snakemake.output.switches)
+          p.check_delta, p.mobile_share, p.credible_interval, p.interval_type, snakemake.output.curve, snakemake.output.switches)

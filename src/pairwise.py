@@ -9,7 +9,8 @@ previous aggregation logistic(sum_j w_j u_{A,j,i} - sum_j w_j u_{B,j,i}) is repo
 import numpy as np
 import pandas as pd
 
-from utility import compute_pairwise_choice_probability, credible_interval_quantiles
+from intervals import credible_interval as interval_of
+from utility import compute_pairwise_choice_probability
 
 
 def scenario_order(cost: pd.Series, explicit: list = None) -> list:
@@ -24,9 +25,9 @@ def scenario_order(cost: pd.Series, explicit: list = None) -> list:
     return list(with_cost.index) + [s for s in cost.index if pd.isna(cost[s])]
 
 
-def _interval(values: np.ndarray, credible_interval: float) -> tuple[float, float, float]:
-    low, high = credible_interval_quantiles(credible_interval)
-    return float(values.mean()), float(np.quantile(values, low)), float(np.quantile(values, high))
+def _interval(values: np.ndarray, credible_interval: float, interval_type: str) -> tuple[float, float, float]:
+    low, high = interval_of(values, credible_interval, interval_type)
+    return float(values.mean()), low, high
 
 
 def regional_pair_draws(region_samples: dict, weights: pd.Series, a: str, b: str) -> tuple[np.ndarray, np.ndarray]:
@@ -39,14 +40,15 @@ def regional_pair_draws(region_samples: dict, weights: pd.Series, a: str, b: str
     return np.asarray(prob, dtype=float), compute_pairwise_choice_probability(u_a, u_b)
 
 
-def pairwise_matrix(region_samples: dict, weights: pd.Series, order: list, credible_interval: float) -> pd.DataFrame:
+def pairwise_matrix(region_samples: dict, weights: pd.Series, order: list, credible_interval: float,
+                    interval_type: str) -> pd.DataFrame:
     """All ordered pairs (incl. the diagonal) in matrix order: expected value and interval of P(scenario 1 >
     scenario 2) aggregated over the regions, and the expected value of the utility aggregation."""
     rows = []
     for i, a in enumerate(order):
         for k, b in enumerate(order):
             prob, via_utility = regional_pair_draws(region_samples, weights, a, b)
-            mean, low, high = _interval(prob, credible_interval)
+            mean, low, high = _interval(prob, credible_interval, interval_type)
             rows.append({"scenario_1": a, "scenario_2": b, "row": i, "column": k, "p_mean": mean, "p_low": low,
                          "p_high": high, "p_mean_utility_aggregation": float(via_utility.mean())})
     out = pd.DataFrame(rows)
@@ -54,12 +56,13 @@ def pairwise_matrix(region_samples: dict, weights: pd.Series, order: list, credi
     return out
 
 
-def region_pair_table(region_samples: dict, a: str, b: str, credible_interval: float) -> pd.DataFrame:
+def region_pair_table(region_samples: dict, a: str, b: str, credible_interval: float,
+                      interval_type: str) -> pd.DataFrame:
     """Per region: expected value and interval of P(a > b) over the draws."""
     rows = []
     for j, samples in region_samples.items():
         p = compute_pairwise_choice_probability(samples[a].to_numpy(), samples[b].to_numpy())
-        mean, low, high = _interval(p, credible_interval)
+        mean, low, high = _interval(p, credible_interval, interval_type)
         rows.append({"region": j, "scenario_1": a, "scenario_2": b, "p_mean": mean, "p_low": low, "p_high": high})
     return pd.DataFrame(rows)
 
@@ -76,7 +79,7 @@ def aggregation_comparison(matrix: pd.DataFrame) -> pd.DataFrame:
 
 
 def checks(matrix: pd.DataFrame, regions: pd.DataFrame, region_samples: dict, weights: pd.Series,
-           credible_interval: float) -> pd.DataFrame:
+           credible_interval: float, interval_type: str) -> pd.DataFrame:
     """Consistency checks: (name, value, tolerance)."""
     m = matrix.set_index(["scenario_1", "scenario_2"])
     swapped = m["p_mean"].reindex([(b, a) for a, b in m.index]).to_numpy()
@@ -96,7 +99,7 @@ def checks(matrix: pd.DataFrame, regions: pd.DataFrame, region_samples: dict, we
         for _, r in table.iterrows():
             one = pd.Series(1.0, index=[r["region"]])
             prob, _ = regional_pair_draws(region_samples, one, a, b)
-            mean, low, high = _interval(prob, credible_interval)
+            mean, low, high = _interval(prob, credible_interval, interval_type)
             dev = max(dev, abs(mean - r["p_mean"]), abs(low - r["p_low"]), abs(high - r["p_high"]))
     rows.append(("single region = region table", dev, 1e-15))
     # national expected value = population-weighted mean of the regional expected values (linearity)

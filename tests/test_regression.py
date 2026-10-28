@@ -10,6 +10,14 @@ ATTRIBUTE_ATOL = 1e-9   # attributes are deterministic (EUR/CHF annual mean of a
 UTILITY_ATOL = 0.005    # utility, CI and P(rank 1)
 
 
+def _interval_tag(table):
+    """Tag of the interval columns (utility_national_<tag>_low), e.g. hdi96; set by the config."""
+    tags = {c[len("utility_national_"):-len("_low")] for c in table.columns
+            if c.startswith("utility_national_") and c.endswith("_low")}
+    assert len(tags) == 1, tags
+    return tags.pop()
+
+
 def _max_abs_diff(actual, expected, columns):
     return np.nanmax(np.abs(actual.loc[expected.index, columns].to_numpy(float)
                             - expected[columns].to_numpy(float)))
@@ -43,7 +51,8 @@ def test_rankings_row_order(rankings, reference_rankings):
 
 @pytest.mark.parametrize("tag", ["DE_CH", "FR_CH", "national"])
 def test_utility_and_ci(rankings, reference_rankings, tag):
-    cols = [f"utility_{tag}", f"utility_{tag}_ci94_low", f"utility_{tag}_ci94_high"]
+    ci = _interval_tag(rankings)
+    cols = [f"utility_{tag}", f"utility_{tag}_{ci}_low", f"utility_{tag}_{ci}_high"]
     assert _max_abs_diff(rankings, reference_rankings, cols) < UTILITY_ATOL
 
 

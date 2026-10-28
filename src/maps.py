@@ -10,6 +10,7 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.patches import Patch
 
 from config import CANTON_MERGES, CANTON_NUMBER_TO_CODE, SCENARIO_DISPLAY_NAMES
+from intervals import credible_interval_label
 from plot_style import CHOICE_CMAP, NEUTRAL, TEXT_SECONDARY, save
 
 
@@ -63,7 +64,7 @@ def _draw(ax, geometries: gpd.GeoDataFrame, values: pd.Series, excluded: list, t
 
 
 def fig_choice_map(geometries: gpd.GeoDataFrame, table: pd.DataFrame, excluded: list, credible_interval: float,
-                   out_dir, name: str, formats=("png", "pdf")) -> None:
+                   interval_type: str, out_dir, name: str, formats=("png", "pdf")) -> None:
     """(A) expected value (large), (B) upper and (C) lower bound of the credible interval of P(scenario 1 >
     scenario 2) per region; common colour bar 0-100 %."""
     a, b = table["scenario_1"].iloc[0], table["scenario_2"].iloc[0]
@@ -88,7 +89,7 @@ def fig_choice_map(geometries: gpd.GeoDataFrame, table: pd.DataFrame, excluded: 
     bar.set_label(f"Choice probability {name_a} (1)", fontsize=11.5)
     fig.suptitle(f"{name_a} (1) vs. {name_b} (2)", x=0.125, ha="left", fontsize=13, fontweight="bold")
     fig.text(0.125, 0.0, f"Probability that {name_a} is chosen over {name_b} in a pairwise comparison, per region "
-             f"(posterior mean; bounds: {credible_interval * 100:g}% equal-tailed credible interval).\n"
+             f"(posterior mean; bounds: {credible_interval_label(credible_interval, interval_type)}).\n"
              "Regions of the Calliope model (AI/AR, BL/BS, NW/OW merged). Boundaries: swisstopo swissBOUNDARIES3D, "
              "LV95 (EPSG:2056).", fontsize=8.5, color=TEXT_SECONDARY, ha="left", va="top")
     save(fig, name, out_dir, formats)

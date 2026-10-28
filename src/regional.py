@@ -153,10 +153,12 @@ def regional_utilities(attributes: pd.DataFrame, weights: pd.Series, coefficient
     return utilities, samples, region_points, region_samples
 
 
-def regional_rankings(attributes: pd.DataFrame, utilities: pd.DataFrame, samples: dict, credible_interval: float) -> pd.DataFrame:
+def regional_rankings(attributes: pd.DataFrame, utilities: pd.DataFrame, samples: dict, credible_interval: float,
+                      interval_type: str) -> pd.DataFrame:
     """Rankings in the format of utility_rankings.csv (groups DE-CH, FR-CH, national)."""
     first = attributes.drop_duplicates("scenario_id")[["scenario_id", "mellot_cost_change_pct"]]
-    return rankings_from_utilities(utilities, samples, [*LANGUAGE_GROUPS, "national"], first, credible_interval)
+    return rankings_from_utilities(utilities, samples, [*LANGUAGE_GROUPS, "national"], first, credible_interval,
+                                   interval_type)
 
 
 def region_table(region_points: dict, region_samples: dict, weights: pd.Series, population: pd.Series,
