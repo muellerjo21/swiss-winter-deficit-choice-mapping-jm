@@ -1,5 +1,6 @@
-"""Interactive pipeline map (build/pipeline_map.html): the graph of `snakemake --rulegraph` as drawn by graphviz (as
-in `snakemake dag`), the texts of docs/pipeline_map.yaml and the page docs/pipeline_map_template.html. The numbers in
+"""Interactive pipeline map (build/pipeline_map.html): the graph of `snakemake --rulegraph` drawn by graphviz as in
+`snakemake dag`, simplified (no arrows into test and all, no detours via `tred`; the panel lists all direct
+dependencies), once for all rules and once for the regional main analysis; the texts of docs/pipeline_map.yaml and the page docs/pipeline_map_template.html. The numbers in
 the texts are read from the results (values); the build fails if a rule has no text, a text names a rule that does not
 exist, or a text uses an unknown {placeholder}, so the map cannot drift from the workflow."""
 import json
@@ -16,6 +17,7 @@ import yaml
 sys.path.insert(0, str(Path(snakemake.scriptdir).parent / "src"))
 from config import SCENARIO_DISPLAY_NAMES
 
+LAST = ["test", "all"]  # bottom row of the map
 LAND_DEFINITIONS = {"national_share": "Landnutzung geteilt durch die Fläche der Schweiz",
                     "canton_mean": "Mittel der Kantonsanteile"}
 
@@ -126,17 +128,7 @@ def fill(text: str, vals: dict, where: str) -> str:
     return text.format_map(vals)
 
 
-def svg_body(path: str) -> str:
-    """graphviz SVG without XML header, scaled by the page."""
-    svg = Path(path).read_text()
-    svg = svg[svg.index("<svg"):]
-    return re.sub(r'<svg width="[^"]*" height="[^"]*"', '<svg id="graph-svg" role="group" aria-label="Pipeline-Graph"', svg, 1)
-
-
-def build(inp, p, path_to_output: str) -> None:
-    names, edges = read_rulegraph(inp.rulegraph)
-    rules = sorted(names.values())
-    texts = yaml.safe_load(Path(inp.texts).read_text())
+def check_texts(rules: list, texts: dict) -> dict:
     described = texts["rules"]
     missing, stale = sorted(set(rules) - set(described)), sorted(set(described) - set(rules))
     if missing or stale:
@@ -144,19 +136,63 @@ def build(inp, p, path_to_output: str) -> None:
     unknown = sorted({v["group"] for v in described.values()} - set(texts["groups"]))
     if unknown:
         raise ValueError(f"unknown groups in docs/pipeline_map.yaml: {unknown}")
+    return described
+
+
+def write_dot(rules: list, edges: list, path: str) -> None:
+    """Graph for graphviz (the page shows it after `tred`, i.e. without detours): the rules and their edges without
+    those into test and all; test and all as the bottom row, the last steps invisibly linked to test for the layout."""
+    body = [(a, b) for a, b in edges if a in rules and b in rules and b not in LAST]
+    sinks = [r for r in rules if r not in LAST and not any(a == r for a, _ in body)]
+    lines = ["digraph pipeline {", "  graph[rankdir=TB, nodesep=0.35, ranksep=0.55, bgcolor=white];",
+             "  node[shape=box, style=rounded, fontname=Helvetica, fontsize=10, penwidth=2];",
+             "  edge[penwidth=1.4, color=grey];"]
+    lines += [f'  "{r}";' for r in rules if r not in LAST]
+    lines += [f'  "{a}" -> "{b}";' for a, b in body]
+    lines += ['  { rank=sink; "test"; "all"; }', '  "test" -> "all";']
+    lines += [f'  "{r}" -> "test" [style=invis];' for r in sinks]
+    Path(path).write_text("\n".join(lines + ["}"]) + "\n")
+
+
+def dots(inp, out) -> None:
+    """Two graphs: all rules, and the regional main analysis without the national aggregate."""
+    names, edges = read_rulegraph(inp.rulegraph)
+    rules = sorted(names.values())
+    described = check_texts(rules, yaml.safe_load(Path(inp.texts).read_text()))
+    write_dot(rules, edges, out.full)
+    write_dot([r for r in rules if not described[r].get("national", False)], edges, out.regional)
+
+
+def svg_body(path: str, svg_id: str) -> str:
+    """graphviz SVG without XML header, scaled by the page."""
+    svg = Path(path).read_text()
+    svg = svg[svg.index("<svg"):]
+    return re.sub(r'<svg width="[^"]*" height="[^"]*"', f'<svg id="{svg_id}" class="graph-svg" role="group" '
+                  'aria-label="Pipeline-Graph"', svg, 1)
+
+
+def build(inp, p, path_to_output: str) -> None:
+    names, edges = read_rulegraph(inp.rulegraph)
+    rules = sorted(names.values())
+    texts = yaml.safe_load(Path(inp.texts).read_text())
+    described = check_texts(rules, texts)
     vals = values(inp, p)
     nodes = {r: {"g": described[r]["group"], "nat": bool(described[r].get("national", False)),
                  "text": fill(described[r]["text"], vals, r),
                  "open": fill(described[r].get("open", ""), vals, r)} for r in rules}
     data = {"groups": texts["groups"], "startHint": fill(texts["start_hint"], vals, "start_hint"),
-            "ids": names, "nodes": nodes, "edges": edges}
+            "nodes": nodes, "edges": edges}
     page = Path(inp.template).read_text()
-    for marker in ("/*PIPELINE_DATA*/", "<!--PIPELINE_SVG-->"):
+    for marker in ("/*PIPELINE_DATA*/", "<!--PIPELINE_SVG_FULL-->", "<!--PIPELINE_SVG_REGIONAL-->"):
         if marker not in page:
             raise ValueError(f"template has no {marker} placeholder")
     page = page.replace("/*PIPELINE_DATA*/", json.dumps(data, ensure_ascii=False, indent=1))
-    Path(path_to_output).write_text(page.replace("<!--PIPELINE_SVG-->", svg_body(inp.graph)))
+    page = page.replace("<!--PIPELINE_SVG_FULL-->", svg_body(inp.graph_full, "svg-full"))
+    Path(path_to_output).write_text(page.replace("<!--PIPELINE_SVG_REGIONAL-->", svg_body(inp.graph_regional, "svg-regional")))
 
 
 if __name__ == "__main__":
-    build(snakemake.input, snakemake.params, snakemake.output[0])
+    if snakemake.rule == "pipeline_map_dot":
+        dots(snakemake.input, snakemake.output)
+    else:
+        build(snakemake.input, snakemake.params, snakemake.output[0])

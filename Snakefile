@@ -420,12 +420,29 @@ rule dag:
         "dot -Tpdf {input} -o build/dag.pdf"
 
 
+rule pipeline_map_dot:
+    message: "Simplified rule graphs for the pipeline map (all rules, regional main analysis)."
+    input:
+        rulegraph = rules.dag_dot.output[0],
+        texts = "docs/pipeline_map.yaml"
+    output:
+        full = temp("build/pipeline_map_full.dot"),
+        regional = temp("build/pipeline_map_regional.dot")
+    conda: "envs/default.yaml"
+    script: "scripts/pipeline_map.py"
+
+
 rule pipeline_map_graph:
-    message: "Draw the rule graph with graphviz (as snakemake dag)."
-    input: rules.dag_dot.output[0]
-    output: temp("build/pipeline_map_graph.svg")
+    message: "Draw the pipeline map graphs with graphviz (as snakemake dag), without detours (tred)."
+    input:
+        full = rules.pipeline_map_dot.output.full,
+        regional = rules.pipeline_map_dot.output.regional
+    output:
+        full = temp("build/pipeline_map_full.svg"),
+        regional = temp("build/pipeline_map_regional.svg")
     conda: "envs/dag.yaml"
-    shell: "dot -Tsvg {input} -o {output}"
+    shell:
+        "tred {input.full} | dot -Tsvg -o {output.full} && tred {input.regional} | dot -Tsvg -o {output.regional}"
 
 
 rule pipeline_map:
@@ -449,7 +466,8 @@ rule pipeline_map:
         test_report = "build/test-report.html"  # log of rule test
     input:
         rulegraph = rules.dag_dot.output[0],
-        graph = rules.pipeline_map_graph.output[0],
+        graph_full = rules.pipeline_map_graph.output.full,
+        graph_regional = rules.pipeline_map_graph.output.regional,
         texts = "docs/pipeline_map.yaml",
         template = "docs/pipeline_map_template.html",
         # results the numbers in the texts are read from

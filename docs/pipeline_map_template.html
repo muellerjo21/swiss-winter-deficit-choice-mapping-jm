@@ -43,28 +43,29 @@ h1 { font-size: 26px; font-weight: 600; margin: 0; text-wrap: balance; }
 .controls input { accent-color: var(--accent); }
 .controls input:focus-visible, .controls button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .graph { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 12px; }
-#graph-svg { display: block; width: 100%; min-width: 900px; height: auto; }
-#graph-svg > g > polygon:first-of-type { fill: transparent; stroke: none; }   /* graphviz white background */
-#graph-svg .node { cursor: pointer; }
-#graph-svg .node path, #graph-svg .node polygon { fill: var(--surface); stroke-width: 2; }
-#graph-svg .node text { fill: var(--fg); font-family: var(--mono); }
-#graph-svg .node[data-g="data"] path { stroke: var(--data); }
-#graph-svg .node[data-g="attr"] path { stroke: var(--attr); }
-#graph-svg .node[data-g="util"] path { stroke: var(--util); }
-#graph-svg .node[data-g="out"] path { stroke: var(--out); }
-#graph-svg .node[data-g="check"] path { stroke: var(--check); }
-#graph-svg .node.sel path { stroke-width: 4; fill: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
-#graph-svg .node.up path, #graph-svg .node.down path { fill: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
-#graph-svg .node:focus { outline: none; }
-#graph-svg .node:focus-visible path { stroke-width: 4; }
-#graph-svg .edge path { stroke: var(--edge); stroke-width: 1.3; opacity: 0.7; }
-#graph-svg .edge polygon { stroke: var(--edge); fill: var(--edge); opacity: 0.7; }
-#graph-svg .edge.on path { stroke: var(--accent); stroke-width: 2.4; opacity: 1; }
-#graph-svg .edge.on polygon { stroke: var(--accent); fill: var(--accent); opacity: 1; }
-#graph-svg .dim { opacity: 0.18; }
-#graph-svg .off { opacity: 0.12; pointer-events: none; }
-#graph-svg .open-dot { fill: var(--open); display: none; }
-body.show-open #graph-svg .open-dot { display: inline; }
+.graph-svg { display: block; width: 100%; max-width: 1100px; min-width: 760px; height: auto; margin: 0 auto; }
+.graph-svg[hidden] { display: none; }
+.graph-svg > g > polygon:first-of-type { fill: transparent; stroke: none; }   /* graphviz white background */
+.graph-svg .node { cursor: pointer; }
+.graph-svg .node path, .graph-svg .node polygon { fill: var(--surface); stroke-width: 2; }
+.graph-svg .node text { fill: var(--fg); }
+.graph-svg .node[data-g="data"] path { stroke: var(--data); }
+.graph-svg .node[data-g="attr"] path { stroke: var(--attr); }
+.graph-svg .node[data-g="util"] path { stroke: var(--util); }
+.graph-svg .node[data-g="out"] path { stroke: var(--out); }
+.graph-svg .node[data-g="check"] path { stroke: var(--check); }
+.graph-svg .node.sel path { stroke-width: 4; fill: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
+.graph-svg .node.up path, .graph-svg .node.down path { fill: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.graph-svg .node:focus { outline: none; }
+.graph-svg .node:focus-visible path { stroke-width: 4; }
+.graph-svg .edge path { stroke: var(--edge); stroke-width: 1.3; opacity: 0.7; }
+.graph-svg .edge polygon { stroke: var(--edge); fill: var(--edge); opacity: 0.7; }
+.graph-svg .edge.on path { stroke: var(--accent); stroke-width: 2.4; opacity: 1; }
+.graph-svg .edge.on polygon { stroke: var(--accent); fill: var(--accent); opacity: 1; }
+.graph-svg .dim { opacity: 0.18; }
+.graph-svg .off { opacity: 0.12; pointer-events: none; }
+.graph-svg .open-dot { fill: var(--open); display: none; }
+body.show-open .graph-svg .open-dot { display: inline; }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px;
   display: grid; gap: 14px; min-height: 190px; }
 .panel h2 { margin: 0; font-family: var(--mono); font-size: 19px; font-weight: 500; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
@@ -83,14 +84,15 @@ body.show-open #graph-svg .open-dot { display: inline; }
   font-size: 15px; line-height: 1.5; border-radius: 0 6px 6px 0; }
 .open-box b { color: var(--open); font-weight: 600; }
 .hint { color: var(--muted); font-size: 15px; }
-@media (prefers-reduced-motion: no-preference) { #graph-svg .node, #graph-svg .edge { transition: opacity .15s; } }
+.note { color: var(--muted); font-size: 13px; margin: 8px 4px 0; line-height: 1.45; }
+@media (prefers-reduced-motion: no-preference) { .graph-svg .node, .graph-svg .edge { transition: opacity .15s; } }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <h1>Pipeline-Karte</h1>
-    <p class="sub">Die Snakemake-Pipeline des Semesterprojekts als Graph, wie in <code>snakemake dag</code>. Klicke auf einen Schritt, um zu sehen, was er macht und was davor und danach kommt.</p>
+    <p class="sub">Die Snakemake-Pipeline des Semesterprojekts als Graph, gezeichnet wie <code>snakemake dag</code>. Klicke auf einen Schritt, um zu sehen, was er macht und was davor und danach kommt.</p>
   </header>
   <div class="bar">
     <div class="legend" id="legend"></div>
@@ -100,7 +102,8 @@ body.show-open #graph-svg .open-dot { display: inline; }
       <button type="button" id="reset">Auswahl aufheben</button>
     </div>
   </div>
-  <div class="graph" id="graph"><!--PIPELINE_SVG--></div>
+  <div class="graph" id="graph"><!--PIPELINE_SVG_FULL--><!--PIPELINE_SVG_REGIONAL-->
+    <p class="note">Vereinfacht: Die Pfeile zu <b>test</b> und <b>all</b> sowie Umwege sind nicht gezeichnet (liefert A an B und B an C, fehlt der direkte Pfeil A → C). Beim Klick auf einen Schritt stehen unten alle direkten Abhängigkeiten.</p></div>
   <section class="panel" id="panel" aria-live="polite"></section>
 </div>
 
@@ -108,9 +111,11 @@ body.show-open #graph-svg .open-dot { display: inline; }
 (function () {
   // {groups, startHint, ids: {graphviz id: rule}, nodes: {rule: {g, nat, text, open}}, edges: [[from, to]]}
   var DATA = /*PIPELINE_DATA*/;
-  var svg = document.getElementById("graph-svg");
+  var svgFull = document.getElementById("svg-full"), svgRegional = document.getElementById("svg-regional");
+  svgRegional.hidden = true;
   var NS = "http://www.w3.org/2000/svg";
 
+  // all direct edges (panel and highlighting); the drawn arrows are a simplified subset
   var up = {}, down = {};
   DATA.edges.forEach(function (e) { (down[e[0]] = down[e[0]] || []).push(e[1]); (up[e[1]] = up[e[1]] || []).push(e[0]); });
   function reach(id, map) {
@@ -119,29 +124,34 @@ body.show-open #graph-svg .open-dot { display: inline; }
     return seen;
   }
 
-  // graphviz nodes and edges: <g class="node"><title>id</title>, <g class="edge"><title>a->b</title>
+  // graphviz nodes and edges of both graphs: <g class="node"><title>rule</title>, <g class="edge"><title>a->b</title>
   var nodeEls = {}, edgeEls = [];
-  Array.prototype.forEach.call(svg.querySelectorAll("g.node"), function (g) {
-    var rule = DATA.ids[g.querySelector("title").textContent.trim()];
-    var n = DATA.nodes[rule];
-    g.setAttribute("data-g", n.g);
-    g.setAttribute("tabindex", "0");
-    g.setAttribute("role", "button");
-    g.setAttribute("aria-label", rule);
-    g.querySelector("title").textContent = rule;
-    if (n.open) {
-      var b = g.getBBox(), c = document.createElementNS(NS, "circle");
-      c.setAttribute("cx", b.x + b.width - 4); c.setAttribute("cy", b.y + 4); c.setAttribute("r", 5);
-      c.setAttribute("class", "open-dot");
-      g.appendChild(c);
-    }
-    g.addEventListener("click", function (ev) { ev.stopPropagation(); select(rule); });
-    g.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(rule); } });
-    nodeEls[rule] = g;
-  });
-  Array.prototype.forEach.call(svg.querySelectorAll("g.edge"), function (g) {
-    var ends = g.querySelector("title").textContent.split("->");
-    edgeEls.push({ el: g, from: DATA.ids[ends[0].trim()], to: DATA.ids[ends[1].trim()] });
+  function corner(g) {  // top right corner of the box, from the coordinates of its outline (no layout needed)
+    var nums = (g.querySelector("path, polygon").getAttribute("d") || g.querySelector("polygon").getAttribute("points"))
+      .match(/-?\d+(\.\d+)?/g).map(Number);
+    var xs = nums.filter(function (_, i) { return i % 2 === 0; }), ys = nums.filter(function (_, i) { return i % 2 === 1; });
+    return [Math.max.apply(null, xs) - 3, Math.min.apply(null, ys) + 3];
+  }
+  [svgFull, svgRegional].forEach(function (svg) {
+    Array.prototype.forEach.call(svg.querySelectorAll("g.node"), function (g) {
+      var rule = g.querySelector("title").textContent.trim(), n = DATA.nodes[rule];
+      g.setAttribute("data-g", n.g);
+      g.setAttribute("tabindex", "0");
+      g.setAttribute("role", "button");
+      g.setAttribute("aria-label", rule);
+      if (n.open) {
+        var xy = corner(g), c = document.createElementNS(NS, "circle");
+        c.setAttribute("cx", xy[0]); c.setAttribute("cy", xy[1]); c.setAttribute("r", 5); c.setAttribute("class", "open-dot");
+        g.appendChild(c);
+      }
+      g.addEventListener("click", function (ev) { ev.stopPropagation(); select(rule); });
+      g.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(rule); } });
+      (nodeEls[rule] = nodeEls[rule] || []).push(g);
+    });
+    Array.prototype.forEach.call(svg.querySelectorAll("g.edge"), function (g) {
+      var ends = g.querySelector("title").textContent.split("->");
+      edgeEls.push({ el: g, from: ends[0].trim(), to: ends[1].trim() });
+    });
   });
 
   var legend = document.getElementById("legend");
@@ -159,22 +169,22 @@ body.show-open #graph-svg .open-dot { display: inline; }
   var reset = document.getElementById("reset");
   var current = null;
   function off(rule) { return tMain.checked && DATA.nodes[rule].nat; }
+  function each(rule, f) { (nodeEls[rule] || []).forEach(f); }
 
   function mark() {
     var u = current ? reach(current, up) : {}, d = current ? reach(current, down) : {};
     Object.keys(nodeEls).forEach(function (rule) {
-      var g = nodeEls[rule];
-      g.classList.remove("sel", "up", "down", "dim");
-      g.classList.toggle("off", off(rule));
-      if (!current || off(rule)) return;
-      if (rule === current) g.classList.add("sel");
-      else if (u[rule]) g.classList.add("up");
-      else if (d[rule]) g.classList.add("down");
-      else g.classList.add("dim");
+      each(rule, function (g) {
+        g.classList.remove("sel", "up", "down", "dim");
+        if (!current) return;
+        if (rule === current) g.classList.add("sel");
+        else if (u[rule]) g.classList.add("up");
+        else if (d[rule]) g.classList.add("down");
+        else g.classList.add("dim");
+      });
     });
     edgeEls.forEach(function (e) {
       e.el.classList.remove("on", "dim");
-      e.el.classList.toggle("off", off(e.from) || off(e.to));
       if (!current) return;
       var inUp = (e.to === current || u[e.to]) && !!u[e.from];
       var inDown = (e.from === current || d[e.from]) && !!d[e.to];
@@ -207,12 +217,13 @@ body.show-open #graph-svg .open-dot { display: inline; }
 
   function select(rule) { current = (current === rule) ? null : rule; mark(); render(); }
   function clearAll() {
-    current = null; tMain.checked = false; tOpen.checked = false;
+    current = null; tMain.checked = false; tOpen.checked = false; showGraph();
     document.body.classList.remove("show-open"); openLegend.hidden = true;
     mark(); render();
   }
 
-  tMain.addEventListener("change", function () { if (current && off(current)) current = null; mark(); render(); });
+  function showGraph() { svgFull.hidden = tMain.checked; svgRegional.hidden = !tMain.checked; }
+  tMain.addEventListener("change", function () { showGraph(); if (current && off(current)) current = null; mark(); render(); });
   tOpen.addEventListener("change", function () {
     document.body.classList.toggle("show-open", tOpen.checked); openLegend.hidden = !tOpen.checked; mark();
   });
