@@ -1,0 +1,15 @@
+name: maps
+channels:
+    - conda-forge
+dependencies:
+    # Separate environment for the maps (geopandas), so that envs/default.yaml and the validated results stay
+    # unchanged. numpy, pandas, matplotlib and python pinned as in envs/default.yaml.
+    - python=3.13.15
+    - numpy=2.5.3
+    - pandas=3.0.6
+    - matplotlib-base=3.11.2
+    - pyyaml=6.0.3
+    - geopandas-base=1.2.0
+    - pyogrio=0.13.0
+    - shapely=2.2.0
+    - pyproj=3.8.0

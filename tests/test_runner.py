@@ -108,6 +108,26 @@ def _create_config_plugin(snakemake):
             return pd.read_csv(snakemake.input.reference_regional_attributes)
 
         @pytest.fixture()
+        def pairwise_matrix(self):
+            return pd.read_csv(snakemake.input.pairwise_matrix)
+
+        @pytest.fixture()
+        def pairwise_regions(self):
+            return pd.read_csv(snakemake.input.pairwise_regions)
+
+        @pytest.fixture()
+        def pairwise_map_tables(self):
+            return [pd.read_csv(path) for path in snakemake.input.pairwise_map_tables]
+
+        @pytest.fixture()
+        def pairwise_checks(self):
+            return pd.read_csv(snakemake.input.pairwise_checks)
+
+        @pytest.fixture()
+        def geometry_checks(self):
+            return pd.read_csv(snakemake.input.geometry_checks)
+
+        @pytest.fixture()
         def sensitivity_curve(self):
             return pd.read_csv(snakemake.input.sensitivity_curve)
 

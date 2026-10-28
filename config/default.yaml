@@ -85,6 +85,34 @@ sensitivity:
     # Scenarios shown in fig6 (colour order of the palette)
     figure_scenarios: [policy_alpine_pv, policy_sccgt_daccs, policy_mix, policy_remix]
 
+# Pairwise choice probabilities of the regional main analysis (as in Tröndle et al. 2025, Fig. 1-4): per draw and
+# region p = logistic(u_1 - u_2), aggregated as the population-weighted mean of the regional probabilities.
+pairwise:
+    # Order of the scenarios in the matrix (fig9). null: by cost change (Mellot et al. 2024, Table 3) ascending,
+    # cheapest first, scenarios without cost value last; or an explicit list of all scenario ids.
+    scenario_order: null
+    # Decimals of the percentages in the matrix cells
+    decimals: 1
+    # Pairs (scenario 1, scenario 2) for the maps (fig10): Alpine PV vs. the cheapest scenario (MIX, -17.0 %)
+    # and vs. S/CCGT (Fossil) + DACCS
+    map_pairs:
+        - [policy_alpine_pv, policy_mix]
+        - [policy_alpine_pv, policy_sccgt_daccs]
+
+# Maps: canton boundaries from swisstopo swissBOUNDARIES3D (open data, free use with source attribution
+# "© swisstopo"), release 2025-01 (status 1 Jan 2025: Moutier still in BE, as in STATPOP 2024), GeoPackage in
+# LV95. sha256 = checksum of the zip file (also listed in the swisstopo STAC API as multihash 1220<sha256>).
+maps:
+    boundaries:
+        url: https://data.geo.admin.ch/ch.swisstopo.swissboundaries3d/swissboundaries3d_2025-01/swissboundaries3d_2025-01_2056_5728.gpkg.zip
+        sha256: 3509d2e3e2993dd97e6a36e37192e0b4e77d0ef3ac42148c51af5a5fe15f99c5
+        file: data/raw/swissboundaries3d_2025-01_2056_5728.gpkg.zip
+        member: swissBOUNDARIES3D_1_5_LV95_LN02.gpkg
+        layer: tlm_kantonsgebiet
+    crs: EPSG:2056
+    # Coverage simplification for the figures (m); shared borders stay identical. 0 = full resolution.
+    simplify_tolerance_m: 100
+
 # Scenario ID (wildcard) -> .nc file name in data.scenario_dir. Explicit mapping instead of a glob,
 # because the file names contain commas.
 scenarios:

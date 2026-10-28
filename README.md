@@ -16,6 +16,9 @@ This project applies an existing discrete choice model (Tröndle, Mey & Lilliest
 | Mellot et al. (2024) | Winter-deficit scenario data (Swiss-Calliope) | Zenodo, DOI 10.5281/zenodo.10887523 |
 | Tröndle, Mey & Lilliestam (2025) | Fitted model coefficients (posterior inference, NetCDF) | Zenodo, DOI 10.5281/zenodo.14501018 |
 | Tröndle, Mey & Lilliestam (2025) | Reproducible analysis code (Snakemake) | Zenodo, DOI 10.5281/zenodo.14501036 |
+| swisstopo, swissBOUNDARIES3D, release 2025-01 | Canton boundaries for the maps (GeoPackage, LV95), downloaded by the rule `fetch_boundaries` with SHA-256 check | [data.geo.admin.ch](https://data.geo.admin.ch/ch.swisstopo.swissboundaries3d/swissboundaries3d_2025-01/swissboundaries3d_2025-01_2056_5728.gpkg.zip) |
+
+**Licence of the boundaries.** swissBOUNDARIES3D is free geodata of the Federal Office of Topography swisstopo (open government data); use, also commercial, is free with source attribution: "Source: Federal Office of Topography swisstopo" / "© swisstopo". Terms of use: https://www.swisstopo.admin.ch/en/terms-of-use-free-geodata-and-geoservices. The figures credit swisstopo in their footnote. Release 2025-01 is the status of 1 January 2025 (Moutier still in Bern, consistent with STATPOP 2024).
 
 Large data files are **not** committed to this repository. Download them directly from the Zenodo links above into `data/raw/` (git-ignored).
 
@@ -57,6 +60,8 @@ The main analysis runs on the 23 Swiss locations of the Calliope model (20 canto
 - inputs (ElCom tariffs per municipality, LINDAS municipality register, STATPOP) are fetched by own rules for completed years only.
 
 Figures of the regional main analysis (rule `make_plots_regional`, `build/figures/{png,pdf,svg}/*_regional.*`): fig1–fig5 and figA1 as in the national aggregate but with the regional rankings (fig3/figA1: population-weighted mean contributions per language region), fig6 P(rank 1) over a common shift of all regional reference prices, fig7 a schematic tile map of the rank-1 scenario per region, fig8 the population share per rank-1 scenario. They are not frozen yet.
+
+Pairwise choice probabilities (as in Tröndle et al. 2025, Fig. 1–4; rules `pairwise_regional`, `plot_pairwise`, `choice_maps`, settings in the sections `pairwise` and `maps` of `config/default.yaml`): per posterior draw and region p = logistic(u_1 − u_2), aggregated as the population-weighted mean of the regional probabilities. fig9 is the matrix of all pairs (lower triangle, scenarios by cost), fig10 the maps per configured pair (expected value and both bounds of the credible interval per region; TI no data). Tables in `build/data/pairwise/`, including the deviation from the aggregation of the utilities (`aggregation_comparison_regional.csv`). The maps run in their own conda environment `envs/maps.yaml` (geopandas).
 
 Regional results are written to files with the suffix `_regional` (`build/data/utility_rankings_regional.csv`, `build/data/regional/`, `build/data/sensitivity/*_regional.csv`) and tested against the frozen references `data/processed/*_regional.csv` and `data/processed/regional_attributes.csv`.
 

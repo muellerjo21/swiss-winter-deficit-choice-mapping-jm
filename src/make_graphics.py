@@ -31,49 +31,16 @@ from utility import (
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 GRAPHICS_DIR = PROJECT_ROOT / "graphics"
 
-# Categorical palette (validated colour-blind safe, fixed order) + text/neutral tones
-SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7"]
-TEXT_PRIMARY = "#0b0b0b"
-TEXT_SECONDARY = "#52514e"
-NEUTRAL = "#a3a29d"
-GRID = "#e4e3df"
+from plot_style import (  # colours, Matplotlib settings and save() shared with the map figures
+    SERIES, TEXT_PRIMARY, TEXT_SECONDARY, NEUTRAL, GRID, CHOICE_CMAP, SCENARIO_1_COLOR, SCENARIO_2_COLOR, save,
+    text_color_on,
+)
 
 REFERENCE_SCENARIO = "baseline"  # not in Mellot Table 3
-
-plt.rcParams.update({
-    "font.size": 10.5,
-    "axes.titlesize": 12,
-    "axes.labelsize": 11.5,
-    "xtick.labelsize": 10.5,
-    "ytick.labelsize": 10.5,
-    "legend.fontsize": 10,
-    "axes.edgecolor": TEXT_SECONDARY,
-    "axes.labelcolor": TEXT_PRIMARY,
-    "xtick.color": TEXT_SECONDARY,
-    "ytick.color": TEXT_SECONDARY,
-    "text.color": TEXT_PRIMARY,
-    "axes.spines.top": False,
-    "axes.spines.right": False,
-    "axes.grid": False,
-    "pdf.fonttype": 42,  # embedded TrueType fonts, editable/searchable in the PDF
-    "savefig.bbox": "tight",
-})
 
 
 def display_name(scenario_id: str) -> str:
     return SCENARIO_DISPLAY_NAMES.get(scenario_id, scenario_id)
-
-
-def save(fig, name: str, out_dir: Path = GRAPHICS_DIR) -> None:
-    """One subfolder per format: out_dir/png/name.png, out_dir/pdf/name.pdf, out_dir/svg/name.svg."""
-    out_dir = Path(out_dir)
-    for fmt in ("png", "pdf", "svg"):
-        (out_dir / fmt).mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_dir / "png" / f"{name}.png", dpi=300)
-    # No timestamp in the metadata -> byte-identical files for identical input
-    fig.savefig(out_dir / "pdf" / f"{name}.pdf", metadata={"CreationDate": None})
-    fig.savefig(out_dir / "svg" / f"{name}.svg", metadata={"Date": None})
-    plt.close(fig)
 
 
 def load_results(attrs_path: Path = PROCESSED_DIR / "scenario_attributes_summary.csv",
@@ -718,6 +685,59 @@ def make_all_regional(attributes: pd.DataFrame, weights: pd.Series, rankings: pd
     fig_reference_price_shift(curve, switches, scenarios, national_reference, out_dir=out_dir)
     fig_rank1_by_region(regions, scenarios, out_dir=out_dir)
     fig_rank1_population_share(share, rankings, scenarios, out_dir=out_dir)
+
+
+def pairwise_order_note(order: list, cost: pd.Series, by_cost: bool) -> str:
+    """Footnote on the scenario order of the matrix."""
+    if not by_cost:
+        return "Scenario order as set in config/default.yaml (pairwise.scenario_order)."
+    without = [display_name(s) for s in order if pd.isna(cost.get(s))]
+    tail = f"; {', '.join(without)}: no cost value, last" if without else ""
+    return f"Scenarios ordered by system cost change (Mellot et al. 2024, Table 3, cheapest first){tail}."
+
+
+# ---------------------------------------------------------------------------
+# Pairwise choice probability matrix (as in Tröndle et al. 2025, Fig. 2/4; src/pairwise.py)
+# ---------------------------------------------------------------------------
+def fig_pairwise_matrix(matrix: pd.DataFrame, credible_interval: float, out_dir: Path = GRAPHICS_DIR,
+                        order_note: str = "", decimals: int = 1, name: str = "fig9_pairwise_choice_probability_regional",
+                        formats=("png", "pdf")) -> None:
+    """Lower triangle incl. diagonal: P(scenario 1 (row) > scenario 2 (column)) in %, expected value large,
+    credible interval small below. Colour: orange (0 %) - beige (50 %) - blue (100 %)."""
+    order = matrix.sort_values("row").drop_duplicates("row")["scenario_1"].tolist()
+    n = len(order)
+    lower = matrix[matrix["column"] <= matrix["row"]]
+    grid = np.full((n, n), np.nan)
+    grid[lower["row"], lower["column"]] = lower["p_mean"]
+    fig, ax = plt.subplots(figsize=(17, 16))
+    image = ax.imshow(np.ma.masked_invalid(grid), cmap=CHOICE_CMAP, vmin=0, vmax=1, aspect="equal")
+    for _, r in lower.iterrows():
+        color = text_color_on(CHOICE_CMAP(r["p_mean"]))
+        ax.text(r["column"], r["row"] - 0.1, f"{100 * r['p_mean']:.{decimals}f}%", ha="center", va="center",
+                fontsize=11.5, fontweight="bold", color=color)
+        ax.text(r["column"], r["row"] + 0.25, f"({100 * r['p_low']:.{decimals}f}–{100 * r['p_high']:.{decimals}f}%)",
+                ha="center", va="center", fontsize=7.8, color=color)
+    labels = [display_name(s) for s in order]
+    ax.set_xticks(range(n))
+    ax.set_xticklabels(labels, rotation=45, ha="right", rotation_mode="anchor")
+    ax.set_yticks(range(n))
+    ax.set_yticklabels(labels)
+    ax.tick_params(length=0)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.set_ylabel("Scenario 1", color=SCENARIO_1_COLOR, fontweight="bold", fontsize=13)
+    ax.set_xlabel("Scenario 2", color=SCENARIO_2_COLOR, fontweight="bold", fontsize=13)
+    bar = fig.colorbar(image, ax=ax, orientation="horizontal", fraction=0.03, pad=0.19, aspect=40, shrink=0.8)
+    bar.set_label("Choice probability scenario 1", fontsize=11.5)
+    bar.set_ticks([0, 0.25, 0.5, 0.75, 1])
+    bar.set_ticklabels(["0%", "25%", "50%", "75%", "100%"])
+    bar.outline.set_visible(False)
+    fig.text(0.02, 0.01, "Probability that scenario 1 (row) is chosen over scenario 2 (column) in a pairwise "
+             "comparison; posterior mean over the draws,\n"
+             f"in brackets the {credible_interval * 100:g}% equal-tailed credible interval. Regional analysis: "
+             "population-weighted mean of the regional choice probabilities (TI excluded).\n" + order_note,
+             fontsize=8.5, color=TEXT_SECONDARY, ha="left", va="top")
+    save(fig, name, out_dir, formats)
 
 
 def make_all(attrs: pd.DataFrame, rankings: pd.DataFrame, model_path: Path = CHOICE_MODEL_PATH,

@@ -22,11 +22,18 @@ FIGURES_REGIONAL = [  # created by src/make_graphics.make_all_regional
     "fig6_p_rank1_vs_reference_price_shift_regional", "fig7_rank1_by_region_regional",
     "fig8_rank1_population_share_regional",
 ]
+PAIRWISE = config["pairwise"]
+MAPS = config["maps"]
+MAP_PAIRS = [f"{a}_vs_{b}" for a, b in PAIRWISE["map_pairs"]]
+FIGURE_PAIRWISE = "fig9_pairwise_choice_probability_regional"
+FIGURES_MAPS = [f"fig10_choice_map_{pair}_regional" for pair in MAP_PAIRS]
+PAIRWISE_FORMATS = ["png", "pdf"]
 REGIONAL_OUTPUTS = [  # part of rule all only with spatial.resolution: regional
     "build/data/utility_rankings_regional.csv",
     "build/data/sensitivity/reference_price_curve_regional.csv",
     "build/data/sensitivity/reference_price_rank1_switches_regional.csv",
     *expand(FIGURE_PATH, figure=FIGURES_REGIONAL, fmt=FIGURE_FORMATS),
+    *expand(FIGURE_PATH, figure=[FIGURE_PAIRWISE, *FIGURES_MAPS], fmt=PAIRWISE_FORMATS),
 ]
 
 
@@ -248,6 +255,77 @@ rule make_plots_regional:
     script: "scripts/make_plots_regional.py"
 
 
+rule pairwise_regional:
+    message: "Pairwise choice probabilities of the regional analysis (matrix and map pairs)."
+    params:
+        scenario_ids = list(SCENARIOS),
+        exclude = REGIONAL["exclude_regions"],
+        order = PAIRWISE["scenario_order"],
+        map_pairs = PAIRWISE["map_pairs"],
+        mobile_share = config["utility"]["mobile_share"],
+        credible_interval = config["utility"]["credible_interval"]
+    input:
+        attributes = rules.regional_attributes.output.attributes,
+        population = rules.regional_attributes.output.population,
+        choice_model = config["data"]["choice_model"]
+    output:
+        matrix = "build/data/pairwise/pairwise_matrix_regional.csv",
+        regions = "build/data/pairwise/pairwise_regions_regional.csv",
+        map_tables = expand("build/data/pairwise/choice_map_{pair}_regional.csv", pair=MAP_PAIRS),
+        comparison = "build/data/pairwise/aggregation_comparison_regional.csv",
+        checks = "build/data/pairwise/checks_pairwise_regional.csv"
+    conda: "envs/default.yaml"
+    script: "scripts/pairwise_regional.py"
+
+
+rule plot_pairwise:
+    message: "Create the pairwise choice probability matrix."
+    params:
+        order = PAIRWISE["scenario_order"],
+        decimals = PAIRWISE["decimals"],
+        credible_interval = config["utility"]["credible_interval"],
+        name = FIGURE_PAIRWISE,
+        formats = PAIRWISE_FORMATS
+    input:
+        matrix = rules.pairwise_regional.output.matrix,
+        attributes = rules.regional_attributes.output.attributes
+    output: expand(FIGURE_PATH, figure=FIGURE_PAIRWISE, fmt=PAIRWISE_FORMATS)
+    conda: "envs/default.yaml"
+    script: "scripts/make_pairwise_plot.py"
+
+
+rule fetch_boundaries:
+    message: "Download swisstopo swissBOUNDARIES3D (fixed release, checksum verified)."
+    params:
+        url = MAPS["boundaries"]["url"],
+        sha256 = MAPS["boundaries"]["sha256"]
+    output: MAPS["boundaries"]["file"]
+    conda: "envs/default.yaml"
+    script: "scripts/fetch_boundaries.py"
+
+
+rule choice_maps:
+    message: "Create the maps of the regional choice probabilities."
+    params:
+        boundaries = MAPS["boundaries"],
+        crs = MAPS["crs"],
+        tolerance = MAPS["simplify_tolerance_m"],
+        exclude = REGIONAL["exclude_regions"],
+        credible_interval = config["utility"]["credible_interval"],
+        names = FIGURES_MAPS,
+        formats = PAIRWISE_FORMATS,
+        figure_dir = "build/figures"
+    input:
+        boundaries = rules.fetch_boundaries.output[0],
+        population = rules.regional_attributes.output.population,
+        tables = rules.pairwise_regional.output.map_tables
+    output:
+        checks = "build/data/pairwise/geometry_checks_regional.csv",
+        figures = expand(FIGURE_PATH, figure=FIGURES_MAPS, fmt=PAIRWISE_FORMATS)
+    conda: "envs/maps.yaml"
+    script: "scripts/make_choice_maps.py"
+
+
 rule sensitivity_reference_price:
     message: "Sensitivity to the ElCom reference price: curve, crossing points, base years {params.base_years}."
     params:
@@ -327,6 +405,11 @@ rule test:
         beta_real_units = rules.beta_real_units.output[0],
         regional_attributes = rules.regional_attributes.output.attributes,
         regional_checks = rules.regional_utility.output.checks,
+        pairwise_matrix = rules.pairwise_regional.output.matrix,
+        pairwise_regions = rules.pairwise_regional.output.regions,
+        pairwise_map_tables = rules.pairwise_regional.output.map_tables,
+        pairwise_checks = rules.pairwise_regional.output.checks,
+        geometry_checks = rules.choice_maps.output.checks,
         rankings_regional = rules.regional_utility.output.rankings,
         region_rankings_regional = rules.regional_utility.output.regions,
         rank1_share_regional = rules.regional_utility.output.rank1_share,
