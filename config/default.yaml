@@ -84,15 +84,21 @@ sensitivity:
     crossing_scenarios: [policy_alpine_pv, policy_sccgt_daccs]
     crossing_tolerance: 1.0e-10
     crossing_check_delta: 0.01
-    # Scenarios shown in fig6 (colour order of the palette)
-    figure_scenarios: [policy_alpine_pv, policy_sccgt_daccs, policy_mix, policy_remix]
+
+# All figures (src/make_graphics.py, src/maps.py)
+figures:
+    # Scenario order of all figures (first = top/left; fig1/fig4 place scenarios by rank). null: by cost change
+    # (Mellot et al. 2024, Table 3) ascending, cheapest first, scenarios without cost value last; or an explicit
+    # list of all scenario ids.
+    scenario_order: null
+    # Scenarios with their own colour in every figure, in this order blue, orange, green, violet (at most 4; the
+    # lines of fig6); all other scenarios grey.
+    highlight_scenarios: [policy_alpine_pv, policy_sccgt_daccs, policy_mix, policy_remix]
 
 # Pairwise choice probabilities of the regional main analysis (as in Tröndle et al. 2025, Fig. 1-4): per draw and
 # region p = logistic(u_1 - u_2), aggregated as the population-weighted mean of the regional probabilities.
 pairwise:
-    # Order of the scenarios in the matrix (fig9). null: by cost change (Mellot et al. 2024, Table 3) ascending,
-    # cheapest first, scenarios without cost value last; or an explicit list of all scenario ids.
-    scenario_order: null
+    # Scenario order of the matrix (fig9): figures.scenario_order.
     # Decimals of the percentages in the matrix cells
     decimals: 1
     # Pairs (scenario 1, scenario 2) for the maps (fig10): Alpine PV vs. the cheapest scenario (MIX, -17.0 %)
@@ -114,6 +120,10 @@ maps:
     crs: EPSG:2056
     # Coverage simplification for the figures (m); shared borders stay identical. 0 = full resolution.
     simplify_tolerance_m: 100
+    # Colour range of the maps in % (Tröndle et al. 2025: 0-100), and a narrowed variant that shows the regional
+    # differences (values outside take the end colours); both are written (variant with suffix _range<lo>-<hi>).
+    color_range: [0, 100]
+    color_range_variant: [40, 60]
 
 # Scenario ID (wildcard) -> .nc file name in data.scenario_dir. Explicit mapping instead of a glob,
 # because the file names contain commas.

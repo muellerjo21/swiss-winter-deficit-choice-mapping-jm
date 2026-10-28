@@ -10,8 +10,7 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.patches import Patch
 
 from config import CANTON_MERGES, CANTON_NUMBER_TO_CODE, SCENARIO_DISPLAY_NAMES
-from intervals import credible_interval_label
-from plot_style import CHOICE_CMAP, NEUTRAL, TEXT_SECONDARY, save
+from plot_style import CHOICE_CMAP, NEUTRAL, TEXT_SECONDARY, FigureSettings, save
 
 
 def region_of_canton(canton: str) -> str:
@@ -52,10 +51,11 @@ def geometry_checks(geometries: gpd.GeoDataFrame, analysis_regions: list) -> pd.
     return out
 
 
-def _draw(ax, geometries: gpd.GeoDataFrame, values: pd.Series, excluded: list, title: str, title_size: float):
+def _draw(ax, geometries: gpd.GeoDataFrame, values: pd.Series, excluded: list, title: str, title_size: float,
+          vmin: float, vmax: float):
     data = geometries.assign(value=geometries["region"].map(values))
     shown = data[data["value"].notna()]
-    shown.plot(ax=ax, column="value", cmap=CHOICE_CMAP, vmin=0, vmax=1, edgecolor="white", linewidth=0.6)
+    shown.plot(ax=ax, column="value", cmap=CHOICE_CMAP, vmin=vmin, vmax=vmax, edgecolor="white", linewidth=0.6)
     data[data["region"].isin(excluded)].plot(ax=ax, color="#d9d8d4", edgecolor="white", linewidth=0.6,
                                              hatch="///")
     ax.set_title(title, loc="left", fontweight="bold", fontsize=title_size)
@@ -63,33 +63,39 @@ def _draw(ax, geometries: gpd.GeoDataFrame, values: pd.Series, excluded: list, t
     ax.set_aspect("equal")
 
 
-def fig_choice_map(geometries: gpd.GeoDataFrame, table: pd.DataFrame, excluded: list, credible_interval: float,
-                   interval_type: str, out_dir, name: str, formats=("png", "pdf")) -> None:
+def fig_choice_map(geometries: gpd.GeoDataFrame, table: pd.DataFrame, excluded: list, fs: FigureSettings,
+                   out_dir, name: str, color_range=(0, 100), formats=("png", "pdf")) -> None:
     """(A) expected value (large), (B) upper and (C) lower bound of the credible interval of P(scenario 1 >
-    scenario 2) per region; common colour bar 0-100 %."""
+    scenario 2) per region; common colour bar over color_range (%, default 0-100 as in Tröndle et al. 2025; the
+    beige midpoint stays at the middle of the range, values outside take the end colours)."""
     a, b = table["scenario_1"].iloc[0], table["scenario_2"].iloc[0]
+    vmin, vmax = color_range[0] / 100, color_range[1] / 100
     t = table.set_index("region")
     fig = plt.figure(figsize=(12, 7.2))
     grid = GridSpec(3, 3, figure=fig, width_ratios=[1, 1, 0.95], height_ratios=[1, 1, 0.09], hspace=0.12, wspace=0.02)
     ax_a = fig.add_subplot(grid[0:2, 0:2])
     ax_b = fig.add_subplot(grid[0, 2])
     ax_c = fig.add_subplot(grid[1, 2])
-    _draw(ax_a, geometries, t["p_mean"], excluded, "(A) Expected value", 13)
-    _draw(ax_b, geometries, t["p_high"], excluded, "(B) Upper uncertainty bound", 11)
-    _draw(ax_c, geometries, t["p_low"], excluded, "(C) Lower uncertainty bound", 11)
+    _draw(ax_a, geometries, t["p_mean"], excluded, "(A) Expected value", 13, vmin, vmax)
+    _draw(ax_b, geometries, t["p_high"], excluded, "(B) Upper uncertainty bound", 11, vmin, vmax)
+    _draw(ax_c, geometries, t["p_low"], excluded, "(C) Lower uncertainty bound", 11, vmin, vmax)
     ax_a.legend(handles=[Patch(facecolor="#d9d8d4", edgecolor="white", hatch="///", label="No data (TI)")],
                 loc="lower left", frameon=False)
     cax = fig.add_subplot(grid[2, :])
-    bar = fig.colorbar(plt.cm.ScalarMappable(norm=plt.Normalize(0, 1), cmap=CHOICE_CMAP), cax=cax,
-                       orientation="horizontal")
-    bar.set_ticks([0, 0.25, 0.5, 0.75, 1])
-    bar.set_ticklabels(["0%", "25%", "50%", "75%", "100%"])
+    clipped = vmin > 0 or vmax < 1
+    bar = fig.colorbar(plt.cm.ScalarMappable(norm=plt.Normalize(vmin, vmax), cmap=CHOICE_CMAP), cax=cax,
+                       orientation="horizontal", extend="both" if clipped else "neither")
+    ticks = np.linspace(vmin, vmax, 5)
+    bar.set_ticks(ticks)
+    bar.set_ticklabels([f"{100 * v:g}%" for v in ticks])
     bar.outline.set_visible(False)
     name_a, name_b = SCENARIO_DISPLAY_NAMES.get(a, a), SCENARIO_DISPLAY_NAMES.get(b, b)
     bar.set_label(f"Choice probability {name_a} (1)", fontsize=11.5)
     fig.suptitle(f"{name_a} (1) vs. {name_b} (2)", x=0.125, ha="left", fontsize=13, fontweight="bold")
+    range_note = (f" Colour range {color_range[0]:g}–{color_range[1]:g}% (narrowed to show the regional differences)."
+                  if clipped else "")
     fig.text(0.125, 0.0, f"Probability that {name_a} is chosen over {name_b} in a pairwise comparison, per region "
-             f"(posterior mean; bounds: {credible_interval_label(credible_interval, interval_type)}).\n"
+             f"(posterior mean; bounds: {fs.interval()}).{range_note}\n"
              "Regions of the Calliope model (AI/AR, BL/BS, NW/OW merged). Boundaries: swisstopo swissBOUNDARIES3D, "
-             "LV95 (EPSG:2056).", fontsize=8.5, color=TEXT_SECONDARY, ha="left", va="top")
+             f"LV95 (EPSG:2056).\n{fs.stamp()}", fontsize=8.5, color=TEXT_SECONDARY, ha="left", va="top")
     save(fig, name, out_dir, formats)

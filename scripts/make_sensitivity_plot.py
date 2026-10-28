@@ -1,11 +1,11 @@
-"""Creates fig6 (P(rank 1) vs. ElCom reference price) from the sensitivity results."""
+"""Creates fig6 of the national aggregate (P(rank 1) vs. ElCom reference price, base years)."""
 import sys
 from pathlib import Path
 
 import pandas as pd
 
 sys.path.insert(0, str(Path(snakemake.scriptdir).parent / "src"))
-from make_graphics import fig_reference_price_sensitivity
+from make_graphics import fig_reference_price_sensitivity, figure_settings
 
 
 if __name__ == "__main__":
@@ -14,6 +14,6 @@ if __name__ == "__main__":
         crossings=pd.read_csv(snakemake.input.crossings),
         base_years=pd.read_csv(snakemake.input.base_years),
         switches=pd.read_csv(snakemake.input.switches),
-        scenarios=snakemake.params.figure_scenarios,
+        fs=figure_settings("national", snakemake.params),
         out_dir=Path(snakemake.output[0]).parent.parent,
     )

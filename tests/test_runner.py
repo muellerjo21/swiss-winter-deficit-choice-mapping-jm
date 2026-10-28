@@ -124,6 +124,14 @@ def _create_config_plugin(snakemake):
             return pd.read_csv(snakemake.input.pairwise_checks)
 
         @pytest.fixture()
+        def contributions_national(self):
+            return pd.read_csv(snakemake.input.contributions_national)
+
+        @pytest.fixture()
+        def contributions_regional(self):
+            return pd.read_csv(snakemake.input.contributions_regional)
+
+        @pytest.fixture()
         def geometry_checks(self):
             return pd.read_csv(snakemake.input.geometry_checks)
 

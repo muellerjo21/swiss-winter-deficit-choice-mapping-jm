@@ -5,15 +5,15 @@ configfile: "config/default.yaml"
 min_version("9.6")
 
 SCENARIOS = config["scenarios"]  # scenario ID -> .nc file name
-FIGURES = [  # created by src/make_graphics.make_all
-    "fig1_rank_choice_vs_cost", "fig2_utility_forest", "fig3_utility_contributions",
-    "fig4_rank_de_vs_fr", "fig5_cost_vs_preference", "figA1_utility_contributions_absolute",
+FIGURES = [  # national aggregate (appendix), created by src/make_graphics.make_all
+    "fig1_rank_choice_vs_cost_national", "fig2_utility_forest_national", "fig3_utility_contributions_national",
+    "fig4_rank_de_vs_fr_national", "fig5_cost_vs_preference_national", "figA1_utility_contributions_absolute_national",
 ]
 FIGURE_FORMATS = ["png", "pdf", "svg"]
 FIGURE_PATH = "build/figures/{fmt}/{figure}.{fmt}"  # one subfolder per format
 REFERENCE_YEAR = config["price"]["reference_year"]
 SENSITIVITY = config["sensitivity"]
-FIGURE_SENSITIVITY = "fig6_p_rank1_vs_reference_price"  # created by src/make_graphics.fig_reference_price_sensitivity
+FIGURE_SENSITIVITY = "fig6_p_rank1_vs_reference_price_national"  # created by src/make_graphics.fig_reference_price_sensitivity
 SENSITIVITY_YEARS = sorted(set(SENSITIVITY["base_years"]) | {REFERENCE_YEAR})
 REGIONAL = config["spatial"]["regional"]
 FIGURES_REGIONAL = [  # created by src/make_graphics.make_all_regional
@@ -22,11 +22,23 @@ FIGURES_REGIONAL = [  # created by src/make_graphics.make_all_regional
     "fig6_p_rank1_vs_reference_price_shift_regional", "fig7_rank1_by_region_regional",
     "fig8_rank1_population_share_regional",
 ]
+FIGURES_CONFIG = config["figures"]
 PAIRWISE = config["pairwise"]
 MAPS = config["maps"]
 MAP_PAIRS = [f"{a}_vs_{b}" for a, b in PAIRWISE["map_pairs"]]
 FIGURE_PAIRWISE = "fig9_pairwise_choice_probability_regional"
-FIGURES_MAPS = [f"fig10_choice_map_{pair}_regional" for pair in MAP_PAIRS]
+MAP_RANGES = [MAPS["color_range"], MAPS["color_range_variant"]]
+MAP_RANGE_TAGS = ["", "_range{}-{}".format(*MAPS["color_range_variant"])]
+FIGURES_MAPS_BY_PAIR = [[f"fig10_choice_map_{pair}{tag}_regional" for tag in MAP_RANGE_TAGS] for pair in MAP_PAIRS]
+FIGURES_MAPS = [name for names in FIGURES_MAPS_BY_PAIR for name in names]
+FIGURE_PARAMS = dict(  # what every figure states (analysis, interval, year), its scenario order and colours
+    credible_interval = config["utility"]["credible_interval"],
+    interval_type = config["utility"]["interval_type"],
+    year = REFERENCE_YEAR,
+    order = FIGURES_CONFIG["scenario_order"],
+    highlight = FIGURES_CONFIG["highlight_scenarios"],
+    scenario_ids = list(SCENARIOS),
+)
 PAIRWISE_FORMATS = ["png", "pdf"]
 REGIONAL_OUTPUTS = [  # part of rule all only with spatial.resolution: regional
     "build/data/utility_rankings_regional.csv",
@@ -223,16 +235,17 @@ rule beta_real_units:
 
 
 rule make_plots:
-    message: "Create figures (mobile_share={params.mobile_share})."
+    message: "Create figures of the national aggregate (appendix, mobile_share={params.mobile_share})."
     params:
         mobile_share = config["utility"]["mobile_share"],
-        credible_interval = config["utility"]["credible_interval"],
-        interval_type = config["utility"]["interval_type"]
+        **FIGURE_PARAMS
     input:
         attributes = rules.compute_attributes.output[0],
         rankings = rules.compute_utility.output[0],
         choice_model = config["data"]["choice_model"]  # fig3/fig5 need the betas directly
-    output: expand(FIGURE_PATH, figure=FIGURES, fmt=FIGURE_FORMATS)
+    output:
+        figures = expand(FIGURE_PATH, figure=FIGURES, fmt=FIGURE_FORMATS),
+        contributions = "build/data/contributions_national.csv"
     conda: "envs/default.yaml"
     script: "scripts/make_plots.py"
 
@@ -241,10 +254,8 @@ rule make_plots_regional:
     message: "Create figures of the regional main analysis."
     params:
         exclude = REGIONAL["exclude_regions"],
-        figure_scenarios = SENSITIVITY["figure_scenarios"],
         mobile_share = config["utility"]["mobile_share"],
-        credible_interval = config["utility"]["credible_interval"],
-        interval_type = config["utility"]["interval_type"]
+        **FIGURE_PARAMS
     input:
         attributes = rules.regional_attributes.output.attributes,
         population = rules.regional_attributes.output.population,
@@ -255,7 +266,9 @@ rule make_plots_regional:
         switches = rules.regional_reference_price.output.switches,
         elcom = f"build/data/reference/elcom_price_{REFERENCE_YEAR}.json",  # national median, fig6 top axis
         choice_model = config["data"]["choice_model"]
-    output: expand(FIGURE_PATH, figure=FIGURES_REGIONAL, fmt=FIGURE_FORMATS)
+    output:
+        figures = expand(FIGURE_PATH, figure=FIGURES_REGIONAL, fmt=FIGURE_FORMATS),
+        contributions = "build/data/regional/contributions_regional.csv"
     conda: "envs/default.yaml"
     script: "scripts/make_plots_regional.py"
 
@@ -265,7 +278,7 @@ rule pairwise_regional:
     params:
         scenario_ids = list(SCENARIOS),
         exclude = REGIONAL["exclude_regions"],
-        order = PAIRWISE["scenario_order"],
+        order = FIGURES_CONFIG["scenario_order"],
         map_pairs = PAIRWISE["map_pairs"],
         mobile_share = config["utility"]["mobile_share"],
         credible_interval = config["utility"]["credible_interval"],
@@ -287,12 +300,9 @@ rule pairwise_regional:
 rule plot_pairwise:
     message: "Create the pairwise choice probability matrix."
     params:
-        order = PAIRWISE["scenario_order"],
         decimals = PAIRWISE["decimals"],
-        credible_interval = config["utility"]["credible_interval"],
-        interval_type = config["utility"]["interval_type"],
-        name = FIGURE_PAIRWISE,
-        formats = PAIRWISE_FORMATS
+        formats = PAIRWISE_FORMATS,
+        **FIGURE_PARAMS
     input:
         matrix = rules.pairwise_regional.output.matrix,
         attributes = rules.regional_attributes.output.attributes
@@ -320,7 +330,9 @@ rule choice_maps:
         exclude = REGIONAL["exclude_regions"],
         credible_interval = config["utility"]["credible_interval"],
         interval_type = config["utility"]["interval_type"],
-        names = FIGURES_MAPS,
+        year = REFERENCE_YEAR,
+        names = FIGURES_MAPS_BY_PAIR,
+        color_ranges = MAP_RANGES,
         formats = PAIRWISE_FORMATS,
         figure_dir = "build/figures"
     input:
@@ -362,8 +374,7 @@ rule sensitivity_reference_price:
 
 rule plot_sensitivity:
     message: "Create figure P(rank 1) vs. reference price."
-    params:
-        figure_scenarios = SENSITIVITY["figure_scenarios"]
+    params: **FIGURE_PARAMS
     input:
         curve = rules.sensitivity_reference_price.output.curve,
         crossings = rules.sensitivity_reference_price.output.crossings,
@@ -418,6 +429,8 @@ rule test:
         pairwise_map_tables = rules.pairwise_regional.output.map_tables,
         pairwise_checks = rules.pairwise_regional.output.checks,
         geometry_checks = rules.choice_maps.output.checks,
+        contributions_national = rules.make_plots.output.contributions,
+        contributions_regional = rules.make_plots_regional.output.contributions,
         rankings_regional = rules.regional_utility.output.rankings,
         region_rankings_regional = rules.regional_utility.output.regions,
         rank1_share_regional = rules.regional_utility.output.rank1_share,
