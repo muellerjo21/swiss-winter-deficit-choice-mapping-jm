@@ -1,3 +1,5 @@
+import sys
+
 from snakemake.utils import min_version
 from pathlib import Path
 
@@ -403,9 +405,10 @@ rule plot_sensitivity:
 
 
 rule dag_dot:
+    params: python = sys.executable  # the Python running this workflow, also without an activated environment
     output: temp("build/dag.dot")
     shell:
-        "snakemake --rulegraph > {output}"
+        '"{params.python}" -m snakemake --rulegraph > {output}'
 
 
 rule dag:
@@ -417,12 +420,50 @@ rule dag:
         "dot -Tpdf {input} -o build/dag.pdf"
 
 
+rule pipeline_map_graph:
+    message: "Draw the rule graph with graphviz (as snakemake dag)."
+    input: rules.dag_dot.output[0]
+    output: temp("build/pipeline_map_graph.svg")
+    conda: "envs/dag.yaml"
+    shell: "dot -Tsvg {input} -o {output}"
+
+
 rule pipeline_map:
     message: "Interactive pipeline map (open build/pipeline_map.html in a browser)."
+    params:
+        price_year = REFERENCE_YEAR,
+        price_category = config["price"]["category"],
+        base_years = SENSITIVITY["base_years"],
+        curve_start = SENSITIVITY["reference_price"]["start"],
+        curve_stop = SENSITIVITY["reference_price"]["stop"],
+        population_year = REGIONAL["population_year"],
+        exclude = REGIONAL["exclude_regions"],
+        credible_interval = config["utility"]["credible_interval"],
+        interval_type = config["utility"]["interval_type"],
+        import_definition = config["imports"]["definition"],
+        land_definition = config["land"]["definition"],
+        boundaries_url = MAPS["boundaries"]["url"],
+        map_pairs = PAIRWISE["map_pairs"],
+        map_range = MAPS["color_range"],
+        map_range_variant = MAPS["color_range_variant"],
+        test_report = "build/test-report.html"  # log of rule test
     input:
         rulegraph = rules.dag_dot.output[0],
+        graph = rules.pipeline_map_graph.output[0],
         texts = "docs/pipeline_map.yaml",
-        template = "docs/pipeline_map_template.html"
+        template = "docs/pipeline_map_template.html",
+        # results the numbers in the texts are read from
+        elcom_national = f"build/data/reference/elcom_price_{REFERENCE_YEAR}.json",
+        eur_chf = f"build/data/reference/eur_chf_{REFERENCE_YEAR}.json",
+        elcom_regions = rules.regional_attributes.output.elcom,
+        population = rules.regional_attributes.output.population,
+        attributes = rules.compute_attributes.output[0],
+        base_years = rules.sensitivity_reference_price.output.base_years,
+        switches_regional = rules.regional_reference_price.output.switches,
+        import_shares = rules.import_shares.output[0],
+        pairwise_matrix = rules.pairwise_regional.output.matrix,
+        choice_model = config["data"]["choice_model"],
+        tests = "build/test.success"
     output: "build/pipeline_map.html"
     conda: "envs/default.yaml"
     script: "scripts/pipeline_map.py"

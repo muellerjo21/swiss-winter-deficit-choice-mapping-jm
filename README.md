@@ -35,7 +35,7 @@ Then run the entire workflow (attribute extraction -> utility -> figures -> regr
 
 Results go to `build/` (git-ignored); figures in `build/figures/` with one subfolder per format (`png/`, `pdf/`, `svg/`). Each rule runs in its own conda environment (`envs/`), pinned to the versions the reference results were validated with. The rule `test` compares `build/` against the frozen reference results in `data/processed/`. Other useful rules: `snakemake --list`, `snakemake dag` (dependency graph as `build/dag.pdf`), `snakemake clean`.
 
-`snakemake pipeline_map` writes an interactive map of the workflow to `build/pipeline_map.html` (open it in a browser): click a step to see what it does, what it needs and what it feeds, with the open questions per step. The arrows come from `snakemake --rulegraph`, the texts from `docs/pipeline_map.yaml`; every rule needs an entry there, otherwise the rule fails.
+`snakemake pipeline_map` writes an interactive map of the workflow to `build/pipeline_map.html` (open it in a browser): the rule graph drawn by graphviz as in `snakemake dag`; click a step to see what it does, what it needs and what it feeds, with the open points of the method. Texts in `docs/pipeline_map.yaml` (every rule needs an entry, otherwise the rule fails); the numbers in the texts are read from the results when the map is built.
 
 The two live data sources are pinned in `config/default.yaml` by one base year (`price.reference_year`): the ElCom reference price of that year and the EUR/CHF rate as the annual mean of the daily ECB reference rates of the same year (the year must be completed). This file is the single source for these price parameters; `src/config.py` reads them from there, so notebooks and the pipeline use the same values.
 
