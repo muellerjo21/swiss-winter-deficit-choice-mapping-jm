@@ -132,6 +132,46 @@ def _create_config_plugin(snakemake):
             return pd.read_csv(snakemake.input.contributions_regional)
 
         @pytest.fixture()
+        def population_by_region(self):
+            return pd.read_csv(snakemake.input.population_by_region)
+
+        @pytest.fixture()
+        def elcom_by_region(self):
+            return pd.read_csv(snakemake.input.elcom_by_region)
+
+        @pytest.fixture()
+        def aggregation_comparison_regional(self):
+            return pd.read_csv(snakemake.input.aggregation_comparison_regional)
+
+        @pytest.fixture()
+        def reference_population_by_region(self):
+            return pd.read_csv(snakemake.input.reference_population_by_region)
+
+        @pytest.fixture()
+        def reference_elcom_by_region(self):
+            return pd.read_csv(snakemake.input.reference_elcom_by_region)
+
+        @pytest.fixture()
+        def reference_pairwise_matrix_regional(self):
+            return pd.read_csv(snakemake.input.reference_pairwise_matrix_regional)
+
+        @pytest.fixture()
+        def reference_pairwise_regions_regional(self):
+            return pd.read_csv(snakemake.input.reference_pairwise_regions_regional)
+
+        @pytest.fixture()
+        def reference_aggregation_comparison_regional(self):
+            return pd.read_csv(snakemake.input.reference_aggregation_comparison_regional)
+
+        @pytest.fixture()
+        def reference_contributions_regional(self):
+            return pd.read_csv(snakemake.input.reference_contributions_regional)
+
+        @pytest.fixture()
+        def reference_contributions_national(self):
+            return pd.read_csv(snakemake.input.reference_contributions_national)
+
+        @pytest.fixture()
         def geometry_checks(self):
             return pd.read_csv(snakemake.input.geometry_checks)
 

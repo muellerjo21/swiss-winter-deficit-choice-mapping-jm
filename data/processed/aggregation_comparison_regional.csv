@@ -1,0 +1,2 @@
+n_pairs,max_abs_diff,mean_abs_diff,max_pair_scenario_1,max_pair_scenario_2,max_pair_p_mean,max_pair_p_mean_utility_aggregation
+132,0.0003911162902661136,5.694400901138576e-05,policy_mix,baseline,0.6029773549768542,0.6033684712671203

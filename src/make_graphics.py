@@ -420,7 +420,8 @@ def _scenario_curve_labels(ax, region: pd.DataFrame, x_col: str, fs: FigureSetti
                  for dy in (0.02, 0.05, -0.03, -0.08, -0.15, -0.25)  # close to the curve first
                  for x, p in zip(c[x_col], c["p_rank1"])
                  for ha in ("center", "left", "right")]
-        cands = [(min(max(x, lo), hi), y, ha, va) for x, y, ha, va in cands]
+        cands = [(min(max(x, lo), hi), y, ha, va) for x, y, ha, va in cands
+                 if not (va == "bottom" and y > 0.95)]  # keep labels near P = 1 below the curve
         _place_label(ax, textwrap.fill(display_name(s), 16), cands, obstacles, placed,  # long names on 2 lines
                      fontsize=9, color=TEXT_PRIMARY, fontweight="bold")
 
@@ -575,8 +576,9 @@ def fig_reference_price_shift(curve: pd.DataFrame, switches: pd.DataFrame, natio
             xc = sw["switch_shift_rp_kwh"]
             text = (f"{display_name(sw['scenario_before'])} →\n{display_name(sw['scenario_after'])} "
                     f"(Δ {xc:+.1f}, ≙ {reference + xc:.1f})")
-            cands = [(xc + dx, y, ha, "top") for y in np.arange(1.06, 0.3, -0.04)
-                     for dx, ha in [(-0.15, "right"), (0.15, "left")]]
+            cands = [(xc - 0.15, y, "right", "center") for y in np.arange(0.25, 0.14, -0.02)] + \
+                    [(xc - 0.15, y, "right", "center") for y in np.arange(0.27, 0.36, 0.02)] + \
+                    [(xc + 0.15, y, "left", "center") for y in np.arange(0.25, 0.36, 0.02)]
             _place_label(ax, text, cands, obstacles, placed, fontsize=8, color=TEXT_SECONDARY)
         if tag == GROUPS[0]:
             _scenario_curve_labels(ax, region, "shift_rp_kwh", fs, lo, hi, obstacles, placed)
@@ -766,5 +768,5 @@ def fig_pairwise_matrix(matrix: pd.DataFrame, fs: FigureSettings, out_dir: Path 
     footnote(fig, "Probability that scenario 1 (row) is chosen over scenario 2 (column) in a pairwise comparison; "
              f"posterior mean over the draws,\nin brackets the {fs.interval()}. Population-weighted mean of the "
              "regional choice probabilities. Orange/blue: scale of the choice probability, not scenario colours.\n"
-             + fs.order_note, fs, x=0.02, y=0.01)
+             + fs.order_note, fs, x=0.02, y=bar.ax.get_position().y0 - 0.045)  # right below the colour bar label
     save(fig, name + fs.suffix, out_dir, formats)

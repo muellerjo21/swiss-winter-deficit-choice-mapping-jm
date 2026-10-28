@@ -149,7 +149,7 @@ reference:
     sensitivity_crossings: data/processed/reference_price_crossing_points.csv
     sensitivity_base_years: data/processed/reference_price_base_years.csv
     sensitivity_switches: data/processed/reference_price_rank1_switches.csv
-    figure_sensitivity: graphics/fig6_p_rank1_vs_reference_price
+    figure_sensitivity: graphics/fig6_p_rank1_vs_reference_price_national
     # regional main analysis
     regional_attributes: data/processed/regional_attributes.csv
     rankings_regional: data/processed/utility_rankings_regional.csv
@@ -158,3 +158,11 @@ reference:
     sensitivities_regional: data/processed/sensitivity_regional.csv
     sensitivity_curve_regional: data/processed/reference_price_curve_regional.csv
     sensitivity_switches_regional: data/processed/reference_price_rank1_switches_regional.csv
+    population_by_region: data/processed/population_by_region.csv
+    elcom_by_region: data/processed/elcom_by_region.csv
+    pairwise_matrix_regional: data/processed/pairwise_matrix_regional.csv
+    pairwise_regions_regional: data/processed/pairwise_regions_regional.csv
+    aggregation_comparison_regional: data/processed/aggregation_comparison_regional.csv
+    # attribute contributions of fig3/figA1
+    contributions_regional: data/processed/contributions_regional.csv
+    contributions_national: data/processed/contributions_national.csv

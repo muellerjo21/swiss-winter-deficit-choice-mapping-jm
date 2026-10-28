@@ -41,7 +41,7 @@ ANALYSIS_LABELS = {
 GROUP_TITLES = {
     "regional": {"national": "Switzerland (population-weighted)", "DE_CH": "German-speaking Switzerland (DE-CH)",
                  "FR_CH": "French-speaking Switzerland (FR-CH)"},
-    "national": {"national": "Switzerland (national aggregate, sample-weighted)",
+    "national": {"national": "Switzerland (national aggregate)",
                  "DE_CH": "German-speaking Switzerland (DE-CH)", "FR_CH": "French-speaking Switzerland (FR-CH)"},
 }
 
