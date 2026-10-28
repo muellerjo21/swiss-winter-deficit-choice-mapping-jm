@@ -62,7 +62,7 @@ def checks(attributes, population, weights, national, model, credible_interval, 
 
 def regional(path_to_attributes, path_to_population, path_to_national, path_to_choice_model, path_to_canton_area,
              path_to_cantons, path_to_statpop, exclude, excluded_coefficients, overrides, mobile_share, credible_interval,
-             interval_type, out):
+             interval_type, path_to_imports, out):
     attributes = pd.read_csv(path_to_attributes)
     population = pd.read_csv(path_to_population).set_index("region")["population"]
     national = pd.read_csv(path_to_national).set_index("scenario_id")
@@ -83,6 +83,12 @@ def regional(path_to_attributes, path_to_population, path_to_national, path_to_c
                                                       weights, coefficients, population, model, credible_interval, interval_type)
     variants["land: national share"], _ = analyse(attributes.assign(relative_land=attributes["relative_land_national"]),
                                                   weights, coefficients, population, model, credible_interval, interval_type)
+    # fuel imports counted with their energy content: 1 GWh fuel = 1 GWh electricity (src/load_data.import_quantities)
+    imports = pd.read_csv(path_to_imports).set_index("scenario_id")
+    for definition, label in [("electricity_fuels", "import: electricity + fuels (year)"),
+                              ("electricity_fuels_diesel", "import: electricity + fuels + synthetic diesel (year)")]:
+        variants[label], _ = analyse(attributes.assign(import_share=attributes["scenario_id"].map(imports[f"import_share_{definition}"])),
+                                     weights, coefficients, population, model, credible_interval, interval_type)
     pd.concat(variants, names=["variant", "row"]).reset_index(level="variant").to_csv(out["sensitivities"], index=False)
 
     checks(attributes, population, weights, national, model, credible_interval, interval_type, path_to_canton_area,
@@ -94,4 +100,4 @@ if __name__ == "__main__":
     regional(snakemake.input.attributes, snakemake.input.population, snakemake.input.national, snakemake.input.choice_model,
              snakemake.input.canton_area, snakemake.input.cantons, snakemake.input.statpop, p.exclude,
              p.excluded_coefficients, p.overrides, p.mobile_share, p.credible_interval, p.interval_type,
-             dict(snakemake.output.items()))
+             snakemake.input.imports, dict(snakemake.output.items()))

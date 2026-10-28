@@ -152,12 +152,28 @@ rule compute_utility:
     script: "scripts/compute_utility.py"
 
 
+rule import_shares:
+    message: "Import attribute per scenario: electricity, + fuels, + synthetic diesel (definition used: {params.definition})."
+    params:
+        scenario_ids = list(SCENARIOS),
+        fuel_techs = config["imports"]["fuel_techs"],
+        diesel_techs = config["imports"]["diesel_techs"],
+        definition = config["imports"]["definition"]
+    input:
+        nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS]
+    output: "build/data/regional/import_shares_regional.csv"
+    conda: "envs/default.yaml"
+    script: "scripts/import_shares.py"
+
+
 rule regional_attributes:
     message: "Attributes per Calliope region (regional analysis)."
     params:
         scenario_ids = list(SCENARIOS),
-        overrides = REGIONAL["municipality_canton_overrides"]
+        overrides = REGIONAL["municipality_canton_overrides"],
+        import_definition = config["imports"]["definition"]
     input:
+        imports = rules.import_shares.output[0],
         nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS],
         canton_area = config["data"]["canton_area"],
         national = rules.compute_attributes.output[0],
@@ -189,7 +205,8 @@ rule regional_utility:
         choice_model = config["data"]["choice_model"],
         canton_area = config["data"]["canton_area"],
         cantons = rules.fetch_municipality_cantons.output[0],
-        statpop = f"build/data/reference/statpop_{REGIONAL['population_year']}.csv"
+        statpop = f"build/data/reference/statpop_{REGIONAL['population_year']}.csv",
+        imports = rules.import_shares.output[0]
     output:
         rankings = "build/data/utility_rankings_regional.csv",
         regions = "build/data/regional/region_rankings_regional.csv",
@@ -416,6 +433,8 @@ rule test:
     # (2) Turn them into pytest fixtures in tests/test_runner.py.
     # (3) Create or reuse a test file in tests/my-test.py and use fixtures in tests.
     message: "Run tests"
+    params:
+        import_definition = config["imports"]["definition"]
     input:
         test_dir = "tests",
         tests = map(str, Path("tests").glob("**/test_*.py")),
@@ -434,6 +453,8 @@ rule test:
         population_by_region = rules.regional_attributes.output.population,
         elcom_by_region = rules.regional_attributes.output.elcom,
         aggregation_comparison_regional = rules.pairwise_regional.output.comparison,
+        import_shares_regional = rules.import_shares.output[0],
+        reference_import_shares_regional = config["reference"]["import_shares_regional"],
         reference_population_by_region = config["reference"]["population_by_region"],
         reference_elcom_by_region = config["reference"]["elcom_by_region"],
         reference_pairwise_matrix_regional = config["reference"]["pairwise_matrix_regional"],

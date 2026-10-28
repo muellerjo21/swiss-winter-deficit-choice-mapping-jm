@@ -172,6 +172,18 @@ def _create_config_plugin(snakemake):
             return pd.read_csv(snakemake.input.reference_contributions_national)
 
         @pytest.fixture()
+        def import_shares(self):
+            return pd.read_csv(snakemake.input.import_shares_regional)
+
+        @pytest.fixture()
+        def reference_import_shares(self):
+            return pd.read_csv(snakemake.input.reference_import_shares_regional)
+
+        @pytest.fixture()
+        def import_definition(self):
+            return snakemake.params.import_definition
+
+        @pytest.fixture()
         def geometry_checks(self):
             return pd.read_csv(snakemake.input.geometry_checks)
 

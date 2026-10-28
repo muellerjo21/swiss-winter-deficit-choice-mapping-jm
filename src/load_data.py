@@ -435,6 +435,42 @@ def compute_import_share(nc_path: str) -> float:
     return max(0.0, min(1.0, share))
 
 
+IMPORT_DEFINITIONS = ("electricity", "electricity_fuels", "electricity_fuels_diesel")
+
+
+def load_fuel_imports(nc_path: str, techs: dict) -> dict:
+    """Annual fuel imports into Switzerland per import technology (GWh): carrier_prod of tech::carrier (techs
+    {tech: carrier}) summed over all time steps and Swiss locations. Technologies absent from the scenario count 0."""
+    ds = xr.open_dataset(nc_path)
+    prod = ds.coords["loc_tech_carriers_prod"].values
+    out = {}
+    for tech, carrier in techs.items():
+        sel = [c for c in prod if c.split("::")[0] not in FOREIGN_CODES and c.split("::")[1] == tech
+               and c.split("::")[2] == carrier]
+        out[tech] = float(ds["carrier_prod"].sel(loc_tech_carriers_prod=sel).sum()) if sel else 0.0
+    ds.close()
+    return out
+
+
+def import_quantities(nc_path: str, fuel_techs: dict, diesel_techs: dict) -> dict:
+    """Net electricity import, fuel imports and electricity consumption (annual sums, GWh) and the import shares of
+    the three definitions (IMPORT_DEFINITIONS), each clipped to [0, 1]. The electricity share is computed exactly
+    as compute_import_share. Fuel variants add the fuel imports to the net electricity import, counted with their
+    energy content: 1 GWh fuel = 1 GWh electricity (no conversion efficiency; an assumption)."""
+    net_import = aggregate_national(load_scenario_net_import(nc_path), "net_import_gwh")
+    demand = aggregate_national(load_scenario_demand(nc_path), "demand_gwh")
+    fuels = load_fuel_imports(nc_path, fuel_techs)
+    diesel = load_fuel_imports(nc_path, diesel_techs)
+    totals = {"electricity": net_import, "electricity_fuels": net_import + sum(fuels.values()),
+              "electricity_fuels_diesel": net_import + sum(fuels.values()) + sum(diesel.values())}
+    row = {"net_electricity_import_gwh": net_import, **{f"{t}_gwh": v for t, v in {**fuels, **diesel}.items()},
+           "consumption_gwh": demand}
+    for name in IMPORT_DEFINITIONS:
+        row[f"import_share_{name}_unclipped"] = totals[name] / demand
+        row[f"import_share_{name}"] = max(0.0, min(1.0, totals[name] / demand))
+    return row
+
+
 #not in the pipeline
 def compute_import_share_extended(nc_path: str) -> float:
     """Extended import share = (electricity net import + fuel import) / total consumption (electricity).
