@@ -47,12 +47,12 @@ def load_year_files(paths_to_elcom: list[str], paths_to_eur_chf: list[str]) -> t
 def sensitivity(path_to_attributes: str, path_to_choice_model: str, paths_to_nc: list[str], scenario_ids: list[str],
                 paths_to_elcom: list[str], paths_to_eur_chf: list[str], reference_year: int, base_years: list[int],
                 reference_price: dict, crossing_scenarios: list[str], crossing_tolerance: float,
-                crossing_check_delta: float, mobile_share: float,
+                crossing_check_delta: float, mobile_share: float, cost_scale: float,
                 path_to_curve: str, path_to_crossings: str, path_to_base_years: str,
                 path_to_switches: str) -> None:
     check_completed_years(base_years)
     attributes = pd.read_csv(path_to_attributes)
-    scenario_cost = {s: load_scenario_cost_and_demand(p) for s, p in zip(scenario_ids, paths_to_nc)}
+    scenario_cost = {s: load_scenario_cost_and_demand(p, cost_scale) for s, p in zip(scenario_ids, paths_to_nc)}
     model = load_model(path_to_choice_model, mobile_share)
     elcom, rates = load_year_files(paths_to_elcom, paths_to_eur_chf)
     ref, (rate, _) = elcom[reference_year], rates[reference_year]
@@ -91,6 +91,7 @@ if __name__ == "__main__":
         crossing_tolerance=p.crossing_tolerance,
         crossing_check_delta=p.crossing_check_delta,
         mobile_share=p.mobile_share,
+        cost_scale=p.cost_scale,
         path_to_curve=snakemake.output.curve,
         path_to_crossings=snakemake.output.crossings,
         path_to_base_years=snakemake.output.base_years,

@@ -28,7 +28,7 @@ rules:
     group: data
     text: >-
       Holt den Jahresmittelwert des Wechselkurses EUR/CHF ({eur_chf} für {price_year}). Die Systemkosten der
-      Calliope-Szenarien sind in Euro angegeben.
+      Calliope-Szenarien werden als Euro angenommen; Währung und Preisjahr stehen nicht in den Ergebnisdateien.
   fetch_statpop:
     group: data
     text: >-
@@ -122,6 +122,15 @@ rules:
     text: >-
       Verschiebt alle regionalen Referenzpreise um denselben Betrag Δ und rechnet P(Rang 1) neu. National wechselt
       Rang 1 bei Δ = {switch_shift} Rp./kWh ({switch_pair}).
+  cost_scale_regional:
+    group: util
+    text: >-
+      Multipliziert die Systemkosten aller Szenarien mit einem gemeinsamen Faktor (Config
+      sensitivity.cost_scale_factors) und rechnet Ranking und P(Rang 1) der regionalen Analyse neu; sucht die
+      Faktoren, bei denen Rang 1 wechselt.
+    open: >-
+      In welchem Preisjahr sind die Calliope-Kosten angegeben? Tarife, Abgaben und EUR/CHF sind von {price_year}.
+      Die Kosten enthalten auch Wärme und Brennstoffe, geteilt wird durch den Stromverbrauch.
   pairwise_regional:
     group: util
     text: >-

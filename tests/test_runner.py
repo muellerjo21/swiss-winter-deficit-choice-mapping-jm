@@ -80,6 +80,26 @@ def _create_config_plugin(snakemake):
             return pd.read_csv(snakemake.input.sensitivity_switches_regional)
 
         @pytest.fixture()
+        def cost_scale_curve_regional(self):
+            return pd.read_csv(snakemake.input.cost_scale_curve_regional)
+
+        @pytest.fixture()
+        def cost_scale_switches_regional(self):
+            return pd.read_csv(snakemake.input.cost_scale_switches_regional)
+
+        @pytest.fixture()
+        def cost_scale(self):
+            return snakemake.params.cost_scale
+
+        @pytest.fixture()
+        def cost_scale_factors(self):
+            return snakemake.params.cost_scale_factors
+
+        @pytest.fixture()
+        def cost_scale_search(self):
+            return snakemake.params.cost_scale_search
+
+        @pytest.fixture()
         def reference_rankings_regional(self):
             return pd.read_csv(snakemake.input.reference_rankings_regional)
 

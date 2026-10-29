@@ -28,7 +28,7 @@ from config import (
     CAPACITY_DENSITY_GW_PER_KM2, OWNERSHIP_MAPPING, PRICE_MARGIN, PRICE_REFERENCE_YEAR, PRICE_CATEGORY,
     TECH_SOURCE_MAPPING, PV_REFERENCE_TECHS, TRANSMISSION_REFERENCE_YEAR, CHOICE_MODEL_PATH,
     SECTOR_COUPLING_ELEC_TECHS, SCENARIO_DIR, CANTON_AREA_CSV_PATH, RAW_DIR, PROCESSED_DIR,
-    MELLOT_COST_CHANGE_PCT, LAND_DEFINITION,
+    MELLOT_COST_CHANGE_PCT, LAND_DEFINITION, PRICE_COST_SCALE_FACTOR,
 )
 
 
@@ -622,7 +622,8 @@ def get_elcom_reference_price(year: int, category: str) -> dict:
 
 def load_scenario_system_cost(nc_path: str) -> float:
     """Total Swiss system cost (million EUR/year), summed over all Swiss loc_techs
-    (foreign loc_techs excluded, as for the other attributes)."""
+    (foreign loc_techs excluded, as for the other attributes). The cost class is 'monetary'; the result
+    files state neither currency nor price year, EUR is our assumption."""
     ds = xr.open_dataset(nc_path)
     cost = ds["cost"]
     classes = list(cost.coords["costs"].values)
@@ -652,20 +653,23 @@ def fetch_eur_to_chf(year: int) -> tuple[float, int]:
     return sum(rates) / len(rates), len(rates)
 
 
-def compute_price_change(nc_path: str, elcom_ref: dict, eur_to_chf: float) -> float:
+def compute_price_change(nc_path: str, elcom_ref: dict, eur_to_chf: float, cost_scale: float = 1.0) -> float:
     """Relative price change vs. the ElCom reference price. Deliberately NOT clipped to >=0
     (unlike import) -- price is a continuous, linear attribute, so mild extrapolation beyond the
     training range (-25% to +100%, survey levels -25/0/+25/+50/+100%) is more defensible here than
     e.g. for net export.
-    elcom_ref: return value of get_elcom_reference_price; eur_to_chf: rate (first element of fetch_eur_to_chf)."""
-    system_cost, demand = load_scenario_cost_and_demand(nc_path)
+    elcom_ref: return value of get_elcom_reference_price; eur_to_chf: rate (first element of fetch_eur_to_chf);
+    cost_scale: price.cost_scale_factor (see load_scenario_cost_and_demand)."""
+    system_cost, demand = load_scenario_cost_and_demand(nc_path, cost_scale)
     return price_change_from_cost(system_cost, demand, elcom_ref, eur_to_chf)
 
 
-def load_scenario_cost_and_demand(nc_path: str) -> tuple[float, float]:
-    """Total Swiss system cost (million EUR/year) and national electricity demand (GWh) of a scenario,
-    the two scenario inputs of price_change_from_cost."""
-    return load_scenario_system_cost(nc_path), aggregate_national(load_scenario_demand(nc_path), "demand_gwh")
+def load_scenario_cost_and_demand(nc_path: str, cost_scale: float = 1.0) -> tuple[float, float]:
+    """Total Swiss system cost (million EUR/year) times cost_scale (price.cost_scale_factor, 1.0 = costs as in
+    the result file) and national electricity demand (GWh) of a scenario, the two scenario inputs of
+    price_change_from_cost."""
+    return (cost_scale * load_scenario_system_cost(nc_path),
+            aggregate_national(load_scenario_demand(nc_path), "demand_gwh"))
 
 
 def price_change_from_cost(system_cost: float, demand: float, elcom_ref: dict, eur_to_chf: float) -> float:
@@ -722,9 +726,10 @@ RELATIVE_LAND_DEFINITIONS = {
 
 
 def compute_all_attributes(nc_path: str, area_dict: dict, elcom_ref: dict, eur_to_chf: float,
-                           land_definition: str) -> dict:
+                           land_definition: str, cost_scale: float = 1.0) -> dict:
     """Computes all 11 choice-model attributes (national) for one scenario.
-    land_definition: key of RELATIVE_LAND_DEFINITIONS (land.definition in config/default.yaml)."""
+    land_definition: key of RELATIVE_LAND_DEFINITIONS (land.definition in config/default.yaml);
+    cost_scale: price.cost_scale_factor."""
     if land_definition not in RELATIVE_LAND_DEFINITIONS:
         raise ValueError(f"Unknown land definition {land_definition!r}, expected one of {list(RELATIVE_LAND_DEFINITIONS)}")
     capacity_df = load_scenario_capacity(nc_path)
@@ -738,7 +743,7 @@ def compute_all_attributes(nc_path: str, area_dict: dict, elcom_ref: dict, eur_t
         "import_share": compute_import_share(nc_path),
         **compute_ownership_shares(capacity_df),
         **compute_technology_mix_shares(capacity_df),
-        "price_change": compute_price_change(nc_path, elcom_ref=elcom_ref, eur_to_chf=eur_to_chf),
+        "price_change": compute_price_change(nc_path, elcom_ref=elcom_ref, eur_to_chf=eur_to_chf, cost_scale=cost_scale),
         # Official cost change vs. EP2050+ (Mellot Table 3), not a choice-model attribute;
         # for comparing preference rank vs. cost rank (NaN for baseline, not in Table 3)
         "mellot_cost_change_pct": MELLOT_COST_CHANGE_PCT[scenario_id_from_filename(os.path.basename(nc_path))],
@@ -760,7 +765,7 @@ def compute_all_scenarios(scenario_dir: str = SCENARIO_DIR, area_csv_path: str =
         nc_path = os.path.join(scenario_dir, filename)
         sid = scenario_id_from_filename(filename)
         print(f"Processing {sid}...")
-        row = compute_all_attributes(nc_path, area_dict, elcom_ref, eur_to_chf, LAND_DEFINITION)
+        row = compute_all_attributes(nc_path, area_dict, elcom_ref, eur_to_chf, LAND_DEFINITION, PRICE_COST_SCALE_FACTOR)
         row["scenario_id"] = sid
         rows.append(row)
     return pd.DataFrame(rows)

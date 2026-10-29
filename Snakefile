@@ -14,6 +14,7 @@ FIGURES = [  # national aggregate (appendix), created by src/make_graphics.make_
 FIGURE_FORMATS = ["png", "pdf", "svg"]
 FIGURE_PATH = "build/figures/{fmt}/{figure}.{fmt}"  # one subfolder per format
 REFERENCE_YEAR = config["price"]["reference_year"]
+COST_SCALE = config["price"]["cost_scale_factor"]  # factor on the Calliope system cost (1.0 = main analysis)
 SENSITIVITY = config["sensitivity"]
 FIGURE_SENSITIVITY = "fig6_p_rank1_vs_reference_price_national"  # created by src/make_graphics.fig_reference_price_sensitivity
 SENSITIVITY_YEARS = sorted(set(SENSITIVITY["base_years"]) | {REFERENCE_YEAR})
@@ -46,6 +47,7 @@ REGIONAL_OUTPUTS = [  # part of rule all only with spatial.resolution: regional
     "build/data/utility_rankings_regional.csv",
     "build/data/sensitivity/reference_price_curve_regional.csv",
     "build/data/sensitivity/reference_price_rank1_switches_regional.csv",
+    "build/data/sensitivity/cost_scale_curve_regional.csv",
     *expand(FIGURE_PATH, figure=FIGURES_REGIONAL, fmt=FIGURE_FORMATS),
     *expand(FIGURE_PATH, figure=[FIGURE_PAIRWISE, *FIGURES_MAPS], fmt=PAIRWISE_FORMATS),
 ]
@@ -119,7 +121,9 @@ rule fetch_statpop:
 
 rule scenario_attributes:
     message: "Compute choice-model attributes of scenario {wildcards.scenario} (land: {params.land_definition})."
-    params: land_definition = config["land"]["definition"]
+    params:
+        land_definition = config["land"]["definition"],
+        cost_scale = COST_SCALE
     input:
         nc = lambda wildcards: Path(config["data"]["scenario_dir"]) / SCENARIOS[wildcards.scenario],
         canton_area = config["data"]["canton_area"],
@@ -173,7 +177,8 @@ rule regional_attributes:
     params:
         scenario_ids = list(SCENARIOS),
         overrides = REGIONAL["municipality_canton_overrides"],
-        import_definition = config["imports"]["definition"]
+        import_definition = config["imports"]["definition"],
+        cost_scale = COST_SCALE
     input:
         imports = rules.import_shares.output[0],
         nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS],
@@ -229,7 +234,8 @@ rule regional_reference_price:
         check_delta = SENSITIVITY["crossing_check_delta"],
         mobile_share = config["utility"]["mobile_share"],
         credible_interval = config["utility"]["credible_interval"],
-        interval_type = config["utility"]["interval_type"]
+        interval_type = config["utility"]["interval_type"],
+        cost_scale = COST_SCALE
     input:
         attributes = rules.regional_attributes.output.attributes,
         population = rules.regional_attributes.output.population,
@@ -242,6 +248,32 @@ rule regional_reference_price:
         switches = "build/data/sensitivity/reference_price_rank1_switches_regional.csv"
     conda: "envs/default.yaml"
     script: "scripts/regional_reference_price.py"
+
+
+rule cost_scale_regional:
+    message: "Sensitivity of the regional analysis to a common factor on the system cost ({params.factors})."
+    params:
+        scenario_ids = list(SCENARIOS),
+        exclude = REGIONAL["exclude_regions"],
+        factors = SENSITIVITY["cost_scale_factors"],
+        search = SENSITIVITY["cost_scale_search"],
+        tolerance = SENSITIVITY["crossing_tolerance"],
+        check_delta = SENSITIVITY["crossing_check_delta"],
+        mobile_share = config["utility"]["mobile_share"],
+        credible_interval = config["utility"]["credible_interval"],
+        interval_type = config["utility"]["interval_type"]
+    input:
+        attributes = rules.regional_attributes.output.attributes,
+        population = rules.regional_attributes.output.population,
+        elcom = rules.regional_attributes.output.elcom,
+        eur_chf = f"build/data/reference/eur_chf_{REFERENCE_YEAR}.json",
+        nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS],
+        choice_model = config["data"]["choice_model"]
+    output:
+        curve = "build/data/sensitivity/cost_scale_curve_regional.csv",
+        switches = "build/data/sensitivity/cost_scale_rank1_switches_regional.csv"
+    conda: "envs/default.yaml"
+    script: "scripts/cost_scale_regional.py"
 
 
 rule beta_real_units:
@@ -375,7 +407,8 @@ rule sensitivity_reference_price:
         crossing_scenarios = SENSITIVITY["crossing_scenarios"],
         crossing_tolerance = SENSITIVITY["crossing_tolerance"],
         crossing_check_delta = SENSITIVITY["crossing_check_delta"],
-        mobile_share = config["utility"]["mobile_share"]
+        mobile_share = config["utility"]["mobile_share"],
+        cost_scale = COST_SCALE
     input:
         attributes = rules.compute_attributes.output[0],
         choice_model = config["data"]["choice_model"],
@@ -504,7 +537,10 @@ rule test:
     # (3) Create or reuse a test file in tests/my-test.py and use fixtures in tests.
     message: "Run tests"
     params:
-        import_definition = config["imports"]["definition"]
+        import_definition = config["imports"]["definition"],
+        cost_scale = COST_SCALE,
+        cost_scale_factors = SENSITIVITY["cost_scale_factors"],
+        cost_scale_search = SENSITIVITY["cost_scale_search"]
     input:
         test_dir = "tests",
         tests = map(str, Path("tests").glob("**/test_*.py")),
@@ -538,6 +574,8 @@ rule test:
         sensitivities_regional = rules.regional_utility.output.sensitivities,
         sensitivity_curve_regional = rules.regional_reference_price.output.curve,
         sensitivity_switches_regional = rules.regional_reference_price.output.switches,
+        cost_scale_curve_regional = rules.cost_scale_regional.output.curve,
+        cost_scale_switches_regional = rules.cost_scale_regional.output.switches,
         reference_regional_attributes = config["reference"]["regional_attributes"],
         reference_rankings_regional = config["reference"]["rankings_regional"],
         reference_region_rankings_regional = config["reference"]["region_rankings_regional"],

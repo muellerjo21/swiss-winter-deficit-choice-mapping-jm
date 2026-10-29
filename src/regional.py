@@ -232,6 +232,48 @@ def regional_rank1_switches(attributes, cost_and_demand, elcom, eur_to_chf, curv
     return pd.DataFrame(rows, columns=["region", "switch_shift_rp_kwh", "scenario_before", "scenario_after", "rank1_below", "rank1_above"])
 
 
+def with_scaled_cost(attributes: pd.DataFrame, cost_and_demand: dict, elcom: pd.DataFrame, eur_to_chf: float,
+                     factor: float) -> pd.DataFrame:
+    """Attributes with price_change recomputed for the system cost of all scenarios multiplied by factor
+    (cost_and_demand: unscaled cost and demand); regional reference prices, taxes/levies and grid usage unchanged."""
+    scaled = {s: (factor * cost, demand) for s, (cost, demand) in cost_and_demand.items()}
+    return with_shifted_reference(attributes, scaled, elcom, eur_to_chf, 0.0)
+
+
+def regional_cost_scale_curve(attributes, cost_and_demand, elcom, eur_to_chf, factors, rank_at) -> pd.DataFrame:
+    """Rank, P(rank 1) and utility per group (DE-CH, FR-CH, national) for each cost factor; rank_at(attributes) ->
+    rankings (regional_rankings)."""
+    frames = []
+    for factor in factors:
+        rk = rank_at(with_scaled_cost(attributes, cost_and_demand, elcom, eur_to_chf, factor)).set_index("scenario_id")
+        for g in [*LANGUAGE_GROUPS, "national"]:
+            t = g.replace("-", "_")
+            frames.append(pd.DataFrame({"cost_scale_factor": float(factor), "region": t, "scenario_id": rk.index,
+                                        "rank": rk[f"rank_{t}"].to_numpy(), "p_rank1": rk[f"p_rank1_{t}"].to_numpy(),
+                                        "utility": rk[f"utility_{t}"].to_numpy()}))
+    return pd.concat(frames, ignore_index=True)
+
+
+def regional_cost_scale_switches(attributes, cost_and_demand, elcom, eur_to_chf, grid, leader_at, tolerance: float,
+                                 check_delta: float) -> pd.DataFrame:
+    """Cost factors at which the rank-1 scenario (posterior-mean utility) of a group changes: rank 1 on the grid,
+    each change narrowed down by bisection (sensitivity.bisect_change); leader_at(attributes, group) -> rank 1."""
+    from sensitivity import bisect_change
+    at = lambda factor, tag: leader_at(with_scaled_cost(attributes, cost_and_demand, elcom, eur_to_chf, factor), tag)
+    rows = []
+    for tag in [g.replace("-", "_") for g in [*LANGUAGE_GROUPS, "national"]]:
+        items = [(float(f), at(float(f), tag)) for f in grid]
+        for (low, before), (high, after) in zip(items, items[1:]):
+            if before == after:
+                continue
+            x, after = bisect_change(lambda f: at(f, tag), low, high, before, after, tolerance)
+            rows.append({"region": tag, "switch_cost_scale_factor": x, "scenario_before": before,
+                         "scenario_after": after, "rank1_below": at(x - check_delta, tag),
+                         "rank1_above": at(x + check_delta, tag)})
+    return pd.DataFrame(rows, columns=["region", "switch_cost_scale_factor", "scenario_before", "scenario_after",
+                                       "rank1_below", "rank1_above"])
+
+
 def load_regional_model(path_to_choice_model: str, mobile_share: float, language_weights: dict) -> dict:
     """Coefficients loaded once as keyword arguments of regional_utilities: per language region plus 'mixed'."""
     from load_data import (load_beta_partworths_mean, load_beta_partworths_samples, load_mobile_partworths_mean,
