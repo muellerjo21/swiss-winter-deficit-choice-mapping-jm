@@ -95,8 +95,27 @@ sensitivity:
     # Regional main analysis with the system cost C_s multiplied by these factors (rule cost_scale_regional;
     # factors on the costs of the result files, independent of price.cost_scale_factor). The changes of the
     # rank-1 scenario are searched on the grid cost_scale_search and located with crossing_tolerance and
-    # crossing_check_delta.
-    cost_scale_factors: [1.0, 1.1, 1.2, 1.3]
+    # crossing_check_delta. Entries are numbers or names of cost_scale_conversions.
+    cost_scale_factors: [1.0, 1.1, 1.2, 1.3, eur2015_to_2025_hicp_ea, eur2015_to_2025_chf_lik]
+    # Price-year conversions of C_s from EUR 2015 to 2025 (Mellot et al. 2024 take most costs from the Danish Energy
+    # Agency, via Pickering et al. 2022, Supplement Table S3: EUR 2015), as factor on C_s relative to the pipeline,
+    # which converts C_s with the EUR/CHF rate e of price.reference_year:
+    #   hicp     index_to / index_from
+    #   chf_lik  to CHF 2015 with eur_chf_from, then the Swiss CPI (LIK) to 2025: eur_chf_from * lik_to / lik_from / e
+    cost_scale_conversions:
+        eur2015_to_2025_hicp_ea:
+            method: hicp
+            # Eurostat prc_hicp_aind, CP00, EA, annual average index (2015 = 100), 2015 and 2025; retrieved 3 Nov 2026
+            index_from: 100.0
+            index_to: 128.75
+        eur2015_to_2025_chf_lik:
+            method: chf_lik
+            # ECB EXR.A.CHF.EUR.SP00.A, annual average 2015 (CHF per EUR); retrieved 3 Nov 2026
+            eur_chf_from: 1.06785703125
+            # BFS LIK cc-d-05.02.08 (sheet Index_y), annual averages 2015 and 2025 on the base December 2010 = 100
+            # (the latest base with the 2015 average); release 3 Nov 2026, retrieved 3 Nov 2026
+            lik_from: 97.9
+            lik_to: 105.4
     cost_scale_search:
         start: 0.5
         stop: 2.0

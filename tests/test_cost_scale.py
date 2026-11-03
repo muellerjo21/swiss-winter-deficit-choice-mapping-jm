@@ -1,6 +1,7 @@
 """Tests of the cost-factor switch (price.cost_scale_factor) and its sensitivity (rule cost_scale_regional): the
-factor applied in the main analysis is reproduced by the sweep, the price attribute (and hence the utility) is
-linear in the factor, a higher factor lowers every utility, and the rank-1 switches agree with the curve.
+factor applied in the main analysis is reproduced by the sweep, the price-year conversions (cost_scale_conversions)
+give the documented factors, the price attribute (and hence the utility) is linear in the factor, a higher factor
+lowers every utility, and the rank-1 switches agree with the curve.
 
 Pytest fixtures are provided from within the test runner.
 """
@@ -12,16 +13,22 @@ CONSISTENCY_ATOL = 1e-12
 LINEARITY_ATOL = 1e-9
 
 
+def _numbers(entries):
+    return [float(e) for e in entries if not isinstance(e, str)]
+
+
 def _group(curve, tag):
     return curve[curve["region"] == tag]
 
 
 def test_curve_complete(cost_scale_curve_regional, cost_scale_factors, rankings_regional):
     curve = cost_scale_curve_regional
-    assert sorted(curve["cost_scale_factor"].unique()) == sorted(float(f) for f in cost_scale_factors)
+    labels = [e if isinstance(e, str) else str(float(e)) for e in cost_scale_factors]
+    assert list(curve["cost_scale_label"].drop_duplicates()) == labels
+    assert curve.groupby("cost_scale_label")["cost_scale_factor"].nunique().eq(1).all()
     n = len(rankings_regional)
     assert len(curve) == len(cost_scale_factors) * len(TAGS) * n
-    for (_, _), g in curve.groupby(["cost_scale_factor", "region"]):
+    for (_, _), g in curve.groupby(["cost_scale_label", "region"]):
         assert sorted(g["rank"]) == list(range(1, n + 1))
         assert abs(g["p_rank1"].sum() - 1) < 1e-9
 
@@ -30,14 +37,35 @@ def test_curve_complete(cost_scale_curve_regional, cost_scale_factors, rankings_
 def test_curve_reproduces_main_ranking(cost_scale_curve_regional, rankings_regional, cost_scale, cost_scale_factors,
                                        tag):
     """At the factor of the main analysis (price.cost_scale_factor) the sweep must equal utility_rankings_regional."""
-    if float(cost_scale) not in [float(f) for f in cost_scale_factors]:
+    if float(cost_scale) not in _numbers(cost_scale_factors):
         pytest.skip(f"price.cost_scale_factor {cost_scale} is not among the sensitivity factors")
     curve = _group(cost_scale_curve_regional, tag)
-    point = curve[curve["cost_scale_factor"] == float(cost_scale)].set_index("scenario_id").loc[rankings_regional["scenario_id"]]
+    point = curve[curve["cost_scale_label"] == str(float(cost_scale))].set_index("scenario_id").loc[rankings_regional["scenario_id"]]
     main = rankings_regional.set_index("scenario_id")
     assert (point["rank"] == main[f"rank_{tag}"]).all()
     assert np.abs(point["p_rank1"] - main[f"p_rank1_{tag}"]).max() < CONSISTENCY_ATOL
     assert np.abs(point["utility"] - main[f"utility_{tag}"]).max() < CONSISTENCY_ATOL
+    for end in ("low", "high"):
+        main_column = next(c for c in main.columns if c.startswith(f"utility_{tag}_") and c.endswith(f"_{end}"))
+        assert np.abs(point[f"utility_interval_{end}"] - main[main_column]).max() < CONSISTENCY_ATOL
+
+
+def test_conversion_factors(cost_scale_curve_regional, cost_scale_factors, cost_scale_conversions, eur_to_chf):
+    """Each named entry is evaluated with the factor of its conversion, from the inputs in the config and the
+    pipeline's EUR/CHF rate (hicp: index ratio; chf_lik: EUR/CHF of the base year x Swiss CPI ratio / EUR/CHF)."""
+    named = [e for e in cost_scale_factors if isinstance(e, str)]
+    factor = cost_scale_curve_regional.drop_duplicates("cost_scale_label").set_index("cost_scale_label")["cost_scale_factor"]
+    for name in named:
+        c = cost_scale_conversions[name]
+        expected = (c["index_to"] / c["index_from"] if c["method"] == "hicp"
+                    else c["eur_chf_from"] * c["lik_to"] / c["lik_from"] / eur_to_chf)
+        assert abs(factor[name] - expected) < CONSISTENCY_ATOL, name
+
+
+def test_conversion_factors_in_search_range(cost_scale_curve_regional, cost_scale_search):
+    """The rank-1 switches are searched over a range that contains every evaluated factor."""
+    f = cost_scale_curve_regional["cost_scale_factor"]
+    assert cost_scale_search["start"] <= f.min() and f.max() <= cost_scale_search["stop"]
 
 
 @pytest.mark.parametrize("tag", TAGS)

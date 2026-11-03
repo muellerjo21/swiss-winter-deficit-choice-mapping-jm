@@ -267,6 +267,7 @@ rule cost_scale_regional:
         exclude = EXCLUDE,
         coefficient_overrides = COEFFICIENT_OVERRIDES,
         factors = SENSITIVITY["cost_scale_factors"],
+        conversions = SENSITIVITY["cost_scale_conversions"],
         search = SENSITIVITY["cost_scale_search"],
         tolerance = SENSITIVITY["crossing_tolerance"],
         check_delta = SENSITIVITY["crossing_check_delta"],
@@ -555,6 +556,7 @@ rule test:
         import_definition = config["imports"]["definition"],
         cost_scale = COST_SCALE,
         cost_scale_factors = SENSITIVITY["cost_scale_factors"],
+        cost_scale_conversions = SENSITIVITY["cost_scale_conversions"],
         cost_scale_search = SENSITIVITY["cost_scale_search"],
         ticino = TICINO
     input:
@@ -592,6 +594,7 @@ rule test:
         sensitivity_switches_regional = rules.regional_reference_price.output.switches,
         cost_scale_curve_regional = rules.cost_scale_regional.output.curve,
         cost_scale_switches_regional = rules.cost_scale_regional.output.switches,
+        eur_chf = f"build/data/reference/eur_chf_{REFERENCE_YEAR}.json",
         reference_regional_attributes = config["reference"]["regional_attributes"],
         reference_rankings_regional = config["reference"]["rankings_regional"],
         reference_region_rankings_regional = config["reference"]["region_rankings_regional"],

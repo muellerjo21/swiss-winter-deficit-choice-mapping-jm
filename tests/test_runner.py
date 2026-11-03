@@ -100,6 +100,15 @@ def _create_config_plugin(snakemake):
             return snakemake.params.cost_scale_search
 
         @pytest.fixture()
+        def cost_scale_conversions(self):
+            return snakemake.params.cost_scale_conversions
+
+        @pytest.fixture()
+        def eur_to_chf(self):
+            import json
+            return json.loads(Path(snakemake.input.eur_chf).read_text())["eur_to_chf"]
+
+        @pytest.fixture()
         def ticino(self):
             """Coefficients TI is computed with (spatial.regional.ticino), None = TI excluded."""
             return snakemake.params.ticino

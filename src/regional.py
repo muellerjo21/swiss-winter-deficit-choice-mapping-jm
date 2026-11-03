@@ -246,17 +246,40 @@ def with_scaled_cost(attributes: pd.DataFrame, cost_and_demand: dict, elcom: pd.
     return with_shifted_reference(attributes, scaled, elcom, eur_to_chf, 0.0)
 
 
-def regional_cost_scale_curve(attributes, cost_and_demand, elcom, eur_to_chf, factors, rank_at) -> pd.DataFrame:
-    """Rank, P(rank 1) and utility per group (DE-CH, FR-CH, national) for each cost factor; rank_at(attributes) ->
-    rankings (regional_rankings)."""
+def cost_scale_factors(entries: list, conversions: dict, eur_to_chf: float) -> dict:
+    """Label -> factor on C_s for the entries of sensitivity.cost_scale_factors: numbers, or names of
+    cost_scale_conversions (price-year conversions, relative to the pipeline's EUR/CHF rate eur_to_chf):
+    hicp = index_to / index_from; chf_lik = eur_chf_from * lik_to / lik_from / eur_to_chf."""
+    out = {}
+    for entry in entries:
+        if not isinstance(entry, str):
+            out[str(float(entry))] = float(entry)
+            continue
+        c = conversions[entry]
+        if c["method"] == "hicp":
+            out[entry] = c["index_to"] / c["index_from"]
+        elif c["method"] == "chf_lik":
+            out[entry] = c["eur_chf_from"] * c["lik_to"] / c["lik_from"] / eur_to_chf
+        else:
+            raise ValueError(f"unknown conversion method {c['method']!r} of {entry}")
+    return out
+
+
+def regional_cost_scale_curve(attributes, cost_and_demand, elcom, eur_to_chf, factors: dict, rank_at) -> pd.DataFrame:
+    """Rank, P(rank 1) and utility per group (DE-CH, FR-CH, national) for each cost factor (label -> factor,
+    cost_scale_factors); rank_at(attributes) -> rankings (regional_rankings)."""
     frames = []
-    for factor in factors:
+    for label, factor in factors.items():
         rk = rank_at(with_scaled_cost(attributes, cost_and_demand, elcom, eur_to_chf, factor)).set_index("scenario_id")
         for g in [*LANGUAGE_GROUPS, "national"]:
             t = g.replace("-", "_")
+            low, high = (next(c for c in rk.columns if c.startswith(f"utility_{t}_") and c.endswith(end))
+                         for end in ("_low", "_high"))  # credible interval columns, e.g. utility_national_hdi96_low
             frames.append(pd.DataFrame({"cost_scale_factor": float(factor), "region": t, "scenario_id": rk.index,
                                         "rank": rk[f"rank_{t}"].to_numpy(), "p_rank1": rk[f"p_rank1_{t}"].to_numpy(),
-                                        "utility": rk[f"utility_{t}"].to_numpy()}))
+                                        "utility": rk[f"utility_{t}"].to_numpy(), "cost_scale_label": label,
+                                        "utility_interval_low": rk[low].to_numpy(),
+                                        "utility_interval_high": rk[high].to_numpy()}))
     return pd.concat(frames, ignore_index=True)
 
 
