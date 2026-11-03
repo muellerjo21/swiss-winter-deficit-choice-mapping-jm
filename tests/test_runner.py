@@ -116,6 +116,10 @@ def _create_config_plugin(snakemake):
             return pd.read_csv(snakemake.input.cost_by_technology)
 
         @pytest.fixture()
+        def power_fuel_cost(self):
+            return pd.read_csv(snakemake.input.power_fuel_cost)
+
+        @pytest.fixture()
         def elcom_national(self):
             import json
             return json.loads(Path(snakemake.input.elcom_national).read_text())

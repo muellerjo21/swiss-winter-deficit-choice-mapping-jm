@@ -10,13 +10,13 @@ from load_data import compute_all_attributes, load_canton_area
 
 
 def scenario_attributes(scenario_id: str, path_to_nc: str, path_to_canton_area: str, path_to_eur_chf: str,
-                        path_to_elcom: str, land_definition: str, cost_scale: float, cost_scope: str, cost_groups: dict,
+                        path_to_elcom: str, land_definition: str, cost_scale: float, cost_scope: str, cost_groups: dict, power_fuel: dict,
                         path_to_output: str) -> None:
     eur_to_chf = json.loads(Path(path_to_eur_chf).read_text())["eur_to_chf"]
     elcom = json.loads(Path(path_to_elcom).read_text())
     elcom_ref = {k: elcom[k] for k in ("total_rp_kwh", "taxes_levies_rp_kwh", "netznutzung_rp_kwh")}
     row = compute_all_attributes(path_to_nc, load_canton_area(path_to_canton_area), elcom_ref, eur_to_chf,
-                                 land_definition, cost_scale, cost_scope, cost_groups)
+                                 land_definition, cost_scale, cost_scope, cost_groups, power_fuel)
     row["scenario_id"] = scenario_id
     pd.DataFrame([row]).to_csv(path_to_output, index=False)
 
@@ -32,5 +32,6 @@ if __name__ == "__main__":
         cost_scale=snakemake.params.cost_scale,
         cost_scope=snakemake.params.cost_scope,
         cost_groups=snakemake.params.cost_groups,
+        power_fuel=snakemake.params.power_fuel,
         path_to_output=snakemake.output[0],
     )

@@ -85,7 +85,8 @@ rules:
       der simulierte Preis mit allen Kosten und nur mit den Stromkosten und der Strom aus Brennstoff-Kraftwerken.
     open: >-
       Die Preisformel teilt die Kosten des ganzen Energiesystems durch den Stromverbrauch. Die Sensitivität
-      price.cost_scope: electricity nimmt nur die Stromkosten; dann fehlen die Brennstoffkosten der Gaskraftwerke.
+      price.cost_scope: electricity nimmt nur die Stromkosten, ohne die Brennstoffkosten der Kraftwerke;
+      electricity_fuel addiert sie (Brennstoff zu Durchschnittskosten des Modells, WKK nach Stromanteil).
   beta_real_units:
     group: check
     text: >-

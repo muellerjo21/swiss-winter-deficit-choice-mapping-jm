@@ -4,6 +4,7 @@ plausibility of the crossing points.
 
 Pytest fixtures are provided from within the test runner.
 """
+import hashlib
 from pathlib import Path
 
 import numpy as np
@@ -102,6 +103,12 @@ def test_rank1_switches_ranks_swap(sensitivity_switches, sensitivity_curve):
 
 
 def test_figure_identical_to_reference(figure_sensitivity_pairs):
-    """fig6 PNG and PDF are byte-reproducible (no timestamps) -> compare with graphics/."""
+    """fig6 PNG and PDF are byte-reproducible (no timestamps) -> compare with graphics/. Compared by SHA-256, so that a
+    failure reports only the file, sizes and checksums (pytest's diff of two large byte strings takes minutes)."""
+    different = []
     for built, reference in figure_sensitivity_pairs:
-        assert Path(built).read_bytes() == Path(reference).read_bytes(), built
+        a, b = Path(built).read_bytes(), Path(reference).read_bytes()
+        sha_a, sha_b = hashlib.sha256(a).hexdigest(), hashlib.sha256(b).hexdigest()
+        if sha_a != sha_b:
+            different.append(f"{built}: {len(a)} B, sha256 {sha_a[:12]} != reference {reference}: {len(b)} B, {sha_b[:12]}")
+    assert not different, "figure differs from reference: " + "; ".join(different)

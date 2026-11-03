@@ -17,12 +17,12 @@ from sensitivity import reference_price_grid
 
 def sweep(path_to_attributes, path_to_population, path_to_elcom, path_to_eur_chf, paths_to_nc, scenario_ids,
           path_to_choice_model, exclude, coefficient_overrides, factors, conversions, search, tolerance, check_delta,
-          mobile_share, credible_interval, interval_type, cost_scope, cost_groups, path_to_curve, path_to_switches):
+          mobile_share, credible_interval, interval_type, cost_scope, cost_groups, power_fuel, path_to_curve, path_to_switches):
     attributes = pd.read_csv(path_to_attributes)
     population = pd.read_csv(path_to_population).set_index("region")["population"]
     elcom = pd.read_csv(path_to_elcom).set_index("region")
     eur_to_chf = json.loads(Path(path_to_eur_chf).read_text())["eur_to_chf"]
-    cost_and_demand = {s: load_scenario_cost_and_demand(p, 1.0, cost_scope, cost_groups)
+    cost_and_demand = {s: load_scenario_cost_and_demand(p, 1.0, cost_scope, cost_groups, power_fuel)
                        for s, p in zip(scenario_ids, paths_to_nc)}  # unscaled
     model = load_regional_model(path_to_choice_model, mobile_share, LANGUAGE_REGION_WEIGHTS)
     weights = population_weights(population, exclude)
@@ -49,6 +49,6 @@ if __name__ == "__main__":
     sweep(snakemake.input.attributes, snakemake.input.population, snakemake.input.elcom, snakemake.input.eur_chf,
           list(snakemake.input.nc), p.scenario_ids, snakemake.input.choice_model, p.exclude,
           p.coefficient_overrides, p.factors, p.conversions, p.search,
-          p.tolerance, p.check_delta, p.mobile_share, p.credible_interval, p.interval_type, p.cost_scope, p.cost_groups,
+          p.tolerance, p.check_delta, p.mobile_share, p.credible_interval, p.interval_type, p.cost_scope, p.cost_groups, p.power_fuel,
           snakemake.output.curve,
           snakemake.output.switches)

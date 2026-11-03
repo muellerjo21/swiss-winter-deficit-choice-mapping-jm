@@ -21,8 +21,9 @@ price:
     cost_scale_factor: 1.0
     # Costs in the price formula, in all analyses: total = system cost of the whole Swiss energy system (main
     # analysis); electricity = only the technologies of cost_groups.electricity (generation, electricity storage,
-    # transmission). The demand D_s stays the electricity consumption in both cases. With electricity the costs of
-    # the fuels burnt in power plants (cost_groups.other) are missing, see fuel_power_techs.
+    # transmission); electricity_fuel = electricity plus the fuel costs of the power plants (fuel_power_techs) that
+    # fall on electricity. The demand D_s stays the electricity consumption in all cases. With electricity the costs
+    # of the fuels burnt in power plants (cost_groups.other) are missing.
     cost_scope: total
     # Every Swiss technology with a cost in the result files belongs to exactly one group (checked when loading);
     # ac_transmission stands for all ac_transmission:<region> links.
@@ -41,6 +42,13 @@ price:
                 daccs_local]
     # Power plants burning fuels whose costs are in cost_groups.other (reported in build/data/cost_groups.csv)
     fuel_power_techs: [ccgt, ccgt_natgas, scgt_natgas, scgt_renewable, chp_methane, chp_waste, chp_biofuel]
+    # Fuel carriers priced for electricity_fuel (load_data.fuel_unit_costs): average model cost of the carrier = cost of
+    # its producers plus their fuel inputs (these carriers) per GWh produced. Electricity and heat inputs (e.g. of
+    # electrolysis) are not added, their costs are in the other cost groups. A carrier without producer costs 0.
+    fuel_carriers: [natural_gas, methane, biofuel, hydrogen, co2, waste]
+    # Fuel of the power plants allocated to electricity: output_share = electricity / all energy output of the plant
+    # (CHP: the rest goes to heat; assumption), electricity = all fuel to electricity (upper bound)
+    chp_fuel_allocation: output_share
 
 land:
     # Definition of the attribute relative_land (share of land used by wind and open-field PV):

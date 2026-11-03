@@ -14,7 +14,7 @@ from regional import (municipality_regions, regional_attributes, regional_balanc
 def attributes(paths_to_nc: list, scenario_ids: list, path_to_canton_area: str, path_to_national: str,
                path_to_prices: str, path_to_cantons: str, path_to_statpop: str, path_to_eur_chf: str, overrides: dict,
                path_to_attributes: str, path_to_elcom: str, path_to_population: str, path_to_imports: str,
-               import_definition: str, cost_scale: float, cost_scope: str, cost_groups: dict) -> None:
+               import_definition: str, cost_scale: float, cost_scope: str, cost_groups: dict, power_fuel: dict) -> None:
     regions = municipality_regions(pd.read_csv(path_to_cantons), overrides)
     elcom = regional_elcom_reference(pd.read_csv(path_to_prices), regions)
     population = regional_population(pd.read_csv(path_to_statpop), regions)
@@ -24,7 +24,7 @@ def attributes(paths_to_nc: list, scenario_ids: list, path_to_canton_area: str, 
     imports = pd.read_csv(path_to_imports).set_index("scenario_id")
     frames = []
     for s, nc in zip(scenario_ids, paths_to_nc):
-        cost_and_demand = load_scenario_cost_and_demand(nc, cost_scale, cost_scope, cost_groups)
+        cost_and_demand = load_scenario_cost_and_demand(nc, cost_scale, cost_scope, cost_groups, power_fuel)
         a = regional_attributes(nc, s, area, national.loc[s], *cost_and_demand, elcom, eur_to_chf)
         if import_definition != "electricity":  # default keeps the national import_share unchanged
             a["import_share"] = imports.loc[s, f"import_share_{import_definition}"]
@@ -47,4 +47,5 @@ if __name__ == "__main__":
         cost_scale=snakemake.params.cost_scale,
         cost_scope=snakemake.params.cost_scope,
         cost_groups=snakemake.params.cost_groups,
+        power_fuel=snakemake.params.power_fuel,
     )

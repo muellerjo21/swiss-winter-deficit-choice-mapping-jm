@@ -17,6 +17,8 @@ REFERENCE_YEAR = config["price"]["reference_year"]
 COST_SCALE = config["price"]["cost_scale_factor"]  # factor on the Calliope system cost (1.0 = main analysis)
 COST_SCOPE = config["price"]["cost_scope"]  # costs in the price formula: total (main analysis) | electricity
 COST_GROUPS = config["price"]["cost_groups"]
+POWER_FUEL = dict(plants=config["price"]["fuel_power_techs"], fuels=config["price"]["fuel_carriers"],
+                  chp_allocation=config["price"]["chp_fuel_allocation"])  # cost_scope electricity_fuel
 SENSITIVITY = config["sensitivity"]
 FIGURE_SENSITIVITY = "fig6_p_rank1_vs_reference_price_national"  # created by src/make_graphics.fig_reference_price_sensitivity
 SENSITIVITY_YEARS = sorted(set(SENSITIVITY["base_years"]) | {REFERENCE_YEAR})
@@ -135,7 +137,8 @@ rule scenario_attributes:
         land_definition = config["land"]["definition"],
         cost_scale = COST_SCALE,
         cost_scope = COST_SCOPE,
-        cost_groups = COST_GROUPS
+        cost_groups = COST_GROUPS,
+        power_fuel = POWER_FUEL
     input:
         nc = lambda wildcards: Path(config["data"]["scenario_dir"]) / SCENARIOS[wildcards.scenario],
         canton_area = config["data"]["canton_area"],
@@ -192,7 +195,8 @@ rule regional_attributes:
         import_definition = config["imports"]["definition"],
         cost_scale = COST_SCALE,
         cost_scope = COST_SCOPE,
-        cost_groups = COST_GROUPS
+        cost_groups = COST_GROUPS,
+        power_fuel = POWER_FUEL
     input:
         imports = rules.import_shares.output[0],
         nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS],
@@ -253,7 +257,8 @@ rule regional_reference_price:
         interval_type = config["utility"]["interval_type"],
         cost_scale = COST_SCALE,
         cost_scope = COST_SCOPE,
-        cost_groups = COST_GROUPS
+        cost_groups = COST_GROUPS,
+        power_fuel = POWER_FUEL
     input:
         attributes = rules.regional_attributes.output.attributes,
         population = rules.regional_attributes.output.population,
@@ -283,7 +288,8 @@ rule cost_scale_regional:
         credible_interval = config["utility"]["credible_interval"],
         interval_type = config["utility"]["interval_type"],
         cost_scope = COST_SCOPE,
-        cost_groups = COST_GROUPS
+        cost_groups = COST_GROUPS,
+        power_fuel = POWER_FUEL
     input:
         attributes = rules.regional_attributes.output.attributes,
         population = rules.regional_attributes.output.population,
@@ -304,6 +310,7 @@ rule cost_groups:
         scenario_ids = list(SCENARIOS),
         cost_groups = COST_GROUPS,
         fuel_power_techs = config["price"]["fuel_power_techs"],
+        power_fuel = POWER_FUEL,
         cost_scale = COST_SCALE
     input:
         nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS],
@@ -311,7 +318,8 @@ rule cost_groups:
         eur_chf = f"build/data/reference/eur_chf_{REFERENCE_YEAR}.json"
     output:
         groups = "build/data/cost_groups.csv",
-        technologies = "build/data/cost_by_technology.csv"
+        technologies = "build/data/cost_by_technology.csv",
+        power_fuel = "build/data/power_fuel_cost.csv"
     conda: "envs/default.yaml"
     script: "scripts/cost_groups.py"
 
@@ -453,7 +461,8 @@ rule sensitivity_reference_price:
         mobile_share = config["utility"]["mobile_share"],
         cost_scale = COST_SCALE,
         cost_scope = COST_SCOPE,
-        cost_groups = COST_GROUPS
+        cost_groups = COST_GROUPS,
+        power_fuel = POWER_FUEL
     input:
         attributes = rules.compute_attributes.output[0],
         choice_model = config["data"]["choice_model"],
@@ -627,6 +636,7 @@ rule test:
         cost_scale_switches_regional = rules.cost_scale_regional.output.switches,
         cost_groups = rules.cost_groups.output.groups,
         cost_by_technology = rules.cost_groups.output.technologies,
+        power_fuel_cost = rules.cost_groups.output.power_fuel,
         elcom_national = f"build/data/reference/elcom_price_{REFERENCE_YEAR}.json",
         eur_chf = f"build/data/reference/eur_chf_{REFERENCE_YEAR}.json",
         reference_regional_attributes = config["reference"]["regional_attributes"],

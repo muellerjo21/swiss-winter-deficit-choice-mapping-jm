@@ -29,6 +29,7 @@ from config import (
     TECH_SOURCE_MAPPING, PV_REFERENCE_TECHS, TRANSMISSION_REFERENCE_YEAR, CHOICE_MODEL_PATH,
     SECTOR_COUPLING_ELEC_TECHS, SCENARIO_DIR, CANTON_AREA_CSV_PATH, RAW_DIR, PROCESSED_DIR,
     MELLOT_COST_CHANGE_PCT, LAND_DEFINITION, PRICE_COST_SCALE_FACTOR, PRICE_COST_SCOPE, PRICE_COST_GROUPS,
+    PRICE_POWER_FUEL,
 )
 
 
@@ -660,13 +661,99 @@ def load_scenario_cost_by_technology(nc_path: str, groups: dict) -> pd.DataFrame
     return by_tech
 
 
-def load_scenario_scoped_cost(nc_path: str, cost_scope: str = "total", groups: dict = None) -> float:
+def _swiss_flows(ds) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """Annual production, consumption (positive, GWh) per (tech, carrier) and cost (million EUR) per tech at the Swiss
+    locations, without transmission links (tech:<region>)."""
+    def by_tech_carrier(var):
+        v = ds[var].sum("timesteps").to_pandas().abs()
+        keep = [i for i in v.index if i.split("::")[0] not in FOREIGN_CODES and ":" not in i.split("::")[1]]
+        v = v[keep]
+        df = pd.DataFrame({"tech": [i.split("::")[1] for i in v.index], "carrier": [i.split("::")[2] for i in v.index],
+                           "value": v.to_numpy()})
+        return df.groupby(["tech", "carrier"])["value"].sum()
+    cost = ds["cost"]
+    classes = list(cost.coords["costs"].values)
+    cost = (cost.sel(costs="monetary") if "monetary" in classes else cost.sel(costs=classes[0])).to_pandas()
+    cost = cost[[lt.split("::")[0] not in FOREIGN_CODES for lt in cost.index]]
+    cost = cost.groupby([lt.split("::")[1] for lt in cost.index]).sum()
+    return by_tech_carrier("carrier_prod"), by_tech_carrier("carrier_con"), cost
+
+
+def fuel_unit_costs(prod: pd.Series, con: pd.Series, cost: pd.Series, fuels: list, iterations: int = 100) -> pd.Series:
+    """Average model cost of each fuel carrier (million EUR/GWh = 1000 EUR/MWh): cost of its producers plus the cost of
+    their fuel inputs (other carriers of fuels, priced the same way), divided by the amount produced. Inputs that are
+    not in fuels (electricity, heat) are not added: their costs are in the other cost groups. Production is net of
+    the same carrier consumed by the technology, so storage (in = out) is no producer. Producers with several outputs
+    share their costs by output energy. Fixed-point iteration; a fuel nobody produces costs 0."""
+    out_total = prod.groupby(level=0).sum()
+    net = {(t, c): v - con.get((t, c), 0.0) for (t, c), v in prod.items()}
+    unit = pd.Series(0.0, index=fuels)
+    for _ in range(iterations):
+        new = {}
+        for fuel in fuels:
+            producers = [t for (t, c), v in net.items() if c == fuel and v > 0]
+            amount = sum(net[(t, fuel)] for t in producers)
+            if amount <= 0:
+                new[fuel] = 0.0
+                continue
+            total = 0.0
+            for t in producers:
+                share = net[(t, fuel)] / out_total[t]
+                inputs = sum(v * unit[c] for (tt, c), v in con.items() if tt == t and c in unit.index and c != fuel)
+                total += share * (cost.get(t, 0.0) + inputs)
+            new[fuel] = total / amount
+        new = pd.Series(new)
+        if (new - unit).abs().max() < 1e-15:
+            return new
+        unit = new
+    raise ValueError("fuel unit costs did not converge")
+
+
+def load_power_fuel_cost(nc_path: str, plants: list, fuels: list, chp_allocation: str = "output_share") -> pd.DataFrame:
+    """Fuel cost of the power plants (price.fuel_power_techs) per plant and fuel: fuel consumed (GWh, from the
+    results, i.e. with the plant's efficiency) x unit cost of the fuel (fuel_unit_costs), and the part allocated to
+    electricity: output_share = electricity / all energy output of the plant (CHP: rest to heat), electricity = all."""
+    ds = xr.open_dataset(nc_path)
+    prod, con, cost = _swiss_flows(ds)
+    ds.close()
+    unit = fuel_unit_costs(prod, con, cost, fuels)
+    rows = []
+    for t in plants:
+        out = prod[[i for i in prod.index if i[0] == t]]
+        electricity = float(out.get((t, "electricity"), 0.0))
+        output = float(out.sum())
+        if chp_allocation == "output_share":
+            share = electricity / output if output > 0 else 0.0
+        elif chp_allocation == "electricity":
+            share = 1.0
+        else:
+            raise ValueError(f"price.chp_fuel_allocation must be output_share or electricity, got {chp_allocation!r}")
+        for (tt, fuel), amount in con.items():
+            if tt != t or fuel not in unit.index:
+                continue
+            rows.append({"tech": t, "fuel": fuel, "fuel_gwh": float(amount), "electricity_gwh": electricity,
+                         "efficiency": electricity / float(amount) if amount > 0 else float("nan"),
+                         "unit_cost": float(unit[fuel]), "fuel_cost": float(amount * unit[fuel]),
+                         "electricity_share": share, "fuel_cost_electricity": float(amount * unit[fuel] * share)})
+    return pd.DataFrame(rows, columns=["tech", "fuel", "fuel_gwh", "electricity_gwh", "efficiency", "unit_cost",
+                                       "fuel_cost", "electricity_share", "fuel_cost_electricity"])
+
+
+def load_scenario_scoped_cost(nc_path: str, cost_scope: str = "total", groups: dict = None,
+                              power_fuel: dict = None) -> float:
     """System cost of the price formula (price.cost_scope): total = load_scenario_system_cost; a group name of
-    groups (price.cost_groups, e.g. electricity) = only the costs of that group."""
+    groups (price.cost_groups, e.g. electricity) = only the costs of that group; electricity_fuel = electricity costs
+    plus the fuel costs of the power plants allocated to electricity (load_power_fuel_cost; power_fuel: keyword
+    arguments plants, fuels, chp_allocation)."""
     if cost_scope == "total":
         return load_scenario_system_cost(nc_path)
+    if cost_scope == "electricity_fuel":
+        if not power_fuel:
+            raise ValueError("price.cost_scope electricity_fuel needs price.fuel_power_techs, fuel_carriers and chp_fuel_allocation")
+        return (load_scenario_scoped_cost(nc_path, "electricity", groups)
+                + float(load_power_fuel_cost(nc_path, **power_fuel)["fuel_cost_electricity"].sum()))
     if not groups or cost_scope not in groups:
-        raise ValueError(f"price.cost_scope must be total or one of {list(groups or {})}, got {cost_scope!r}")
+        raise ValueError(f"price.cost_scope must be total, electricity_fuel or one of {list(groups or {})}, got {cost_scope!r}")
     by_tech = load_scenario_cost_by_technology(nc_path, groups)
     return float(by_tech.loc[by_tech["group"] == cost_scope, "cost"].sum())
 
@@ -690,24 +777,24 @@ def fetch_eur_to_chf(year: int) -> tuple[float, int]:
 
 
 def compute_price_change(nc_path: str, elcom_ref: dict, eur_to_chf: float, cost_scale: float = 1.0,
-                         cost_scope: str = "total", cost_groups: dict = None) -> float:
+                         cost_scope: str = "total", cost_groups: dict = None, power_fuel: dict = None) -> float:
     """Relative price change vs. the ElCom reference price. Deliberately NOT clipped to >=0
     (unlike import) -- price is a continuous, linear attribute, so mild extrapolation beyond the
     training range (-25% to +100%, survey levels -25/0/+25/+50/+100%) is more defensible here than
     e.g. for net export.
     elcom_ref: return value of get_elcom_reference_price; eur_to_chf: rate (first element of fetch_eur_to_chf);
-    cost_scale, cost_scope, cost_groups: price.cost_scale_factor, cost_scope, cost_groups (see
-    load_scenario_cost_and_demand)."""
-    system_cost, demand = load_scenario_cost_and_demand(nc_path, cost_scale, cost_scope, cost_groups)
+    cost_scale, cost_scope, cost_groups, power_fuel: price.cost_scale_factor, cost_scope, cost_groups and the power
+    plant fuel settings (see load_scenario_cost_and_demand)."""
+    system_cost, demand = load_scenario_cost_and_demand(nc_path, cost_scale, cost_scope, cost_groups, power_fuel)
     return price_change_from_cost(system_cost, demand, elcom_ref, eur_to_chf)
 
 
 def load_scenario_cost_and_demand(nc_path: str, cost_scale: float = 1.0, cost_scope: str = "total",
-                                  cost_groups: dict = None) -> tuple[float, float]:
+                                  cost_groups: dict = None, power_fuel: dict = None) -> tuple[float, float]:
     """Swiss system cost (million EUR/year; all technologies, or with cost_scope only one cost group, see
     load_scenario_scoped_cost) times cost_scale (price.cost_scale_factor, 1.0 = costs as in the result file) and
     national electricity demand (GWh) of a scenario, the two scenario inputs of price_change_from_cost."""
-    return (cost_scale * load_scenario_scoped_cost(nc_path, cost_scope, cost_groups),
+    return (cost_scale * load_scenario_scoped_cost(nc_path, cost_scope, cost_groups, power_fuel),
             aggregate_national(load_scenario_demand(nc_path), "demand_gwh"))
 
 
@@ -772,10 +859,10 @@ RELATIVE_LAND_DEFINITIONS = {
 
 def compute_all_attributes(nc_path: str, area_dict: dict, elcom_ref: dict, eur_to_chf: float,
                            land_definition: str, cost_scale: float = 1.0, cost_scope: str = "total",
-                           cost_groups: dict = None) -> dict:
+                           cost_groups: dict = None, power_fuel: dict = None) -> dict:
     """Computes all 11 choice-model attributes (national) for one scenario.
     land_definition: key of RELATIVE_LAND_DEFINITIONS (land.definition in config/default.yaml);
-    cost_scale, cost_scope, cost_groups: price.cost_scale_factor, cost_scope, cost_groups."""
+    cost_scale, cost_scope, cost_groups, power_fuel: price.cost_scale_factor, cost_scope, cost_groups, power plant fuels."""
     if land_definition not in RELATIVE_LAND_DEFINITIONS:
         raise ValueError(f"Unknown land definition {land_definition!r}, expected one of {list(RELATIVE_LAND_DEFINITIONS)}")
     capacity_df = load_scenario_capacity(nc_path)
@@ -790,7 +877,7 @@ def compute_all_attributes(nc_path: str, area_dict: dict, elcom_ref: dict, eur_t
         **compute_ownership_shares(capacity_df),
         **compute_technology_mix_shares(capacity_df),
         "price_change": compute_price_change(nc_path, elcom_ref=elcom_ref, eur_to_chf=eur_to_chf, cost_scale=cost_scale,
-                                             cost_scope=cost_scope, cost_groups=cost_groups),
+                                             cost_scope=cost_scope, cost_groups=cost_groups, power_fuel=power_fuel),
         # Official cost change vs. EP2050+ (Mellot Table 3), not a choice-model attribute;
         # for comparing preference rank vs. cost rank (NaN for baseline, not in Table 3)
         "mellot_cost_change_pct": MELLOT_COST_CHANGE_PCT[scenario_id_from_filename(os.path.basename(nc_path))],
@@ -813,7 +900,7 @@ def compute_all_scenarios(scenario_dir: str = SCENARIO_DIR, area_csv_path: str =
         sid = scenario_id_from_filename(filename)
         print(f"Processing {sid}...")
         row = compute_all_attributes(nc_path, area_dict, elcom_ref, eur_to_chf, LAND_DEFINITION, PRICE_COST_SCALE_FACTOR,
-                                     PRICE_COST_SCOPE, PRICE_COST_GROUPS)
+                                     PRICE_COST_SCOPE, PRICE_COST_GROUPS, PRICE_POWER_FUEL)
         row["scenario_id"] = sid
         rows.append(row)
     return pd.DataFrame(rows)
