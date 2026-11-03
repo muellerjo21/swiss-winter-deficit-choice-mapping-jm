@@ -56,8 +56,9 @@ def _draw(ax, geometries: gpd.GeoDataFrame, values: pd.Series, excluded: list, t
     data = geometries.assign(value=geometries["region"].map(values))
     shown = data[data["value"].notna()]
     shown.plot(ax=ax, column="value", cmap=CHOICE_CMAP, vmin=vmin, vmax=vmax, edgecolor="white", linewidth=0.6)
-    data[data["region"].isin(excluded)].plot(ax=ax, color="#d9d8d4", edgecolor="white", linewidth=0.6,
-                                             hatch="///")
+    if excluded:
+        data[data["region"].isin(excluded)].plot(ax=ax, color="#d9d8d4", edgecolor="white", linewidth=0.6,
+                                                 hatch="///")
     ax.set_title(title, loc="left", fontweight="bold", fontsize=title_size)
     ax.set_axis_off()
     ax.set_aspect("equal")
@@ -79,8 +80,9 @@ def fig_choice_map(geometries: gpd.GeoDataFrame, table: pd.DataFrame, excluded: 
     _draw(ax_a, geometries, t["p_mean"], excluded, "(A) Expected value", 13, vmin, vmax)
     _draw(ax_b, geometries, t["p_high"], excluded, "(B) Upper uncertainty bound", 11, vmin, vmax)
     _draw(ax_c, geometries, t["p_low"], excluded, "(C) Lower uncertainty bound", 11, vmin, vmax)
-    ax_a.legend(handles=[Patch(facecolor="#d9d8d4", edgecolor="white", hatch="///", label="No data (TI)")],
-                loc="lower left", frameon=False)
+    if excluded:
+        ax_a.legend(handles=[Patch(facecolor="#d9d8d4", edgecolor="white", hatch="///",
+                                   label=f"No data ({', '.join(excluded)})")], loc="lower left", frameon=False)
     cax = fig.add_subplot(grid[2, :])
     clipped = vmin > 0 or vmax < 1
     bar = fig.colorbar(plt.cm.ScalarMappable(norm=plt.Normalize(vmin, vmax), cmap=CHOICE_CMAP), cax=cax,

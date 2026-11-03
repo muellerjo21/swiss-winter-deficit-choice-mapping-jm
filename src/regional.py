@@ -59,6 +59,12 @@ def regional_population(statpop: pd.DataFrame, regions: pd.Series) -> pd.Series:
     return statpop.groupby(region)["population"].sum().rename("population")
 
 
+def region_coefficients(regions, overrides: dict) -> dict:
+    """Coefficients per region: those of its language region (CANTON_LANGUAGE), or overrides[region] (TI:
+    spatial.regional.ticino). Groups (DE-CH, FR-CH) still follow CANTON_LANGUAGE, so TI counts nationally only."""
+    return {r: overrides.get(r, CANTON_LANGUAGE.get(r)) for r in regions}
+
+
 def population_weights(population: pd.Series, exclude: list) -> pd.Series:
     """Population weights of the included regions, normalised to sum 1."""
     p = population.drop([r for r in exclude if r in population.index])

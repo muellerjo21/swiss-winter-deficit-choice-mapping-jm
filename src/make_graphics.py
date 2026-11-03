@@ -191,14 +191,20 @@ def compute_contributions(attrs: pd.DataFrame, region: str, scale: dict,
 
 
 def group_contributions(attrs_by_language: dict, language_weights: dict, model_path: Path = CHOICE_MODEL_PATH,
-                        mobile_share: float = 0.0) -> dict:
+                        mobile_share: float = 0.0, national_attrs_by_language: dict = None) -> dict:
     """Contributions per group (national, DE_CH, FR_CH). DE-CH/FR-CH: attributes of the language region with its
     coefficients; Switzerland: mean of the two weighted with language_weights (population shares in the regional
-    analysis, sample shares in the national aggregate), so that the totals equal utility_<group>."""
+    analysis, sample shares in the national aggregate), so that the totals equal utility_<group>.
+    national_attrs_by_language: own attributes per coefficient set for Switzerland, if regions are computed with
+    coefficients other than their language region's (TI, see coefficient_mean_attributes)."""
     scale = load_attribute_scale(model_path)
     out = {l.replace("-", "_"): compute_contributions(attrs_by_language[l], l, scale, model_path, mobile_share)
            for l in LANGUAGES}
-    out["national"] = sum(language_weights[l] * out[l.replace("-", "_")] for l in LANGUAGES)
+    if national_attrs_by_language is None:
+        out["national"] = sum(language_weights[l] * out[l.replace("-", "_")] for l in LANGUAGES)
+    else:
+        out["national"] = sum(language_weights[l] * compute_contributions(national_attrs_by_language[l], l, scale,
+                                                                          model_path, mobile_share) for l in LANGUAGES)
     return out
 
 
@@ -284,6 +290,14 @@ CONTRIBUTIONS_REGIONAL_NOTE = (
     "\nDE-CH / FR-CH: population-weighted mean over the regions of the language region; Switzerland: "
     "population-weighted mean of DE-CH and FR-CH."
 )
+
+
+def contributions_regional_note(ticino: str = None) -> str:
+    """Footnote of the regional contribution figures; ticino: coefficients of TI (None = TI excluded)."""
+    if ticino is None:
+        return CONTRIBUTIONS_REGIONAL_NOTE
+    return ("\nDE-CH / FR-CH: population-weighted mean over the regions of the language region; Switzerland: "
+            f"population-weighted mean over all regions, TI with the {ticino} coefficients.")
 CONTRIBUTIONS_NATIONAL_NOTE = (
     "\nNational attribute values; Switzerland: DE-CH and FR-CH weighted with the survey sample shares 61:23."
 )
@@ -515,8 +529,24 @@ def regional_mean_attributes(attributes: pd.DataFrame, weights: pd.Series, langu
     linear in the attributes, so contributions computed from these means equal the population-weighted
     mean of the regional contributions (same coefficients within a language region)."""
     members = [r for r in weights.index if CANTON_LANGUAGE.get(r) == language]
-    w = weights[members] / weights[members].sum()
-    a = attributes[attributes["region"].isin(members)]
+    return _mean_attributes(attributes, weights[members] / weights[members].sum())
+
+
+def coefficient_mean_attributes(attributes: pd.DataFrame, weights: pd.Series, coefficients: dict,
+                                language: str) -> tuple[pd.DataFrame, float]:
+    """For the Switzerland contributions when regions use coefficients other than their language region's (TI):
+    mean attributes of the regions computed with the coefficients of language, weighted with population weight x
+    share of these coefficients (1, or the LANGUAGE_REGION_WEIGHTS share for 'mixed'; the utility is linear in the
+    coefficients), and the total of these weights."""
+    share = pd.Series({r: 1.0 if coefficients[r] == language else LANGUAGE_REGION_WEIGHTS[language]
+                       if coefficients[r] == "mixed" else 0.0 for r in weights.index})
+    w = (weights * share)[share > 0]
+    return _mean_attributes(attributes, w / w.sum()), float(w.sum())
+
+
+def _mean_attributes(attributes: pd.DataFrame, w: pd.Series) -> pd.DataFrame:
+    """Mean attributes per scenario over the regions of w (weights summing to 1)."""
+    a = attributes[attributes["region"].isin(w.index)]
     columns = list(ATTRIBUTE_COLUMN_TO_MODEL_TERM)
     mean = a[columns].mul(a["region"].map(w), axis=0).groupby(a["scenario_id"], sort=False).sum()
     first = a.drop_duplicates("scenario_id").set_index("scenario_id")[["mellot_cost_change_pct"]]
@@ -636,9 +666,11 @@ def fig_rank1_by_region(regions: pd.DataFrame, fs: FigureSettings, out_dir: Path
     handles.append(plt.Rectangle((0, 0), 1, 1, facecolor="white", edgecolor=TEXT_PRIMARY, linewidth=2.2,
                                  label="FR-CH (bold outline)"))
     ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=3, frameon=False)
+    ticino = ("TI is excluded (no coefficients for the Italian-speaking region in the choice model)." if fs.ticino is None
+              else f"TI with the {fs.ticino} coefficients (no coefficients for the Italian-speaking region in the "
+                   "choice model).")
     footnote(fig, "Scenario with rank 1 per region (posterior-mean utility); number = its P(rank 1) in that region. "
-             "Schematic layout, tiles not to scale.\nTI is excluded (no coefficients for the Italian-speaking region "
-             "in the choice model).", fs, x=0.02, y=-0.04)
+             f"Schematic layout, tiles not to scale.\n{ticino}", fs, x=0.02, y=-0.04)
     save(fig, "fig7_rank1_by_region" + fs.suffix, out_dir)
 
 
@@ -664,7 +696,8 @@ def fig_rank1_population_share(share: pd.DataFrame, rankings: pd.DataFrame, fs: 
     ax.spines["left"].set_visible(False)
     ax.tick_params(axis="y", length=0)
     leader = rankings.set_index("scenario_id")["rank_national"].idxmin()
-    footnote(fig, "Share of the population of the 22 included regions (BFS STATPOP 2024); all other scenarios 0. "
+    regions = "the 22 included regions" if fs.ticino is None else "all 23 regions"
+    footnote(fig, f"Share of the population of {regions} (BFS STATPOP 2024); all other scenarios 0. "
              f"Not the national ranking,\nwhere {display_name(leader)} has rank 1. {fs.order_note}", fs, y=-0.08)
     save(fig, "fig8_rank1_population_share" + fs.suffix, out_dir)
 
@@ -673,18 +706,25 @@ def make_all_regional(attributes: pd.DataFrame, weights: pd.Series, rankings: pd
                       regions: pd.DataFrame, share: pd.DataFrame, curve: pd.DataFrame, switches: pd.DataFrame,
                       national_samples: dict, national_reference: float, fs: FigureSettings,
                       model_path: Path = CHOICE_MODEL_PATH, out_dir: Path = GRAPHICS_DIR,
-                      mobile_share: float = 0.0) -> pd.DataFrame:
+                      mobile_share: float = 0.0, coefficients: dict = None) -> pd.DataFrame:
     """Figures of the regional main analysis (suffix _regional; list in the Snakefile: FIGURES_REGIONAL).
+    coefficients: region -> coefficient set (regional.region_coefficients); None = those of the language region.
     Returns the absolute contributions per group and scenario (fig3/figA1) with their totals."""
     by_language = {l: regional_mean_attributes(attributes, weights, l) for l in LANGUAGES}
-    contributions = group_contributions(by_language, language_population_weights(weights), model_path, mobile_share)
+    national_by_language, national_weights = None, language_population_weights(weights)
+    if coefficients and any(coefficients[r] != CANTON_LANGUAGE.get(r) for r in weights.index):
+        means = {l: coefficient_mean_attributes(attributes, weights, coefficients, l) for l in LANGUAGES}
+        national_by_language = {l: m for l, (m, _) in means.items()}
+        national_weights = {l: total for l, (_, total) in means.items()}
+    contributions = group_contributions(by_language, national_weights, model_path, mobile_share, national_by_language)
+    note = contributions_regional_note(fs.ticino)
     first = attributes.drop_duplicates("scenario_id")[["scenario_id", "mellot_cost_change_pct"]]
     fig_rank_vs_cost(rankings, fs, out_dir)
     fig_forest(rankings, fs, out_dir)
     fig_contributions(contributions, fs, True, "fig3_utility_contributions",
-                      CONTRIBUTIONS_CENTERED_NOTE + CONTRIBUTIONS_REGIONAL_NOTE + mobile_share_note(mobile_share), out_dir)
+                      CONTRIBUTIONS_CENTERED_NOTE + note + mobile_share_note(mobile_share), out_dir)
     fig_contributions(contributions, fs, False, "figA1_utility_contributions_absolute",
-                      CONTRIBUTIONS_ABSOLUTE_NOTE + CONTRIBUTIONS_REGIONAL_NOTE + mobile_share_note(mobile_share), out_dir)
+                      CONTRIBUTIONS_ABSOLUTE_NOTE + note + mobile_share_note(mobile_share), out_dir)
     fig_slope_regions(rankings, fs, out_dir)
     fig_cost_vs_preference(first, fs, model_path, out_dir, mobile_share, national_samples)
     fig_reference_price_shift(curve, switches, national_reference, fs, out_dir)
@@ -721,7 +761,7 @@ def figure_settings(analysis: str, params, cost: pd.Series = None) -> FigureSett
         order = tuple(scenario_order(cost, params.order))
         note = scenario_order_note(list(order), cost, not params.order)
     return FigureSettings(analysis, params.credible_interval, params.interval_type, params.year, order, note,
-                          tuple(params.highlight))
+                          tuple(params.highlight), params.ticino)
 
 
 def scenario_order_note(order: list, cost: pd.Series, by_cost: bool) -> str:

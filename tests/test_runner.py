@@ -100,6 +100,11 @@ def _create_config_plugin(snakemake):
             return snakemake.params.cost_scale_search
 
         @pytest.fixture()
+        def ticino(self):
+            """Coefficients TI is computed with (spatial.regional.ticino), None = TI excluded."""
+            return snakemake.params.ticino
+
+        @pytest.fixture()
         def reference_rankings_regional(self):
             return pd.read_csv(snakemake.input.reference_rankings_regional)
 

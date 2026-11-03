@@ -111,12 +111,11 @@ rules:
     group: util
     text: >-
       Hauptanalyse: Utility pro Region und Posterior-Draw mit den Partworths der Sprachregion, bevölkerungsgewichtet
-      über {n_included} Regionen ({excluded} ausgeschlossen). Ergibt Ranking, {interval}, P(Rang 1), die Rangfolge
+      über {n_included} Regionen ({ticino_note}). Ergibt Ranking, {interval}, P(Rang 1), die Rangfolge
       pro Region, die Sensitivitätstabelle und die Kontrollen.
     open: >-
-      Das Modell hat keine Partworths für die italienische Schweiz; {excluded} ({excluded_share} der Bevölkerung) ist
-      deshalb ausgeschlossen. Und welcher Wert für m: 0 (so rechnen wir) oder der Stichprobenanteil
-      {mobile_sample_share}?
+      Das Modell hat keine Partworths für die italienische Schweiz; {ticino_handling}. Und welcher Wert für m: 0
+      (so rechnen wir) oder der Stichprobenanteil {mobile_sample_share}?
   regional_reference_price:
     group: util
     text: >-

@@ -17,7 +17,7 @@ if __name__ == "__main__":
     geometries = load_region_geometries(snakemake.input.boundaries, b["member"], b["layer"], p.crs, p.tolerance)
     regions = pd.read_csv(snakemake.input.population)["region"].tolist()
     geometry_checks(geometries, regions).to_csv(snakemake.output.checks, index=False)
-    fs = FigureSettings("regional", p.credible_interval, p.interval_type, p.year)
+    fs = FigureSettings("regional", p.credible_interval, p.interval_type, p.year, ticino=p.ticino)
     for path, names in zip(snakemake.input.tables, p.names):
         table = pd.read_csv(path)
         for name, color_range in zip(names, p.color_ranges):

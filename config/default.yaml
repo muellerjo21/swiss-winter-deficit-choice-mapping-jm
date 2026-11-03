@@ -57,10 +57,13 @@ spatial:
         # STATPOP permanent resident population on 31 Dec of this (completed) year, BFS PxWeb table
         population_year: 2024
         statpop_table: px-x-0102010000_101
-        # Regions without coefficients of the choice model (TI: Italian-speaking) are excluded in the
-        # main regional analysis; the population weights of the other regions are renormalised.
-        exclude_regions: [TI]
-        # Sensitivity: TI included with these coefficients (mixed = draw-wise LANGUAGE_REGION_WEIGHTS mix)
+        # Ticino (TI, a Calliope region of its own), for which the choice model has no coefficients (Italian-
+        # speaking): de / fr / mixed = TI included with the DE-CH, FR-CH or mixed coefficients (mixed = draw-wise
+        # LANGUAGE_REGION_WEIGHTS mix); TI counts towards Switzerland (national) only, not to DE-CH or FR-CH.
+        # exclude = TI left out, the population weights of the other regions renormalised (main analysis until
+        # Nov 2026).
+        ticino: de
+        # Sensitivity: TI with each of these coefficients, all regions included
         excluded_region_coefficients: [DE-CH, FR-CH, mixed]
         # Municipalities without a canton in the LINDAS register (BFS number: canton in the price year);
         # Moutier moved from BE to JU on 1 Jan 2026.

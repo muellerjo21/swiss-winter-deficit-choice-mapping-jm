@@ -65,6 +65,7 @@ def values(inp, p) -> dict:
     regions = pd.read_csv(inp.elcom_regions).set_index("region")["total_rp_kwh"]
     population = pd.read_csv(inp.population).set_index("region")["population"]
     excluded = [r for r in p.exclude if r in population.index]
+    ti_share = f"{fixed(100 * population['TI'] / population.sum(), 1)} %"
     base = pd.read_csv(inp.base_years)
     leaders = base[(base["region"] == "national") & (base["rank"] == 1)].sort_values("year")
     by_leader = {}
@@ -93,8 +94,11 @@ def values(inp, p) -> dict:
         "population_date": f"31.12.{p.population_year}",
         "n_regions": len(population),
         "n_included": len(population) - len(excluded),
-        "excluded": join(excluded),
-        "excluded_share": f"{fixed(100 * population[excluded].sum() / population.sum(), 1)} %",
+        "ticino_note": ("TI ausgeschlossen" if p.ticino is None
+                        else f"TI mit den {p.ticino}-Koeffizienten, zählt nur zu CH, nicht zu DE-CH oder FR-CH"),
+        "ticino_handling": (f"TI ({ti_share} der Bevölkerung) ist deshalb ausgeschlossen" if p.ticino is None
+                            else f"TI ({ti_share} der Bevölkerung) wird mit den {p.ticino}-Koeffizienten gerechnet; "
+                                 "die Sensitivität rechnet TI mit DE-CH, FR-CH und gemischten Koeffizienten"),
         "ref_price_regional_range": f"{fixed(regions.min())} Rp./kWh in {regions.idxmin()} bis {fixed(regions.max())} "
                                     f"in {regions.idxmax()}",
         "boundaries_release": "Release " + re.search(r"swissboundaries3d_(\d{4}-\d{2})", p.boundaries_url).group(1),

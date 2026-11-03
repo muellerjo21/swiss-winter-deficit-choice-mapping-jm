@@ -19,6 +19,13 @@ SENSITIVITY = config["sensitivity"]
 FIGURE_SENSITIVITY = "fig6_p_rank1_vs_reference_price_national"  # created by src/make_graphics.fig_reference_price_sensitivity
 SENSITIVITY_YEARS = sorted(set(SENSITIVITY["base_years"]) | {REFERENCE_YEAR})
 REGIONAL = config["spatial"]["regional"]
+# Ticino (spatial.regional.ticino): coefficients TI is computed with, or excluded
+TICINO_COEFFICIENTS = {"exclude": None, "de": "DE-CH", "fr": "FR-CH", "mixed": "mixed"}
+if REGIONAL["ticino"] not in TICINO_COEFFICIENTS:
+    raise ValueError(f"spatial.regional.ticino must be one of {list(TICINO_COEFFICIENTS)}, got {REGIONAL['ticino']!r}")
+TICINO = TICINO_COEFFICIENTS[REGIONAL["ticino"]]
+EXCLUDE = ["TI"] if TICINO is None else []  # regions left out of the regional analysis
+COEFFICIENT_OVERRIDES = {} if TICINO is None else {"TI": TICINO}  # region -> coefficients instead of its language
 FIGURES_REGIONAL = [  # created by src/make_graphics.make_all_regional
     "fig1_rank_choice_vs_cost_regional", "fig2_utility_forest_regional", "fig3_utility_contributions_regional",
     "fig4_rank_de_vs_fr_regional", "fig5_cost_vs_preference_regional", "figA1_utility_contributions_absolute_regional",
@@ -40,6 +47,7 @@ FIGURE_PARAMS = dict(  # what every figure states (analysis, interval, year), it
     year = REFERENCE_YEAR,
     order = FIGURES_CONFIG["scenario_order"],
     highlight = FIGURES_CONFIG["highlight_scenarios"],
+    ticino = TICINO,
     scenario_ids = list(SCENARIOS),
 )
 PAIRWISE_FORMATS = ["png", "pdf"]
@@ -199,7 +207,8 @@ rule regional_attributes:
 rule regional_utility:
     message: "Regional main analysis, sensitivities and checks (excluded regions: {params.exclude})."
     params:
-        exclude = REGIONAL["exclude_regions"],
+        exclude = EXCLUDE,
+        coefficient_overrides = COEFFICIENT_OVERRIDES,
         excluded_coefficients = REGIONAL["excluded_region_coefficients"],
         overrides = REGIONAL["municipality_canton_overrides"],
         mobile_share = config["utility"]["mobile_share"],
@@ -228,7 +237,8 @@ rule regional_reference_price:
     message: "Regional reference-price sweep (common shift of all regional reference prices)."
     params:
         scenario_ids = list(SCENARIOS),
-        exclude = REGIONAL["exclude_regions"],
+        exclude = EXCLUDE,
+        coefficient_overrides = COEFFICIENT_OVERRIDES,
         shift = REGIONAL["reference_price_shift"],
         tolerance = SENSITIVITY["crossing_tolerance"],
         check_delta = SENSITIVITY["crossing_check_delta"],
@@ -254,7 +264,8 @@ rule cost_scale_regional:
     message: "Sensitivity of the regional analysis to a common factor on the system cost ({params.factors})."
     params:
         scenario_ids = list(SCENARIOS),
-        exclude = REGIONAL["exclude_regions"],
+        exclude = EXCLUDE,
+        coefficient_overrides = COEFFICIENT_OVERRIDES,
         factors = SENSITIVITY["cost_scale_factors"],
         search = SENSITIVITY["cost_scale_search"],
         tolerance = SENSITIVITY["crossing_tolerance"],
@@ -304,7 +315,8 @@ rule make_plots:
 rule make_plots_regional:
     message: "Create figures of the regional main analysis."
     params:
-        exclude = REGIONAL["exclude_regions"],
+        exclude = EXCLUDE,
+        coefficient_overrides = COEFFICIENT_OVERRIDES,
         mobile_share = config["utility"]["mobile_share"],
         **FIGURE_PARAMS
     input:
@@ -328,7 +340,8 @@ rule pairwise_regional:
     message: "Pairwise choice probabilities of the regional analysis (matrix and map pairs)."
     params:
         scenario_ids = list(SCENARIOS),
-        exclude = REGIONAL["exclude_regions"],
+        exclude = EXCLUDE,
+        coefficient_overrides = COEFFICIENT_OVERRIDES,
         order = FIGURES_CONFIG["scenario_order"],
         map_pairs = PAIRWISE["map_pairs"],
         mobile_share = config["utility"]["mobile_share"],
@@ -378,9 +391,10 @@ rule choice_maps:
         boundaries = MAPS["boundaries"],
         crs = MAPS["crs"],
         tolerance = MAPS["simplify_tolerance_m"],
-        exclude = REGIONAL["exclude_regions"],
+        exclude = EXCLUDE,
         credible_interval = config["utility"]["credible_interval"],
         interval_type = config["utility"]["interval_type"],
+        ticino = TICINO,
         year = REFERENCE_YEAR,
         names = FIGURES_MAPS_BY_PAIR,
         color_ranges = MAP_RANGES,
@@ -481,13 +495,14 @@ rule pipeline_map_graph:
 rule pipeline_map:
     message: "Interactive pipeline map (open build/pipeline_map.html in a browser)."
     params:
+        ticino = TICINO,
         price_year = REFERENCE_YEAR,
         price_category = config["price"]["category"],
         base_years = SENSITIVITY["base_years"],
         curve_start = SENSITIVITY["reference_price"]["start"],
         curve_stop = SENSITIVITY["reference_price"]["stop"],
         population_year = REGIONAL["population_year"],
-        exclude = REGIONAL["exclude_regions"],
+        exclude = EXCLUDE,
         credible_interval = config["utility"]["credible_interval"],
         interval_type = config["utility"]["interval_type"],
         import_definition = config["imports"]["definition"],
@@ -540,7 +555,8 @@ rule test:
         import_definition = config["imports"]["definition"],
         cost_scale = COST_SCALE,
         cost_scale_factors = SENSITIVITY["cost_scale_factors"],
-        cost_scale_search = SENSITIVITY["cost_scale_search"]
+        cost_scale_search = SENSITIVITY["cost_scale_search"],
+        ticino = TICINO
     input:
         test_dir = "tests",
         tests = map(str, Path("tests").glob("**/test_*.py")),

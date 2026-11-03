@@ -57,6 +57,7 @@ class FigureSettings:
     order: tuple = ()
     order_note: str = ""
     highlight: tuple = ()
+    ticino: str = None  # regional analysis: coefficients TI is computed with (spatial.regional.ticino); None = excluded
 
     def __post_init__(self):
         if self.analysis not in ANALYSIS_LABELS:
@@ -77,8 +78,13 @@ class FigureSettings:
     def title(self, group: str) -> str:
         return GROUP_TITLES[self.analysis][group]
 
+    def label(self) -> str:
+        if self.analysis == "regional" and self.ticino:
+            return f"Regional main analysis (23 Calliope regions, TI with {self.ticino} coefficients, population-weighted)"
+        return ANALYSIS_LABELS[self.analysis]
+
     def stamp(self) -> str:
-        return f"{ANALYSIS_LABELS[self.analysis]} · {self.interval()} · ElCom prices and EUR/CHF {self.year}."
+        return f"{self.label()} · {self.interval()} · ElCom prices and EUR/CHF {self.year}."
 
 
 RC_PARAMS = {

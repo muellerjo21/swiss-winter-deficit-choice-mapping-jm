@@ -6,9 +6,9 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(snakemake.scriptdir).parent / "src"))
-from config import CANTON_LANGUAGE, LANGUAGE_REGION_WEIGHTS
+from config import LANGUAGE_REGION_WEIGHTS
 from make_graphics import figure_settings, make_all_regional
-from regional import load_regional_model, population_weights, regional_utilities
+from regional import load_regional_model, population_weights, region_coefficients, regional_utilities
 
 
 if __name__ == "__main__":
@@ -16,7 +16,7 @@ if __name__ == "__main__":
     attributes = pd.read_csv(snakemake.input.attributes)
     population = pd.read_csv(snakemake.input.population).set_index("region")["population"]
     weights = population_weights(population, p.exclude)
-    coefficients = {r: CANTON_LANGUAGE.get(r) for r in population.index}
+    coefficients = region_coefficients(population.index, p.coefficient_overrides)
     model = load_regional_model(snakemake.input.choice_model, p.mobile_share, LANGUAGE_REGION_WEIGHTS)
     _, samples, _, _ = regional_utilities(attributes, weights, coefficients, **model)  # fig5 needs the samples
     national = {s: samples["national"][s].to_numpy() for s in samples["national"].columns}
@@ -27,4 +27,4 @@ if __name__ == "__main__":
         pd.read_csv(snakemake.input.switches), national,
         json.loads(Path(snakemake.input.elcom).read_text())["total_rp_kwh"], figure_settings("regional", p, cost),
         model_path=snakemake.input.choice_model, out_dir=Path(snakemake.output.figures[0]).parent.parent,
-        mobile_share=p.mobile_share).to_csv(snakemake.output.contributions, index=False)
+        mobile_share=p.mobile_share, coefficients=coefficients).to_csv(snakemake.output.contributions, index=False)

@@ -34,7 +34,8 @@ def test_matrix_complementary(pairwise_matrix):
 
 def test_matrix_diagonal(pairwise_matrix):
     diag = pairwise_matrix[pairwise_matrix["scenario_1"] == pairwise_matrix["scenario_2"]]
-    assert (diag[["p_mean", "p_low", "p_high", "p_mean_utility_aggregation"]] == 0.5).all().all()
+    # 0.5 up to rounding: the population-weighted mean of 0.5 over the regions is not always exactly 0.5
+    assert np.abs(diag[["p_mean", "p_low", "p_high", "p_mean_utility_aggregation"]].to_numpy() - 0.5).max() < 1e-12
 
 
 def test_probabilities_in_unit_interval(pairwise_matrix, pairwise_regions):
@@ -45,13 +46,14 @@ def test_probabilities_in_unit_interval(pairwise_matrix, pairwise_regions):
         assert (table["p_low"] <= table["p_mean"] + ATOL).all() and (table["p_mean"] <= table["p_high"] + ATOL).all()
 
 
-def test_map_tables_match_regions(pairwise_map_tables, pairwise_regions):
-    """One table per map pair, each the subset of the region table; 22 regions (TI excluded)."""
+def test_map_tables_match_regions(pairwise_map_tables, pairwise_regions, ticino):
+    """One table per map pair, each the subset of the region table; 22 regions with TI excluded, else 23."""
     for table in pairwise_map_tables:
         a, b = table["scenario_1"].iloc[0], table["scenario_2"].iloc[0]
         subset = pairwise_regions[(pairwise_regions["scenario_1"] == a) & (pairwise_regions["scenario_2"] == b)]
         assert table.reset_index(drop=True).equals(subset.reset_index(drop=True))
-        assert table["region"].nunique() == 22 and "TI" not in set(table["region"])
+        assert table["region"].nunique() == (22 if ticino is None else 23)
+        assert ("TI" in set(table["region"])) == (ticino is not None)
 
 
 def test_every_region_has_one_geometry(geometry_checks):
