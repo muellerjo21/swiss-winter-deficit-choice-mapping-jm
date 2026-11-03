@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(snakemake.scriptdir).parent / "src"))
 from config import LANGUAGE_REGION_WEIGHTS
 from load_data import (
     load_beta_partworths_mean, load_beta_partworths_samples,
-    load_mobile_partworths_mean, load_mobile_partworths_samples, load_scenario_cost_and_demand,
+    load_mobile_partworths_mean, load_mobile_partworths_samples, load_scenario_cost_and_demand, scope_reference,
 )
 from sensitivity import (
     check_completed_years, reference_price_grid, reference_price_curve, crossing_points, rank1_switches,
@@ -48,6 +48,7 @@ def sensitivity(path_to_attributes: str, path_to_choice_model: str, paths_to_nc:
                 paths_to_elcom: list[str], paths_to_eur_chf: list[str], reference_year: int, base_years: list[int],
                 reference_price: dict, crossing_scenarios: list[str], crossing_tolerance: float,
                 crossing_check_delta: float, mobile_share: float, cost_scale: float, cost_scope: str, cost_groups: dict, power_fuel: dict,
+                energy_reference: float,
                 path_to_curve: str, path_to_crossings: str, path_to_base_years: str,
                 path_to_switches: str) -> None:
     check_completed_years(base_years)
@@ -55,6 +56,7 @@ def sensitivity(path_to_attributes: str, path_to_choice_model: str, paths_to_nc:
     scenario_cost = {s: load_scenario_cost_and_demand(p, cost_scale, cost_scope, cost_groups, power_fuel) for s, p in zip(scenario_ids, paths_to_nc)}
     model = load_model(path_to_choice_model, mobile_share)
     elcom, rates = load_year_files(paths_to_elcom, paths_to_eur_chf)
+    elcom = {y: scope_reference(r, cost_scope, energy_reference) for y, r in elcom.items()}
     ref, (rate, _) = elcom[reference_year], rates[reference_year]
 
     grid = reference_price_grid(reference_price["start"], reference_price["stop"], reference_price["step"])
@@ -95,6 +97,7 @@ if __name__ == "__main__":
         cost_scope=p.cost_scope,
         cost_groups=p.cost_groups,
         power_fuel=p.power_fuel,
+        energy_reference=p.energy_reference,
         path_to_curve=snakemake.output.curve,
         path_to_crossings=snakemake.output.crossings,
         path_to_base_years=snakemake.output.base_years,

@@ -453,11 +453,13 @@ def load_fuel_imports(nc_path: str, techs: dict) -> dict:
     return out
 
 
-def import_quantities(nc_path: str, fuel_techs: dict, diesel_techs: dict) -> dict:
+def import_quantities(nc_path: str, fuel_techs: dict, diesel_techs: dict, denominator: str = "electricity") -> dict:
     """Net electricity import, fuel imports and electricity consumption (annual sums, GWh) and the import shares of
     the three definitions (IMPORT_DEFINITIONS), each clipped to [0, 1]. The electricity share is computed exactly
     as compute_import_share. Fuel variants add the fuel imports to the net electricity import, counted with their
-    energy content: 1 GWh fuel = 1 GWh electricity (no conversion efficiency; an assumption)."""
+    energy content: 1 GWh fuel = 1 GWh electricity (no conversion efficiency; an assumption).
+    denominator (imports.denominator): electricity = electricity consumption; final_energy = final energy
+    (load_scenario_final_energy), reported in the extra column final_energy_gwh."""
     net_import = aggregate_national(load_scenario_net_import(nc_path), "net_import_gwh")
     demand = aggregate_national(load_scenario_demand(nc_path), "demand_gwh")
     fuels = load_fuel_imports(nc_path, fuel_techs)
@@ -466,6 +468,11 @@ def import_quantities(nc_path: str, fuel_techs: dict, diesel_techs: dict) -> dic
               "electricity_fuels_diesel": net_import + sum(fuels.values()) + sum(diesel.values())}
     row = {"net_electricity_import_gwh": net_import, **{f"{t}_gwh": v for t, v in {**fuels, **diesel}.items()},
            "consumption_gwh": demand}
+    if denominator == "final_energy":
+        demand = load_scenario_final_energy(nc_path)["final_energy"]
+        row["final_energy_gwh"] = demand
+    elif denominator != "electricity":
+        raise ValueError(f"imports.denominator must be electricity or final_energy, got {denominator!r}")
     for name in IMPORT_DEFINITIONS:
         row[f"import_share_{name}_unclipped"] = totals[name] / demand
         row[f"import_share_{name}"] = max(0.0, min(1.0, totals[name] / demand))
@@ -789,11 +796,51 @@ def compute_price_change(nc_path: str, elcom_ref: dict, eur_to_chf: float, cost_
     return price_change_from_cost(system_cost, demand, elcom_ref, eur_to_chf)
 
 
+HEAT_DEMAND_TECHS = ("demand_buildings_heat", "demand_low_temp_process_heat", "demand_medium_temp_process_heat",
+                     "demand_high_temp_process_heat")
+
+
+def load_scenario_final_energy(nc_path: str) -> dict:
+    """Final energy demand (GWh/year, carrier_con summed over time and the Swiss locations): electricity = demand_elec,
+    heat = the heat demands (HEAT_DEMAND_TECHS, delivered heat), transport = energy into the vehicles (*_transport_*
+    technologies: electricity, hydrogen, diesel; the transport demand itself is not energy), and their sum. The model
+    has no direct fuel demand. Same calculation as the cost/energy untangling of Nov 2026."""
+    ds = xr.open_dataset(nc_path)
+    con = ds["carrier_con"].sum("timesteps").to_pandas().abs()
+    ds.close()
+    con = con[[i.split("::")[0] not in FOREIGN_CODES for i in con.index]]
+    tech = pd.Series([i.split("::")[1] for i in con.index], index=con.index)
+    out = {"electricity": float(con[tech == "demand_elec"].sum()),
+           "heat": float(con[tech.isin(HEAT_DEMAND_TECHS)].sum()),
+           "transport": float(con[tech.str.contains("_transport_") & ~tech.str.startswith("demand")].sum())}
+    out["final_energy"] = out["electricity"] + out["heat"] + out["transport"]
+    return out
+
+
+def scope_reference(ref: dict, cost_scope: str, energy_reference: float = None) -> dict:
+    """ElCom reference values for the price formula: with cost_scope energy and a number for
+    price.energy_reference_ct_per_kwh, the reference price total_rp_kwh is that number (taxes/levies and grid usage
+    stay the electricity values); otherwise unchanged (null = ElCom electricity reference as first assumption)."""
+    if cost_scope != "energy" or energy_reference is None:
+        return ref
+    return {**ref, "total_rp_kwh": float(energy_reference)}
+
+
+def scope_reference_table(elcom: pd.DataFrame, cost_scope: str, energy_reference: float = None) -> pd.DataFrame:
+    """scope_reference for the regional ElCom table (index region): the same reference price in every region."""
+    if cost_scope != "energy" or energy_reference is None:
+        return elcom
+    return elcom.assign(total_rp_kwh=float(energy_reference))
+
+
 def load_scenario_cost_and_demand(nc_path: str, cost_scale: float = 1.0, cost_scope: str = "total",
                                   cost_groups: dict = None, power_fuel: dict = None) -> tuple[float, float]:
     """Swiss system cost (million EUR/year; all technologies, or with cost_scope only one cost group, see
     load_scenario_scoped_cost) times cost_scale (price.cost_scale_factor, 1.0 = costs as in the result file) and
-    national electricity demand (GWh) of a scenario, the two scenario inputs of price_change_from_cost."""
+    national electricity demand (GWh) of a scenario, the two scenario inputs of price_change_from_cost.
+    cost_scope energy: all costs over the final energy demand (load_scenario_final_energy) instead of electricity."""
+    if cost_scope == "energy":
+        return cost_scale * load_scenario_system_cost(nc_path), load_scenario_final_energy(nc_path)["final_energy"]
     return (cost_scale * load_scenario_scoped_cost(nc_path, cost_scope, cost_groups, power_fuel),
             aggregate_national(load_scenario_demand(nc_path), "demand_gwh"))
 

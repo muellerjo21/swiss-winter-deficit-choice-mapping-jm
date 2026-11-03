@@ -19,6 +19,7 @@ COST_SCOPE = config["price"]["cost_scope"]  # costs in the price formula: total 
 COST_GROUPS = config["price"]["cost_groups"]
 POWER_FUEL = dict(plants=config["price"]["fuel_power_techs"], fuels=config["price"]["fuel_carriers"],
                   chp_allocation=config["price"]["chp_fuel_allocation"])  # cost_scope electricity_fuel
+ENERGY_REFERENCE = config["price"]["energy_reference_ct_per_kwh"]  # p_ref of cost_scope energy (null = ElCom)
 SENSITIVITY = config["sensitivity"]
 FIGURE_SENSITIVITY = "fig6_p_rank1_vs_reference_price_national"  # created by src/make_graphics.fig_reference_price_sensitivity
 SENSITIVITY_YEARS = sorted(set(SENSITIVITY["base_years"]) | {REFERENCE_YEAR})
@@ -138,7 +139,8 @@ rule scenario_attributes:
         cost_scale = COST_SCALE,
         cost_scope = COST_SCOPE,
         cost_groups = COST_GROUPS,
-        power_fuel = POWER_FUEL
+        power_fuel = POWER_FUEL,
+        energy_reference = ENERGY_REFERENCE
     input:
         nc = lambda wildcards: Path(config["data"]["scenario_dir"]) / SCENARIOS[wildcards.scenario],
         canton_area = config["data"]["canton_area"],
@@ -179,7 +181,8 @@ rule import_shares:
         scenario_ids = list(SCENARIOS),
         fuel_techs = config["imports"]["fuel_techs"],
         diesel_techs = config["imports"]["diesel_techs"],
-        definition = config["imports"]["definition"]
+        definition = config["imports"]["definition"],
+        denominator = config["imports"]["denominator"]
     input:
         nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS]
     output: "build/data/regional/import_shares_regional.csv"
@@ -196,7 +199,8 @@ rule regional_attributes:
         cost_scale = COST_SCALE,
         cost_scope = COST_SCOPE,
         cost_groups = COST_GROUPS,
-        power_fuel = POWER_FUEL
+        power_fuel = POWER_FUEL,
+        energy_reference = ENERGY_REFERENCE
     input:
         imports = rules.import_shares.output[0],
         nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS],
@@ -258,7 +262,8 @@ rule regional_reference_price:
         cost_scale = COST_SCALE,
         cost_scope = COST_SCOPE,
         cost_groups = COST_GROUPS,
-        power_fuel = POWER_FUEL
+        power_fuel = POWER_FUEL,
+        energy_reference = ENERGY_REFERENCE
     input:
         attributes = rules.regional_attributes.output.attributes,
         population = rules.regional_attributes.output.population,
@@ -289,7 +294,8 @@ rule cost_scale_regional:
         interval_type = config["utility"]["interval_type"],
         cost_scope = COST_SCOPE,
         cost_groups = COST_GROUPS,
-        power_fuel = POWER_FUEL
+        power_fuel = POWER_FUEL,
+        energy_reference = ENERGY_REFERENCE
     input:
         attributes = rules.regional_attributes.output.attributes,
         population = rules.regional_attributes.output.population,
@@ -311,6 +317,9 @@ rule cost_groups:
         cost_groups = COST_GROUPS,
         fuel_power_techs = config["price"]["fuel_power_techs"],
         power_fuel = POWER_FUEL,
+        energy_reference = ENERGY_REFERENCE,
+        fuel_techs = config["imports"]["fuel_techs"],
+        diesel_techs = config["imports"]["diesel_techs"],
         cost_scale = COST_SCALE
     input:
         nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS],
@@ -319,7 +328,8 @@ rule cost_groups:
     output:
         groups = "build/data/cost_groups.csv",
         technologies = "build/data/cost_by_technology.csv",
-        power_fuel = "build/data/power_fuel_cost.csv"
+        power_fuel = "build/data/power_fuel_cost.csv",
+        final_energy = "build/data/final_energy.csv"
     conda: "envs/default.yaml"
     script: "scripts/cost_groups.py"
 
@@ -462,7 +472,8 @@ rule sensitivity_reference_price:
         cost_scale = COST_SCALE,
         cost_scope = COST_SCOPE,
         cost_groups = COST_GROUPS,
-        power_fuel = POWER_FUEL
+        power_fuel = POWER_FUEL,
+        energy_reference = ENERGY_REFERENCE
     input:
         attributes = rules.compute_attributes.output[0],
         choice_model = config["data"]["choice_model"],
@@ -595,6 +606,8 @@ rule test:
         import_definition = config["imports"]["definition"],
         cost_scale = COST_SCALE,
         cost_scope = COST_SCOPE,
+        energy_reference = ENERGY_REFERENCE,
+        import_denominator = config["imports"]["denominator"],
         cost_scale_factors = SENSITIVITY["cost_scale_factors"],
         cost_scale_conversions = SENSITIVITY["cost_scale_conversions"],
         cost_scale_search = SENSITIVITY["cost_scale_search"],
@@ -637,6 +650,7 @@ rule test:
         cost_groups = rules.cost_groups.output.groups,
         cost_by_technology = rules.cost_groups.output.technologies,
         power_fuel_cost = rules.cost_groups.output.power_fuel,
+        final_energy = rules.cost_groups.output.final_energy,
         elcom_national = f"build/data/reference/elcom_price_{REFERENCE_YEAR}.json",
         eur_chf = f"build/data/reference/eur_chf_{REFERENCE_YEAR}.json",
         reference_regional_attributes = config["reference"]["regional_attributes"],

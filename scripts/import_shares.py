@@ -12,6 +12,6 @@ from load_data import import_quantities
 
 if __name__ == "__main__":
     p = snakemake.params
-    rows = [{"scenario_id": s, **import_quantities(nc, p.fuel_techs, p.diesel_techs)}
+    rows = [{"scenario_id": s, **import_quantities(nc, p.fuel_techs, p.diesel_techs, p.denominator)}
             for s, nc in zip(p.scenario_ids, snakemake.input.nc)]
     pd.DataFrame(rows).to_csv(snakemake.output[0], index=False)

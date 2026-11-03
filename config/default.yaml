@@ -22,9 +22,16 @@ price:
     # Costs in the price formula, in all analyses: total = system cost of the whole Swiss energy system (main
     # analysis); electricity = only the technologies of cost_groups.electricity (generation, electricity storage,
     # transmission); electricity_fuel = electricity plus the fuel costs of the power plants (fuel_power_techs) that
-    # fall on electricity. The demand D_s stays the electricity consumption in all cases. With electricity the costs
-    # of the fuels burnt in power plants (cost_groups.other) are missing.
+    # fall on electricity. The demand D_s stays the electricity consumption in these cases. With electricity the
+    # costs of the fuels burnt in power plants (cost_groups.other) are missing. energy = all costs over the final
+    # energy demand (electricity + heat + transport, load_data.load_scenario_final_energy) instead of D_s; then the
+    # reference price is energy_reference_ct_per_kwh. Taxes/levies and grid usage are the ElCom electricity values in
+    # all cases (for energy still to be checked).
     cost_scope: total
+    # Reference price p_ref for cost_scope energy (CHF cents = Rp. per kWh of final energy), the same in every region.
+    # Placeholder without a confirmed value: null = the ElCom electricity reference (national and regional medians)
+    # as first assumption.
+    energy_reference_ct_per_kwh: null
     # Every Swiss technology with a cost in the result files belongs to exactly one group (checked when loading);
     # ac_transmission stands for all ac_transmission:<region> links.
     cost_groups:
@@ -160,6 +167,9 @@ sensitivity:
 # (no conversion efficiency). The fuel variants are always computed as regional sensitivities.
 imports:
     definition: electricity
+    # Denominator of the import shares: electricity = electricity consumption (main analysis); final_energy = final
+    # energy demand (electricity + heat + transport, as for price.cost_scope energy)
+    denominator: electricity
     # Calliope import technology -> carrier it produces (carrier_prod at the Swiss locations)
     fuel_techs: {import_natgas: natural_gas, import_hydrogen: hydrogen, import_synmethane: methane}
     diesel_techs: {import_syndiesel: diesel}

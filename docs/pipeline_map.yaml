@@ -86,7 +86,9 @@ rules:
     open: >-
       Die Preisformel teilt die Kosten des ganzen Energiesystems durch den Stromverbrauch. Die Sensitivität
       price.cost_scope: electricity nimmt nur die Stromkosten, ohne die Brennstoffkosten der Kraftwerke;
-      electricity_fuel addiert sie (Brennstoff zu Durchschnittskosten des Modells, WKK nach Stromanteil).
+      electricity_fuel addiert sie (Brennstoff zu Durchschnittskosten des Modells, WKK nach Stromanteil). energy teilt
+      alle Kosten durch die Endenergie (Strom, Wärme, Verkehr); der Referenzpreis dafür
+      (price.energy_reference_ct_per_kwh) ist noch offen, ebenso ob Abgaben und Netz für die Gesamtenergie gelten.
   beta_real_units:
     group: check
     text: >-

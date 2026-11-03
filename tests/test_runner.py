@@ -120,6 +120,18 @@ def _create_config_plugin(snakemake):
             return pd.read_csv(snakemake.input.power_fuel_cost)
 
         @pytest.fixture()
+        def final_energy(self):
+            return pd.read_csv(snakemake.input.final_energy).set_index("scenario_id")
+
+        @pytest.fixture()
+        def energy_reference(self):
+            return snakemake.params.energy_reference
+
+        @pytest.fixture()
+        def import_denominator(self):
+            return snakemake.params.import_denominator
+
+        @pytest.fixture()
         def elcom_national(self):
             import json
             return json.loads(Path(snakemake.input.elcom_national).read_text())
