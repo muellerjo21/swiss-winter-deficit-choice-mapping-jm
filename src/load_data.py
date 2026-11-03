@@ -28,7 +28,7 @@ from config import (
     CAPACITY_DENSITY_GW_PER_KM2, OWNERSHIP_MAPPING, PRICE_MARGIN, PRICE_REFERENCE_YEAR, PRICE_CATEGORY,
     TECH_SOURCE_MAPPING, PV_REFERENCE_TECHS, TRANSMISSION_REFERENCE_YEAR, CHOICE_MODEL_PATH,
     SECTOR_COUPLING_ELEC_TECHS, SCENARIO_DIR, CANTON_AREA_CSV_PATH, RAW_DIR, PROCESSED_DIR,
-    MELLOT_COST_CHANGE_PCT, LAND_DEFINITION, PRICE_COST_SCALE_FACTOR,
+    MELLOT_COST_CHANGE_PCT, LAND_DEFINITION, PRICE_COST_SCALE_FACTOR, PRICE_COST_SCOPE, PRICE_COST_GROUPS,
 )
 
 
@@ -635,6 +635,42 @@ def load_scenario_system_cost(nc_path: str) -> float:
     return total  # million EUR/year
 
 
+def cost_group_of(tech: str, groups: dict) -> str:
+    """Cost group (price.cost_groups) of a Calliope technology; ac_transmission:<region> -> ac_transmission. Fails if
+    the technology is in no group or in several."""
+    base = tech.split(":")[0]
+    found = [g for g, techs in groups.items() if base in techs]
+    if len(found) != 1:
+        raise ValueError(f"technology {tech!r} is in {len(found)} cost groups ({found}), expected exactly one; "
+                         "see price.cost_groups in config/default.yaml")
+    return found[0]
+
+
+def load_scenario_cost_by_technology(nc_path: str, groups: dict) -> pd.DataFrame:
+    """Swiss system cost (million EUR/year) per technology (summed over the Swiss locations) with its cost group;
+    the costs sum to load_scenario_system_cost."""
+    ds = xr.open_dataset(nc_path)
+    cost = ds["cost"]
+    classes = list(cost.coords["costs"].values)
+    cost = (cost.sel(costs="monetary") if "monetary" in classes else cost.sel(costs=classes[0])).to_pandas()
+    ds.close()
+    cost = cost[[lt.split("::")[0] not in FOREIGN_CODES for lt in cost.index]]
+    by_tech = cost.groupby([lt.split("::")[1] for lt in cost.index]).sum().rename("cost").rename_axis("tech").reset_index()
+    by_tech["group"] = [cost_group_of(t, groups) for t in by_tech["tech"]]
+    return by_tech
+
+
+def load_scenario_scoped_cost(nc_path: str, cost_scope: str = "total", groups: dict = None) -> float:
+    """System cost of the price formula (price.cost_scope): total = load_scenario_system_cost; a group name of
+    groups (price.cost_groups, e.g. electricity) = only the costs of that group."""
+    if cost_scope == "total":
+        return load_scenario_system_cost(nc_path)
+    if not groups or cost_scope not in groups:
+        raise ValueError(f"price.cost_scope must be total or one of {list(groups or {})}, got {cost_scope!r}")
+    by_tech = load_scenario_cost_by_technology(nc_path, groups)
+    return float(by_tech.loc[by_tech["group"] == cost_scope, "cost"].sum())
+
+
 def fetch_eur_to_chf(year: int) -> tuple[float, int]:
     """Annual mean EUR/CHF exchange rate of a completed calendar year: arithmetic mean of the daily ECB
     reference rates via the Frankfurter API (time series {year}-01-01..{year}-12-31).
@@ -653,32 +689,41 @@ def fetch_eur_to_chf(year: int) -> tuple[float, int]:
     return sum(rates) / len(rates), len(rates)
 
 
-def compute_price_change(nc_path: str, elcom_ref: dict, eur_to_chf: float, cost_scale: float = 1.0) -> float:
+def compute_price_change(nc_path: str, elcom_ref: dict, eur_to_chf: float, cost_scale: float = 1.0,
+                         cost_scope: str = "total", cost_groups: dict = None) -> float:
     """Relative price change vs. the ElCom reference price. Deliberately NOT clipped to >=0
     (unlike import) -- price is a continuous, linear attribute, so mild extrapolation beyond the
     training range (-25% to +100%, survey levels -25/0/+25/+50/+100%) is more defensible here than
     e.g. for net export.
     elcom_ref: return value of get_elcom_reference_price; eur_to_chf: rate (first element of fetch_eur_to_chf);
-    cost_scale: price.cost_scale_factor (see load_scenario_cost_and_demand)."""
-    system_cost, demand = load_scenario_cost_and_demand(nc_path, cost_scale)
+    cost_scale, cost_scope, cost_groups: price.cost_scale_factor, cost_scope, cost_groups (see
+    load_scenario_cost_and_demand)."""
+    system_cost, demand = load_scenario_cost_and_demand(nc_path, cost_scale, cost_scope, cost_groups)
     return price_change_from_cost(system_cost, demand, elcom_ref, eur_to_chf)
 
 
-def load_scenario_cost_and_demand(nc_path: str, cost_scale: float = 1.0) -> tuple[float, float]:
-    """Total Swiss system cost (million EUR/year) times cost_scale (price.cost_scale_factor, 1.0 = costs as in
-    the result file) and national electricity demand (GWh) of a scenario, the two scenario inputs of
-    price_change_from_cost."""
-    return (cost_scale * load_scenario_system_cost(nc_path),
+def load_scenario_cost_and_demand(nc_path: str, cost_scale: float = 1.0, cost_scope: str = "total",
+                                  cost_groups: dict = None) -> tuple[float, float]:
+    """Swiss system cost (million EUR/year; all technologies, or with cost_scope only one cost group, see
+    load_scenario_scoped_cost) times cost_scale (price.cost_scale_factor, 1.0 = costs as in the result file) and
+    national electricity demand (GWh) of a scenario, the two scenario inputs of price_change_from_cost."""
+    return (cost_scale * load_scenario_scoped_cost(nc_path, cost_scope, cost_groups),
             aggregate_national(load_scenario_demand(nc_path), "demand_gwh"))
+
+
+def simulated_price(system_cost: float, demand: float, elcom_ref: dict, eur_to_chf: float) -> float:
+    """Simulated household price p_sim (Rp./kWh) = C/D * e * 100 * (1 + margin) + taxes/levies + grid usage."""
+    cost_per_kwh_chf = (system_cost / demand) * eur_to_chf
+    simulated_rp_kwh = cost_per_kwh_chf * 100 * (1 + PRICE_MARGIN)
+    # Grid usage (distribution grid) is not included in the Calliope system cost -> constant surcharge
+    simulated_rp_kwh += elcom_ref["taxes_levies_rp_kwh"] + elcom_ref["netznutzung_rp_kwh"]
+    return simulated_rp_kwh
 
 
 def price_change_from_cost(system_cost: float, demand: float, elcom_ref: dict, eur_to_chf: float) -> float:
     """Price-change formula of compute_price_change for already loaded system cost and demand, so that
     several reference prices / rates can be evaluated without re-reading the scenario file."""
-    cost_per_kwh_chf = (system_cost / demand) * eur_to_chf
-    simulated_rp_kwh = cost_per_kwh_chf * 100 * (1 + PRICE_MARGIN)
-    # Grid usage (distribution grid) is not included in the Calliope system cost -> constant surcharge
-    simulated_rp_kwh += elcom_ref["taxes_levies_rp_kwh"] + elcom_ref["netznutzung_rp_kwh"]
+    simulated_rp_kwh = simulated_price(system_cost, demand, elcom_ref, eur_to_chf)
     return (simulated_rp_kwh - elcom_ref["total_rp_kwh"]) / elcom_ref["total_rp_kwh"]
 
 
@@ -726,10 +771,11 @@ RELATIVE_LAND_DEFINITIONS = {
 
 
 def compute_all_attributes(nc_path: str, area_dict: dict, elcom_ref: dict, eur_to_chf: float,
-                           land_definition: str, cost_scale: float = 1.0) -> dict:
+                           land_definition: str, cost_scale: float = 1.0, cost_scope: str = "total",
+                           cost_groups: dict = None) -> dict:
     """Computes all 11 choice-model attributes (national) for one scenario.
     land_definition: key of RELATIVE_LAND_DEFINITIONS (land.definition in config/default.yaml);
-    cost_scale: price.cost_scale_factor."""
+    cost_scale, cost_scope, cost_groups: price.cost_scale_factor, cost_scope, cost_groups."""
     if land_definition not in RELATIVE_LAND_DEFINITIONS:
         raise ValueError(f"Unknown land definition {land_definition!r}, expected one of {list(RELATIVE_LAND_DEFINITIONS)}")
     capacity_df = load_scenario_capacity(nc_path)
@@ -743,7 +789,8 @@ def compute_all_attributes(nc_path: str, area_dict: dict, elcom_ref: dict, eur_t
         "import_share": compute_import_share(nc_path),
         **compute_ownership_shares(capacity_df),
         **compute_technology_mix_shares(capacity_df),
-        "price_change": compute_price_change(nc_path, elcom_ref=elcom_ref, eur_to_chf=eur_to_chf, cost_scale=cost_scale),
+        "price_change": compute_price_change(nc_path, elcom_ref=elcom_ref, eur_to_chf=eur_to_chf, cost_scale=cost_scale,
+                                             cost_scope=cost_scope, cost_groups=cost_groups),
         # Official cost change vs. EP2050+ (Mellot Table 3), not a choice-model attribute;
         # for comparing preference rank vs. cost rank (NaN for baseline, not in Table 3)
         "mellot_cost_change_pct": MELLOT_COST_CHANGE_PCT[scenario_id_from_filename(os.path.basename(nc_path))],
@@ -765,7 +812,8 @@ def compute_all_scenarios(scenario_dir: str = SCENARIO_DIR, area_csv_path: str =
         nc_path = os.path.join(scenario_dir, filename)
         sid = scenario_id_from_filename(filename)
         print(f"Processing {sid}...")
-        row = compute_all_attributes(nc_path, area_dict, elcom_ref, eur_to_chf, LAND_DEFINITION, PRICE_COST_SCALE_FACTOR)
+        row = compute_all_attributes(nc_path, area_dict, elcom_ref, eur_to_chf, LAND_DEFINITION, PRICE_COST_SCALE_FACTOR,
+                                     PRICE_COST_SCOPE, PRICE_COST_GROUPS)
         row["scenario_id"] = sid
         rows.append(row)
     return pd.DataFrame(rows)

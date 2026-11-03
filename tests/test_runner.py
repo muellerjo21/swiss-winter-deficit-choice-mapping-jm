@@ -104,6 +104,23 @@ def _create_config_plugin(snakemake):
             return snakemake.params.cost_scale_conversions
 
         @pytest.fixture()
+        def cost_scope(self):
+            return snakemake.params.cost_scope
+
+        @pytest.fixture()
+        def cost_groups(self):
+            return pd.read_csv(snakemake.input.cost_groups).set_index("scenario_id")
+
+        @pytest.fixture()
+        def cost_by_technology(self):
+            return pd.read_csv(snakemake.input.cost_by_technology)
+
+        @pytest.fixture()
+        def elcom_national(self):
+            import json
+            return json.loads(Path(snakemake.input.elcom_national).read_text())
+
+        @pytest.fixture()
         def eur_to_chf(self):
             import json
             return json.loads(Path(snakemake.input.eur_chf).read_text())["eur_to_chf"]

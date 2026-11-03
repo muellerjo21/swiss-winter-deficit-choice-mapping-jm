@@ -19,6 +19,28 @@ price:
     # in the result files; converting EUR 2020 to EUR 2025 with the euro area HICP would be 128.75 / 105.06 = 1.2255
     # (Eurostat prc_hicp_aind, CP00, EA, annual average index 2015 = 100, retrieved 29 Oct 2026).
     cost_scale_factor: 1.0
+    # Costs in the price formula, in all analyses: total = system cost of the whole Swiss energy system (main
+    # analysis); electricity = only the technologies of cost_groups.electricity (generation, electricity storage,
+    # transmission). The demand D_s stays the electricity consumption in both cases. With electricity the costs of
+    # the fuels burnt in power plants (cost_groups.other) are missing, see fuel_power_techs.
+    cost_scope: total
+    # Every Swiss technology with a cost in the result files belongs to exactly one group (checked when loading);
+    # ac_transmission stands for all ac_transmission:<region> links.
+    cost_groups:
+        electricity: [roof_mounted_pv, open_field_pv, alpine_pv_subsidised, alpine_pv_not_subsidised, hydro_reservoir,
+                      hydro_run_of_river, wind_onshore_monopoly, wind_onshore_competing, ccgt, ccgt_natgas, scgt_natgas,
+                      scgt_renewable, chp_methane, chp_waste, chp_biofuel, pumped_hydro, battery,
+                      hydrogen_electricity_storage, ac_transmission]
+        other: [supply_biofuel, import_natgas, import_synmethane, import_syndiesel, import_hydrogen, biofuel_to_methane,
+                biofuel_to_diesel, hydrogen_to_methane, hydrogen_to_liquids, electrolysis, hp, buildings_biofuel_boiler,
+                buildings_methane_boiler, industry_methane_boiler, industry_biofuel_boiler, electrode_boiler,
+                electric_heater, waste_boiler, hp_heat_storage_small, buildings_biofuel_boiler_heat_storage_small,
+                buildings_methane_boiler_heat_storage_small, electric_heater_heat_storage_small,
+                electrode_boiler_heat_storage_big, industry_biofuel_boiler_heat_storage_big,
+                industry_methane_boiler_heat_storage_big, waste_boiler_heat_storage_big, hydrogen_storage, dac,
+                daccs_local]
+    # Power plants burning fuels whose costs are in cost_groups.other (reported in build/data/cost_groups.csv)
+    fuel_power_techs: [ccgt, ccgt_natgas, scgt_natgas, scgt_renewable, chp_methane, chp_waste, chp_biofuel]
 
 land:
     # Definition of the attribute relative_land (share of land used by wind and open-field PV):

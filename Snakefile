@@ -15,6 +15,8 @@ FIGURE_FORMATS = ["png", "pdf", "svg"]
 FIGURE_PATH = "build/figures/{fmt}/{figure}.{fmt}"  # one subfolder per format
 REFERENCE_YEAR = config["price"]["reference_year"]
 COST_SCALE = config["price"]["cost_scale_factor"]  # factor on the Calliope system cost (1.0 = main analysis)
+COST_SCOPE = config["price"]["cost_scope"]  # costs in the price formula: total (main analysis) | electricity
+COST_GROUPS = config["price"]["cost_groups"]
 SENSITIVITY = config["sensitivity"]
 FIGURE_SENSITIVITY = "fig6_p_rank1_vs_reference_price_national"  # created by src/make_graphics.fig_reference_price_sensitivity
 SENSITIVITY_YEARS = sorted(set(SENSITIVITY["base_years"]) | {REFERENCE_YEAR})
@@ -131,7 +133,9 @@ rule scenario_attributes:
     message: "Compute choice-model attributes of scenario {wildcards.scenario} (land: {params.land_definition})."
     params:
         land_definition = config["land"]["definition"],
-        cost_scale = COST_SCALE
+        cost_scale = COST_SCALE,
+        cost_scope = COST_SCOPE,
+        cost_groups = COST_GROUPS
     input:
         nc = lambda wildcards: Path(config["data"]["scenario_dir"]) / SCENARIOS[wildcards.scenario],
         canton_area = config["data"]["canton_area"],
@@ -186,7 +190,9 @@ rule regional_attributes:
         scenario_ids = list(SCENARIOS),
         overrides = REGIONAL["municipality_canton_overrides"],
         import_definition = config["imports"]["definition"],
-        cost_scale = COST_SCALE
+        cost_scale = COST_SCALE,
+        cost_scope = COST_SCOPE,
+        cost_groups = COST_GROUPS
     input:
         imports = rules.import_shares.output[0],
         nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS],
@@ -245,7 +251,9 @@ rule regional_reference_price:
         mobile_share = config["utility"]["mobile_share"],
         credible_interval = config["utility"]["credible_interval"],
         interval_type = config["utility"]["interval_type"],
-        cost_scale = COST_SCALE
+        cost_scale = COST_SCALE,
+        cost_scope = COST_SCOPE,
+        cost_groups = COST_GROUPS
     input:
         attributes = rules.regional_attributes.output.attributes,
         population = rules.regional_attributes.output.population,
@@ -273,7 +281,9 @@ rule cost_scale_regional:
         check_delta = SENSITIVITY["crossing_check_delta"],
         mobile_share = config["utility"]["mobile_share"],
         credible_interval = config["utility"]["credible_interval"],
-        interval_type = config["utility"]["interval_type"]
+        interval_type = config["utility"]["interval_type"],
+        cost_scope = COST_SCOPE,
+        cost_groups = COST_GROUPS
     input:
         attributes = rules.regional_attributes.output.attributes,
         population = rules.regional_attributes.output.population,
@@ -286,6 +296,24 @@ rule cost_scale_regional:
         switches = "build/data/sensitivity/cost_scale_rank1_switches_regional.csv"
     conda: "envs/default.yaml"
     script: "scripts/cost_scale_regional.py"
+
+
+rule cost_groups:
+    message: "System cost per cost group (electricity, other) and simulated price with all and with electricity costs."
+    params:
+        scenario_ids = list(SCENARIOS),
+        cost_groups = COST_GROUPS,
+        fuel_power_techs = config["price"]["fuel_power_techs"],
+        cost_scale = COST_SCALE
+    input:
+        nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS],
+        elcom = f"build/data/reference/elcom_price_{REFERENCE_YEAR}.json",
+        eur_chf = f"build/data/reference/eur_chf_{REFERENCE_YEAR}.json"
+    output:
+        groups = "build/data/cost_groups.csv",
+        technologies = "build/data/cost_by_technology.csv"
+    conda: "envs/default.yaml"
+    script: "scripts/cost_groups.py"
 
 
 rule beta_real_units:
@@ -423,7 +451,9 @@ rule sensitivity_reference_price:
         crossing_tolerance = SENSITIVITY["crossing_tolerance"],
         crossing_check_delta = SENSITIVITY["crossing_check_delta"],
         mobile_share = config["utility"]["mobile_share"],
-        cost_scale = COST_SCALE
+        cost_scale = COST_SCALE,
+        cost_scope = COST_SCOPE,
+        cost_groups = COST_GROUPS
     input:
         attributes = rules.compute_attributes.output[0],
         choice_model = config["data"]["choice_model"],
@@ -555,6 +585,7 @@ rule test:
     params:
         import_definition = config["imports"]["definition"],
         cost_scale = COST_SCALE,
+        cost_scope = COST_SCOPE,
         cost_scale_factors = SENSITIVITY["cost_scale_factors"],
         cost_scale_conversions = SENSITIVITY["cost_scale_conversions"],
         cost_scale_search = SENSITIVITY["cost_scale_search"],
@@ -594,6 +625,9 @@ rule test:
         sensitivity_switches_regional = rules.regional_reference_price.output.switches,
         cost_scale_curve_regional = rules.cost_scale_regional.output.curve,
         cost_scale_switches_regional = rules.cost_scale_regional.output.switches,
+        cost_groups = rules.cost_groups.output.groups,
+        cost_by_technology = rules.cost_groups.output.technologies,
+        elcom_national = f"build/data/reference/elcom_price_{REFERENCE_YEAR}.json",
         eur_chf = f"build/data/reference/eur_chf_{REFERENCE_YEAR}.json",
         reference_regional_attributes = config["reference"]["regional_attributes"],
         reference_rankings_regional = config["reference"]["rankings_regional"],

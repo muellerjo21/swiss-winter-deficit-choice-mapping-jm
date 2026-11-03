@@ -77,6 +77,15 @@ rules:
       Die Umfrage zeigte Importanteile von {survey_import_levels}. Mit dem Stromimport liegen {n_import_below}
       von {n_scenarios} Szenarien unter {survey_import_min}; {net_export_note} Und: Zählen Brennstoffimporte zum
       Import?
+  cost_groups:
+    group: attr
+    text: >-
+      Teilt die Systemkosten jedes Szenarios nach Technologien in Strom (Erzeugung, Stromspeicher, Übertragung) und
+      Rest (Brennstoffe, Wärme, DAC, Brennstoffspeicher, Importe), Zuordnung in der Config price.cost_groups. Dazu
+      der simulierte Preis mit allen Kosten und nur mit den Stromkosten und der Strom aus Brennstoff-Kraftwerken.
+    open: >-
+      Die Preisformel teilt die Kosten des ganzen Energiesystems durch den Stromverbrauch. Die Sensitivität
+      price.cost_scope: electricity nimmt nur die Stromkosten; dann fehlen die Brennstoffkosten der Gaskraftwerke.
   beta_real_units:
     group: check
     text: >-

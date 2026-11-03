@@ -170,6 +170,9 @@ PRICE_REFERENCE_YEAR = _WORKFLOW_CONFIG["price"]["reference_year"]
 PRICE_CATEGORY = _WORKFLOW_CONFIG["price"]["category"]
 # Factor on the Calliope system cost before the price formula (1.0 = main analysis)
 PRICE_COST_SCALE_FACTOR = _WORKFLOW_CONFIG["price"]["cost_scale_factor"]
+# Costs in the price formula (total | electricity) and the technology -> cost group assignment
+PRICE_COST_SCOPE = _WORKFLOW_CONFIG["price"]["cost_scope"]
+PRICE_COST_GROUPS = _WORKFLOW_CONFIG["price"]["cost_groups"]
 # Definition of relative_land (land.definition): national_share or canton_mean, see
 # load_data.RELATIVE_LAND_DEFINITIONS. The pipeline passes it via the rule's params.
 LAND_DEFINITION = _WORKFLOW_CONFIG["land"]["definition"]
