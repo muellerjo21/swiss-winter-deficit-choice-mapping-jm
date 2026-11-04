@@ -69,8 +69,23 @@ def test_final_energy(final_energy):
 
 def test_energy_reference_price(final_energy, energy_reference, elcom_national):
     """p_ref of the energy scope = price.energy_reference_ct_per_kwh, or the ElCom electricity reference if null."""
-    expected = elcom_national["total_rp_kwh"] if energy_reference is None else float(energy_reference)
+    value = energy_reference["reference"]
+    expected = elcom_national["total_rp_kwh"] if value is None else float(value)
     assert (final_energy["p_ref_rp_kwh"] == expected).all()
+
+
+def test_energy_surcharge(final_energy, energy_reference, elcom_national, cost_groups):
+    """p_sim of the energy scope = C_s / final energy * e * 100 * (1 + margin) + surcharge, with the surcharge
+    price.energy_surcharge_ct_per_kwh or, if null, the ElCom taxes/levies + grid usage: checked through the
+    difference to p_sim of all costs over D_s, which uses the ElCom surcharge (same margin)."""
+    value = energy_reference["surcharge"]
+    elcom = elcom_national["taxes_levies_rp_kwh"] + elcom_national["netznutzung_rp_kwh"]
+    surcharge = elcom if value is None else float(value)
+    t = final_energy.loc[cost_groups.index]
+    variable_energy = t["p_sim_energy_rp_kwh"] - surcharge
+    variable_total = cost_groups["p_sim_total_rp_kwh"] - elcom
+    # same cost and margin, different denominator: variable parts scale with D_s / final energy
+    assert np.allclose(variable_energy, variable_total * t["demand_gwh"] / t["final_energy_gwh"], rtol=1e-9, atol=0)
 
 
 def test_import_shares_follow_denominator(import_shares, final_energy, import_denominator):

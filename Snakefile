@@ -19,7 +19,8 @@ COST_SCOPE = config["price"]["cost_scope"]  # costs in the price formula: total 
 COST_GROUPS = config["price"]["cost_groups"]
 POWER_FUEL = dict(plants=config["price"]["fuel_power_techs"], fuels=config["price"]["fuel_carriers"],
                   chp_allocation=config["price"]["chp_fuel_allocation"])  # cost_scope electricity_fuel
-ENERGY_REFERENCE = config["price"]["energy_reference_ct_per_kwh"]  # p_ref of cost_scope energy (null = ElCom)
+ENERGY_REFERENCE = dict(reference=config["price"]["energy_reference_ct_per_kwh"],  # cost_scope energy: p_ref and tau + g
+                        surcharge=config["price"]["energy_surcharge_ct_per_kwh"])  # (null = ElCom electricity values)
 SENSITIVITY = config["sensitivity"]
 FIGURE_SENSITIVITY = "fig6_p_rank1_vs_reference_price_national"  # created by src/make_graphics.fig_reference_price_sensitivity
 SENSITIVITY_YEARS = sorted(set(SENSITIVITY["base_years"]) | {REFERENCE_YEAR})

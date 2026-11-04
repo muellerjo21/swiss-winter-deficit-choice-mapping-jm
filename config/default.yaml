@@ -28,10 +28,21 @@ price:
     # reference price is energy_reference_ct_per_kwh. Taxes/levies and grid usage are the ElCom electricity values in
     # all cases (for energy still to be checked).
     cost_scope: total
-    # Reference price p_ref for cost_scope energy (CHF cents = Rp. per kWh of final energy), the same in every region.
-    # Placeholder without a confirmed value: null = the ElCom electricity reference (national and regional medians)
-    # as first assumption.
-    energy_reference_ct_per_kwh: null
+    # Reference price p_ref for cost_scope energy (CHF cents = Rp. per kWh of final energy), the same in every region;
+    # null = the ElCom electricity reference. 16.94 = (a) national average 2025: final consumer expenditure for energy
+    # 32.824 bn CHF (nominal, provisional; excl. aviation fuel) / final energy consumption excl. aviation fuel
+    # 697'690 TJ = 193.80 TWh (777'870 - 80'180 TJ), BFE Schweizerische Gesamtenergiestatistik 2025, tables T42 and
+    # T01 (https://pubdb.bfe.admin.ch/de/publication/download/7519, retrieved 4 Nov 2026). Carriers without expenditure
+    # (ambient heat, solar heat, biogas, industrial waste) count with 0. Comparison (b) households 2025, electricity and
+    # heat only: 15.82 Rp./kWh (T17a consumption; electricity 29.9 and gas 15.0 Rp./kWh from T37, heating oil, wood
+    # and district heat at the T42/T01 averages); household mobility is not reported separately.
+    energy_reference_ct_per_kwh: 16.94
+    # Taxes/levies + grid usage tau + g for cost_scope energy (Rp. per kWh of final energy), replacing the ElCom
+    # electricity values; null = the ElCom electricity values. 4.88 = estimate: ElCom tau + g of electricity 2025
+    # (H4, 16.30 Rp./kWh) x electricity share of final energy excl. aviation (57.97 / 193.80 TWh, GEST 2025 T01).
+    # Lower bound: mineral oil tax and CO2 levy on fuels are not included (no open data source found), and the H4
+    # household value overstates tau + g of large consumers.
+    energy_surcharge_ct_per_kwh: 4.88
     # Every Swiss technology with a cost in the result files belongs to exactly one group (checked when loading);
     # ac_transmission stands for all ac_transmission:<region> links.
     cost_groups:

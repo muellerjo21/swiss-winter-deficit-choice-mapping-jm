@@ -817,20 +817,31 @@ def load_scenario_final_energy(nc_path: str) -> dict:
     return out
 
 
-def scope_reference(ref: dict, cost_scope: str, energy_reference: float = None) -> dict:
-    """ElCom reference values for the price formula: with cost_scope energy and a number for
-    price.energy_reference_ct_per_kwh, the reference price total_rp_kwh is that number (taxes/levies and grid usage
-    stay the electricity values); otherwise unchanged (null = ElCom electricity reference as first assumption)."""
-    if cost_scope != "energy" or energy_reference is None:
+def scope_reference(ref: dict, cost_scope: str, energy_reference: dict = None) -> dict:
+    """ElCom reference values for the price formula. With cost_scope energy, energy_reference = {"reference": p_ref,
+    "surcharge": tau + g} (price.energy_reference_ct_per_kwh, price.energy_surcharge_ct_per_kwh): a number replaces the
+    reference price total_rp_kwh, or taxes/levies + grid usage as one value (taxes_levies_rp_kwh = surcharge, grid usage
+    0); null keeps the ElCom electricity values (first assumption). Other cost scopes: unchanged."""
+    if cost_scope != "energy" or not energy_reference:
         return ref
-    return {**ref, "total_rp_kwh": float(energy_reference)}
+    out = dict(ref)
+    if energy_reference.get("reference") is not None:
+        out["total_rp_kwh"] = float(energy_reference["reference"])
+    if energy_reference.get("surcharge") is not None:
+        out["taxes_levies_rp_kwh"], out["netznutzung_rp_kwh"] = float(energy_reference["surcharge"]), 0.0
+    return out
 
 
-def scope_reference_table(elcom: pd.DataFrame, cost_scope: str, energy_reference: float = None) -> pd.DataFrame:
-    """scope_reference for the regional ElCom table (index region): the same reference price in every region."""
-    if cost_scope != "energy" or energy_reference is None:
+def scope_reference_table(elcom: pd.DataFrame, cost_scope: str, energy_reference: dict = None) -> pd.DataFrame:
+    """scope_reference for the regional ElCom table (index region): the same values in every region."""
+    if cost_scope != "energy" or not energy_reference:
         return elcom
-    return elcom.assign(total_rp_kwh=float(energy_reference))
+    out = elcom.copy()
+    if energy_reference.get("reference") is not None:
+        out["total_rp_kwh"] = float(energy_reference["reference"])
+    if energy_reference.get("surcharge") is not None:
+        out["taxes_levies_rp_kwh"], out["netznutzung_rp_kwh"] = float(energy_reference["surcharge"]), 0.0
+    return out
 
 
 def load_scenario_cost_and_demand(nc_path: str, cost_scale: float = 1.0, cost_scope: str = "total",
