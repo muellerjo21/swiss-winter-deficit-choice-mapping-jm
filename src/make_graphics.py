@@ -751,6 +751,61 @@ def make_all(attrs: pd.DataFrame, rankings: pd.DataFrame, fs: FigureSettings, mo
 
 
 # ---------------------------------------------------------------------------
+# Weather years (sensitivity.weather_years)
+# ---------------------------------------------------------------------------
+def fig_rank_by_weather_year(summary: pd.DataFrame, years: list, fs: FigureSettings, out_dir: Path = GRAPHICS_DIR,
+                             name: str = "fig11_rank_by_weather_year", formats=("png", "pdf", "svg")) -> None:
+    """Rank (posterior-mean utility, Switzerland) per weather year: (A) over the scenarios with a result file in that
+    year, (B) over the scenarios available in every weather year. A scenario missing in a year has no point there;
+    a dashed line bridges the gap. Names at the first year (all scenarios have a run there), the rank of the last year
+    on the right; number above a rank-1 point = its P(rank 1)."""
+    fig, axes = plt.subplots(1, 2, figsize=(15, 7.2), gridspec_kw={"wspace": 0.55})
+    for ax, scenario_set, title in [(axes[0], "all", "(A) All scenarios of each weather year"),
+                                    (axes[1], "common", "(B) Scenarios available in all weather years")]:
+        t = summary[(summary["scenario_set"] == scenario_set) & (summary["group"] == "national")]
+        ranks = t.pivot(index="scenario_id", columns="weather_year", values="rank").reindex(columns=years)
+        p1 = t.pivot(index="scenario_id", columns="weather_year", values="p_rank1").reindex(columns=years)
+        order = [s for s in fs.order if s in ranks.index] + [s for s in ranks.index if s not in fs.order]
+        for s in order:
+            color = fs.color(s)
+            lw, z = (2.4, 3) if s in fs.highlight else (1.3, 2)
+            row = ranks.loc[s]
+            present = [(i, int(row[y])) for i, y in enumerate(years) if pd.notna(row[y])]
+            for (i0, r0), (i1, r1) in zip(present, present[1:]):
+                ax.plot([i0, i1], [r0, r1], color=color, lw=lw, zorder=z, ls="-" if i1 - i0 == 1 else "--",
+                        solid_capstyle="round")
+            for i, r in present:
+                ax.plot(i, r, "o", color=color, markersize=7, markeredgecolor="white", markeredgewidth=1.5, zorder=z + 1)
+                if r == 1:
+                    ax.text(i, r - 0.35, f"{p1.loc[s, years[i]]:.2f}", ha="center", va="bottom", fontsize=8.5,
+                            color=TEXT_SECONDARY)
+            missing = [str(y) for y in years if pd.isna(row[y])]
+            text = dict(va="center", fontsize=9, color=TEXT_PRIMARY if s in fs.highlight else TEXT_SECONDARY)
+            i_first, r_first = present[0]
+            ax.text(i_first - 0.12, r_first, display_name(s) + (f" (no run {', '.join(missing)})" if missing else ""),
+                    ha="right", **text)
+            if pd.notna(row[years[-1]]):
+                ax.text(len(years) - 1 + 0.12, int(row[years[-1]]), str(int(row[years[-1]])), ha="left", **text)
+        n = int(ranks.max().max())
+        ax.set_ylim(n + 0.6, 0.2)
+        ax.set_xlim(-0.15, len(years) - 1 + 0.35)
+        ax.set_xticks(range(len(years)))
+        ax.set_xticklabels([str(y) for y in years], fontsize=11, color=TEXT_PRIMARY)
+        ax.tick_params(axis="x", length=0, pad=8)
+        ax.xaxis.set_ticks_position("top")
+        ax.set_yticks([])
+        for side in ["left", "bottom", "right"]:
+            ax.spines[side].set_visible(False)
+        ax.set_title(title, loc="right", fontweight="bold", pad=30)
+    fig.text(0.5, 1.0, "Rank in Switzerland (posterior-mean utility) per weather year", ha="center", fontsize=12)
+    footnote(fig, "Calliope runs of Mellot et al. (2024) with the weather of 2016 (main analysis), 2017 and 2018; "
+             "reference prices, population and EUR/CHF are the same in every year.\nDashed: no run for the year in "
+             "between. Number above a rank-1 point: its P(rank 1). The ranks in (A) are over a different set of "
+             "scenarios in each year.", fs, y=0.0)
+    save(fig, name + fs.suffix, out_dir, formats)
+
+
+# ---------------------------------------------------------------------------
 # Pairwise choice probability matrix (as in Tröndle et al. 2025, Fig. 2/4; src/pairwise.py)
 # ---------------------------------------------------------------------------
 def figure_settings(analysis: str, params, cost: pd.Series = None) -> FigureSettings:

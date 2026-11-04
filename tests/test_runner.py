@@ -120,6 +120,30 @@ def _create_config_plugin(snakemake):
             return pd.read_csv(snakemake.input.power_fuel_cost)
 
         @pytest.fixture()
+        def weather_summary(self):
+            return pd.read_csv(snakemake.input.weather_summary)
+
+        @pytest.fixture()
+        def weather_missing(self):
+            return pd.read_csv(snakemake.input.weather_missing)
+
+        @pytest.fixture()
+        def weather_rankings_main(self):
+            return pd.read_csv(snakemake.input.weather_rankings_main)
+
+        @pytest.fixture()
+        def weather_years(self):
+            return list(snakemake.params.weather_years)
+
+        @pytest.fixture()
+        def weather_scenarios(self):
+            return {int(y): list(s) for y, s in snakemake.params.weather_scenarios.items()}
+
+        @pytest.fixture()
+        def common_scenarios(self):
+            return list(snakemake.params.common_scenarios)
+
+        @pytest.fixture()
         def final_energy(self):
             return pd.read_csv(snakemake.input.final_energy).set_index("scenario_id")
 

@@ -6,7 +6,27 @@ from pathlib import Path
 configfile: "config/default.yaml"
 min_version("9.6")
 
-SCENARIOS = config["scenarios"]  # scenario ID -> .nc file name
+WEATHER_YEAR = config["weather_year"]  # weather year of the main analysis (2016 = main result)
+WEATHER_YEARS = config["sensitivity"]["weather_years"]  # weather years compared (rule weather_year_rankings)
+
+
+def scenario_files(year):
+    """Scenario ID -> result file of the weather year; scenarios without a run for that year are skipped."""
+    files = {s: f.get(year) or f.get(str(year)) for s, f in config["scenarios"].items()}
+    missing = [s for s, f in files.items() if not f]
+    if missing:
+        print(f"Weather year {year}: no result file for {', '.join(missing)}; skipped.", file=sys.stderr)
+    return {s: f for s, f in files.items() if f}
+
+
+def scenario_dir(year):
+    return Path(config["data"]["scenario_dir"].format(weather_year=year))
+
+
+SCENARIOS = scenario_files(WEATHER_YEAR)  # scenario ID -> .nc file name (main analysis)
+SCENARIO_DIR = scenario_dir(WEATHER_YEAR)
+SCENARIOS_BY_YEAR = {y: SCENARIOS if y == WEATHER_YEAR else scenario_files(y) for y in WEATHER_YEARS}
+COMMON_SCENARIOS = [s for s in config["scenarios"] if all(s in SCENARIOS_BY_YEAR[y] for y in WEATHER_YEARS)]
 FIGURES = [  # national aggregate (appendix), created by src/make_graphics.make_all
     "fig1_rank_choice_vs_cost_national", "fig2_utility_forest_national", "fig3_utility_contributions_national",
     "fig4_rank_de_vs_fr_national", "fig5_cost_vs_preference_national", "figA1_utility_contributions_absolute_national",
@@ -62,6 +82,8 @@ REGIONAL_OUTPUTS = [  # part of rule all only with spatial.resolution: regional
     "build/data/sensitivity/reference_price_curve_regional.csv",
     "build/data/sensitivity/reference_price_rank1_switches_regional.csv",
     "build/data/sensitivity/cost_scale_curve_regional.csv",
+    "build/data/weather/weather_year_rankings.csv",
+    *expand(FIGURE_PATH, figure="fig11_rank_by_weather_year_regional", fmt=["png", "pdf"]),
     *expand(FIGURE_PATH, figure=FIGURES_REGIONAL, fmt=FIGURE_FORMATS),
     *expand(FIGURE_PATH, figure=[FIGURE_PAIRWISE, *FIGURES_MAPS], fmt=PAIRWISE_FORMATS),
 ]
@@ -143,7 +165,7 @@ rule scenario_attributes:
         power_fuel = POWER_FUEL,
         energy_reference = ENERGY_REFERENCE
     input:
-        nc = lambda wildcards: Path(config["data"]["scenario_dir"]) / SCENARIOS[wildcards.scenario],
+        nc = lambda wildcards: SCENARIO_DIR / SCENARIOS[wildcards.scenario],
         canton_area = config["data"]["canton_area"],
         eur_chf = f"build/data/reference/eur_chf_{REFERENCE_YEAR}.json",
         elcom = f"build/data/reference/elcom_price_{REFERENCE_YEAR}.json"
@@ -185,7 +207,7 @@ rule import_shares:
         definition = config["imports"]["definition"],
         denominator = config["imports"]["denominator"]
     input:
-        nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS]
+        nc = [SCENARIO_DIR / SCENARIOS[s] for s in SCENARIOS]
     output: "build/data/regional/import_shares_regional.csv"
     conda: "envs/default.yaml"
     script: "scripts/import_shares.py"
@@ -204,7 +226,7 @@ rule regional_attributes:
         energy_reference = ENERGY_REFERENCE
     input:
         imports = rules.import_shares.output[0],
-        nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS],
+        nc = [SCENARIO_DIR / SCENARIOS[s] for s in SCENARIOS],
         canton_area = config["data"]["canton_area"],
         national = rules.compute_attributes.output[0],
         prices = f"build/data/reference/elcom_municipal_{REFERENCE_YEAR}.csv",
@@ -270,7 +292,7 @@ rule regional_reference_price:
         population = rules.regional_attributes.output.population,
         elcom = rules.regional_attributes.output.elcom,
         eur_chf = f"build/data/reference/eur_chf_{REFERENCE_YEAR}.json",
-        nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS],
+        nc = [SCENARIO_DIR / SCENARIOS[s] for s in SCENARIOS],
         choice_model = config["data"]["choice_model"]
     output:
         curve = "build/data/sensitivity/reference_price_curve_regional.csv",
@@ -302,7 +324,7 @@ rule cost_scale_regional:
         population = rules.regional_attributes.output.population,
         elcom = rules.regional_attributes.output.elcom,
         eur_chf = f"build/data/reference/eur_chf_{REFERENCE_YEAR}.json",
-        nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS],
+        nc = [SCENARIO_DIR / SCENARIOS[s] for s in SCENARIOS],
         choice_model = config["data"]["choice_model"]
     output:
         curve = "build/data/sensitivity/cost_scale_curve_regional.csv",
@@ -323,7 +345,7 @@ rule cost_groups:
         diesel_techs = config["imports"]["diesel_techs"],
         cost_scale = COST_SCALE
     input:
-        nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS],
+        nc = [SCENARIO_DIR / SCENARIOS[s] for s in SCENARIOS],
         elcom = f"build/data/reference/elcom_price_{REFERENCE_YEAR}.json",
         eur_chf = f"build/data/reference/eur_chf_{REFERENCE_YEAR}.json"
     output:
@@ -333,6 +355,74 @@ rule cost_groups:
         final_energy = "build/data/final_energy.csv"
     conda: "envs/default.yaml"
     script: "scripts/cost_groups.py"
+
+
+rule weather_year_rankings:
+    message: "Regional analysis for weather year {wildcards.year} (scenarios with a result file for that year)."
+    params:
+        year = lambda wildcards: int(wildcards.year),
+        scenario_ids = lambda wildcards: list(SCENARIOS_BY_YEAR[int(wildcards.year)]),
+        common_scenarios = COMMON_SCENARIOS,
+        land_definition = config["land"]["definition"],
+        cost_scale = COST_SCALE,
+        cost_scope = COST_SCOPE,
+        cost_groups = COST_GROUPS,
+        power_fuel = POWER_FUEL,
+        energy_reference = ENERGY_REFERENCE,
+        import_definition = config["imports"]["definition"],
+        import_denominator = config["imports"]["denominator"],
+        fuel_techs = config["imports"]["fuel_techs"],
+        diesel_techs = config["imports"]["diesel_techs"],
+        exclude = EXCLUDE,
+        coefficient_overrides = COEFFICIENT_OVERRIDES,
+        mobile_share = config["utility"]["mobile_share"],
+        credible_interval = config["utility"]["credible_interval"],
+        interval_type = config["utility"]["interval_type"]
+    input:
+        nc = lambda wildcards: [scenario_dir(int(wildcards.year)) / f for f in SCENARIOS_BY_YEAR[int(wildcards.year)].values()],
+        canton_area = config["data"]["canton_area"],
+        elcom_national = f"build/data/reference/elcom_price_{REFERENCE_YEAR}.json",
+        eur_chf = f"build/data/reference/eur_chf_{REFERENCE_YEAR}.json",
+        elcom_regional = rules.regional_attributes.output.elcom,
+        population = rules.regional_attributes.output.population,
+        choice_model = config["data"]["choice_model"]
+    output:
+        national = "build/data/weather/{year}/scenario_attributes_summary.csv",
+        attributes = "build/data/weather/{year}/regional_attributes.csv",
+        rankings = "build/data/weather/{year}/utility_rankings_regional.csv",
+        rankings_common = "build/data/weather/{year}/utility_rankings_common_regional.csv"
+    wildcard_constraints:
+        year = "|".join(str(y) for y in WEATHER_YEARS)
+    conda: "envs/default.yaml"
+    script: "scripts/weather_year_rankings.py"
+
+
+rule weather_year_summary:
+    message: "Compare the weather years {params.weather_years}."
+    params:
+        weather_years = WEATHER_YEARS,
+        scenarios = config["scenarios"]
+    input:
+        rankings = expand("build/data/weather/{year}/utility_rankings_regional.csv", year=WEATHER_YEARS),
+        rankings_common = expand("build/data/weather/{year}/utility_rankings_common_regional.csv", year=WEATHER_YEARS)
+    output:
+        summary = "build/data/weather/weather_year_rankings.csv",
+        missing = "build/data/weather/missing_runs.csv"
+    conda: "envs/default.yaml"
+    script: "scripts/weather_year_summary.py"
+
+
+rule plot_weather_years:
+    message: "Create the figure of the rank per weather year."
+    params:
+        weather_years = WEATHER_YEARS,
+        formats = ["png", "pdf"],
+        **{**FIGURE_PARAMS, "scenario_ids": list(config["scenarios"])}
+    input:
+        summary = rules.weather_year_summary.output.summary
+    output: expand(FIGURE_PATH, figure="fig11_rank_by_weather_year_regional", fmt=["png", "pdf"])
+    conda: "envs/default.yaml"
+    script: "scripts/make_weather_year_plot.py"
 
 
 rule beta_real_units:
@@ -478,7 +568,7 @@ rule sensitivity_reference_price:
     input:
         attributes = rules.compute_attributes.output[0],
         choice_model = config["data"]["choice_model"],
-        nc = [Path(config["data"]["scenario_dir"]) / SCENARIOS[s] for s in SCENARIOS],
+        nc = [SCENARIO_DIR / SCENARIOS[s] for s in SCENARIOS],
         elcom = expand("build/data/reference/elcom_price_{year}.json", year=SENSITIVITY_YEARS),
         eur_chf = expand("build/data/reference/eur_chf_{year}.json", year=SENSITIVITY_YEARS)
     output:
@@ -608,6 +698,9 @@ rule test:
         cost_scale = COST_SCALE,
         cost_scope = COST_SCOPE,
         energy_reference = ENERGY_REFERENCE,
+        weather_years = WEATHER_YEARS,
+        weather_scenarios = {y: list(SCENARIOS_BY_YEAR[y]) for y in WEATHER_YEARS},
+        common_scenarios = COMMON_SCENARIOS,
         import_denominator = config["imports"]["denominator"],
         cost_scale_factors = SENSITIVITY["cost_scale_factors"],
         cost_scale_conversions = SENSITIVITY["cost_scale_conversions"],
@@ -648,6 +741,9 @@ rule test:
         sensitivity_switches_regional = rules.regional_reference_price.output.switches,
         cost_scale_curve_regional = rules.cost_scale_regional.output.curve,
         cost_scale_switches_regional = rules.cost_scale_regional.output.switches,
+        weather_summary = rules.weather_year_summary.output.summary,
+        weather_missing = rules.weather_year_summary.output.missing,
+        weather_rankings_main = f"build/data/weather/{WEATHER_YEAR}/utility_rankings_regional.csv",
         cost_groups = rules.cost_groups.output.groups,
         cost_by_technology = rules.cost_groups.output.technologies,
         power_fuel_cost = rules.cost_groups.output.power_fuel,

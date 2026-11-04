@@ -6,9 +6,8 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(snakemake.scriptdir).parent / "src"))
-from load_data import load_canton_area, load_scenario_cost_and_demand, scope_reference_table
-from regional import (municipality_regions, regional_attributes, regional_balance_import_share, regional_elcom_reference,
-                      regional_population)
+from load_data import load_canton_area, scope_reference_table
+from regional import municipality_regions, regional_attribute_table, regional_elcom_reference, regional_population
 
 
 def attributes(paths_to_nc: list, scenario_ids: list, path_to_canton_area: str, path_to_national: str,
@@ -24,15 +23,11 @@ def attributes(paths_to_nc: list, scenario_ids: list, path_to_canton_area: str, 
     eur_to_chf = json.loads(Path(path_to_eur_chf).read_text())["eur_to_chf"]
     imports = pd.read_csv(path_to_imports).set_index("scenario_id")
     price_reference = scope_reference_table(elcom, cost_scope, energy_reference)  # elcom_by_region.csv stays ElCom
-    frames = []
-    for s, nc in zip(scenario_ids, paths_to_nc):
-        cost_and_demand = load_scenario_cost_and_demand(nc, cost_scale, cost_scope, cost_groups, power_fuel)
-        a = regional_attributes(nc, s, area, national.loc[s], *cost_and_demand, price_reference, eur_to_chf)
-        if import_definition != "electricity":  # default keeps the national import_share unchanged
-            a["import_share"] = imports.loc[s, f"import_share_{import_definition}"]
-        a["import_share_balance"] = a["region"].map(regional_balance_import_share(nc))
-        frames.append(a)
-    pd.concat(frames, ignore_index=True).to_csv(path_to_attributes, index=False)
+    # default (electricity) keeps the national import_share unchanged
+    import_share = None if import_definition == "electricity" else imports[f"import_share_{import_definition}"].to_dict()
+    cost_options = dict(cost_scale=cost_scale, cost_scope=cost_scope, cost_groups=cost_groups, power_fuel=power_fuel)
+    regional_attribute_table(dict(zip(scenario_ids, paths_to_nc)), area, national, price_reference, eur_to_chf,
+                             cost_options, import_share).to_csv(path_to_attributes, index=False)
     elcom.rename_axis("region").to_csv(path_to_elcom)
     population.rename_axis("region").to_csv(path_to_population)
 

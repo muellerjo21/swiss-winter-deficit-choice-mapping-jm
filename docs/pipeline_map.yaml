@@ -89,6 +89,23 @@ rules:
       electricity_fuel addiert sie (Brennstoff zu Durchschnittskosten des Modells, WKK nach Stromanteil). energy teilt
       alle Kosten durch die Endenergie (Strom, Wärme, Verkehr); der Referenzpreis dafür
       (price.energy_reference_ct_per_kwh) ist noch offen, ebenso ob Abgaben und Netz für die Gesamtenergie gelten.
+  weather_year_rankings:
+    group: util
+    text: >-
+      Rechnet die regionale Analyse für ein Wetterjahr (2016, 2017, 2018) mit allen Szenarien, für die Mellot et al.
+      einen Lauf veröffentlicht haben, und einmal nur mit den Szenarien, die es in allen Jahren gibt.
+      Referenzpreise, Bevölkerung und EUR/CHF sind in allen Jahren gleich.
+    open: >-
+      Es fehlen Läufe (Alpine PV und Roof PV 2017, S/CCGT ohne H2 und Baseline 2018, EP2050+ 2017 und 2018); die
+      Ränge der Jahre beruhen deshalb auf verschiedenen Szenariomengen.
+  weather_year_summary:
+    group: util
+    text: >-
+      Fasst die Wetterjahre in einer Tabelle zusammen (Rang, P(Rang 1), Utility mit {interval}) und listet die
+      fehlenden Läufe.
+  plot_weather_years:
+    group: out
+    text: Abbildung Rang pro Wetterjahr, über alle Szenarien eines Jahres und über die gemeinsamen Szenarien.
   beta_real_units:
     group: check
     text: >-

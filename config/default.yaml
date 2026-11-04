@@ -4,9 +4,15 @@
 # ElCom reference price and the EUR/CHF rate (annual mean of the daily ECB rates of that year).
 
 data:
-    scenario_dir: data/raw/scenario_data
+    # Calliope results of Mellot et al. (2024) per weather year: data/raw/<weather_year>/ (copies of the Zenodo files;
+    # the original download stays in data/raw/scenario_data/)
+    scenario_dir: data/raw/{weather_year}
     canton_area: data/raw/flache_der_schweiz_nach_kantonen_in_quadratkilometern.csv
     choice_model: data/raw/choice-model-jan-2026.nc
+
+# Weather year of the main analysis (Calliope runs with the weather of 2016, 2017 or 2018); the other years are
+# compared in the sensitivity sensitivity.weather_years. 2016 = main result.
+weather_year: 2016
 
 price:
     # Base year for the ElCom reference price (yearly tariffs) and the EUR/CHF rate (annual mean of
@@ -164,6 +170,9 @@ sensitivity:
             # (the latest base with the 2015 average); release 3 Nov 2026, retrieved 3 Nov 2026
             lik_from: 97.9
             lik_to: 105.4
+    # Weather years compared (rule weather_year_rankings): every scenario with a result file for the year; the
+    # comparison over all years uses the scenarios available in all of them.
+    weather_years: [2016, 2017, 2018]
     cost_scale_search:
         start: 0.5
         stop: 2.0
@@ -228,18 +237,58 @@ maps:
 # Scenario ID (wildcard) -> .nc file name in data.scenario_dir. Explicit mapping instead of a glob,
 # because the file names contain commas.
 scenarios:
-    baseline: "barrier_baseline,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
-    baseline_no_self_sufficiency_result_4H: "barrier_baseline_no_self_sufficiency_result_4H.nc"
-    policy_alpine_pv: "barrier_policy_alpine_pv,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
-    policy_chp: "barrier_policy_chp,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
-    policy_h2_imports_only: "barrier_policy_h2_imports_only,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
-    policy_mix: "barrier_policy_mix,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
-    policy_remix: "barrier_policy_remix,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
-    policy_roof_pv: "barrier_policy_roof_pv,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
-    policy_sccgt_daccs: "barrier_policy_sccgt_daccs,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
-    policy_sccgt_no_h2: "barrier_policy_sccgt_no_h2,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
-    policy_sccgt_plus_h2: "barrier_policy_sccgt_plus_h2,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
-    policy_wind_x2: "barrier_policy_wind_x2,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+    # scenario ID -> {weather year: result file in data.scenario_dir, or null if Mellot et al. did not publish that
+    # run; missing runs are skipped with a message}. 2017 baseline: the file ends in _no_self_sufficiency, but like
+    # the 2016 baseline it has the neighbours fixed and the winter constraint (overrides), so it is the baseline;
+    # EP2050+ without fixed neighbours (baseline_no_self_sufficiency) exists for 2016 only.
+    baseline:
+        2016: "barrier_baseline,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+        2017: "barrier_baseline,sensitivity_weather_2017,neighbours_fixed_by_EP2050_baseline_2017_no_self_sufficiency_result_4H.nc"
+        2018: null
+    baseline_no_self_sufficiency_result_4H:
+        2016: "barrier_baseline_no_self_sufficiency_result_4H.nc"
+        2017: null
+        2018: null
+    policy_alpine_pv:
+        2016: "barrier_policy_alpine_pv,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+        2017: null
+        2018: "barrier_policy_alpine_pv,sensitivity_weather_2018,neighbours_fixed_by_EP2050_baseline_2018_result_4H.nc"
+    policy_chp:
+        2016: "barrier_policy_chp,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+        2017: "barrier_policy_chp,sensitivity_weather_2017,neighbours_fixed_by_EP2050_baseline_2017_result_4H.nc"
+        2018: "barrier_policy_chp,sensitivity_weather_2018,neighbours_fixed_by_EP2050_baseline_2018_result_4H.nc"
+    policy_h2_imports_only:
+        2016: "barrier_policy_h2_imports_only,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+        2017: "barrier_policy_h2_imports_only,sensitivity_weather_2017,neighbours_fixed_by_EP2050_baseline_2017_result_4H.nc"
+        2018: "barrier_policy_h2_imports_only,sensitivity_weather_2018,neighbours_fixed_by_EP2050_baseline_2018_result_4H.nc"
+    policy_mix:
+        2016: "barrier_policy_mix,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+        2017: "barrier_policy_mix,sensitivity_weather_2017,neighbours_fixed_by_EP2050_baseline_2017_result_4H.nc"
+        2018: "barrier_policy_mix,sensitivity_weather_2018,neighbours_fixed_by_EP2050_baseline_2018_result_4H.nc"
+    policy_remix:
+        2016: "barrier_policy_remix,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+        2017: "barrier_policy_remix,sensitivity_weather_2017,neighbours_fixed_by_EP2050_baseline_2017_result_4H.nc"
+        2018: "barrier_policy_remix,sensitivity_weather_2018,neighbours_fixed_by_EP2050_baseline_2018_result_4H.nc"
+    policy_roof_pv:
+        2016: "barrier_policy_roof_pv,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+        2017: null
+        2018: "barrier_policy_roof_pv,sensitivity_weather_2018,neighbours_fixed_by_EP2050_baseline_2018_result_4H.nc"
+    policy_sccgt_daccs:
+        2016: "barrier_policy_sccgt_daccs,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+        2017: "barrier_policy_sccgt_daccs,sensitivity_weather_2017,neighbours_fixed_by_EP2050_baseline_2017_result_4H.nc"
+        2018: "barrier_policy_sccgt_daccs,sensitivity_weather_2018,neighbours_fixed_by_EP2050_baseline_2018_result_4H.nc"
+    policy_sccgt_no_h2:
+        2016: "barrier_policy_sccgt_no_h2,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+        2017: "barrier_policy_sccgt_no_h2,sensitivity_weather_2017,neighbours_fixed_by_EP2050_baseline_2017_result_4H.nc"
+        2018: null
+    policy_sccgt_plus_h2:
+        2016: "barrier_policy_sccgt_plus_h2,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+        2017: "barrier_policy_sccgt_plus_h2,sensitivity_weather_2017,neighbours_fixed_by_EP2050_baseline_2017_result_4H.nc"
+        2018: "barrier_policy_sccgt_plus_h2,sensitivity_weather_2018,neighbours_fixed_by_EP2050_baseline_2018_result_4H.nc"
+    policy_wind_x2:
+        2016: "barrier_policy_wind_x2,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
+        2017: "barrier_policy_wind_x2,sensitivity_weather_2017,neighbours_fixed_by_EP2050_baseline_2017_result_4H.nc"
+        2018: "barrier_policy_wind_x2,sensitivity_weather_2018,neighbours_fixed_by_EP2050_baseline_2018_result_4H.nc"
 
 # Frozen, validated reference results for the rule "test"
 reference:

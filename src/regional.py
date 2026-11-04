@@ -100,6 +100,25 @@ def regional_attributes(nc_path: str, scenario_id: str, area: dict, national: pd
     return pd.DataFrame(rows)
 
 
+def regional_attribute_table(nc_by_scenario: dict, area: dict, national: pd.DataFrame, price_reference: pd.DataFrame,
+                             eur_to_chf: float, cost_options: dict, import_share: dict = None) -> pd.DataFrame:
+    """Regional attributes of several scenarios (rows: scenario x region): regional_attributes of each scenario with
+    its system cost and demand (load_data.load_scenario_cost_and_demand with cost_options: cost_scale, cost_scope,
+    cost_groups, power_fuel); import_share (scenario -> share) replaces the national import share (imports.definition
+    other than electricity); import_share_balance = regional balance sensitivity. national: national attributes
+    (index scenario_id); price_reference: regional ElCom values for the price formula."""
+    from load_data import load_scenario_cost_and_demand
+    frames = []
+    for s, nc in nc_by_scenario.items():
+        cost_and_demand = load_scenario_cost_and_demand(nc, **cost_options)
+        a = regional_attributes(nc, s, area, national.loc[s], *cost_and_demand, price_reference, eur_to_chf)
+        if import_share is not None:
+            a["import_share"] = import_share[s]
+        a["import_share_balance"] = a["region"].map(regional_balance_import_share(nc))
+        frames.append(a)
+    return pd.concat(frames, ignore_index=True)
+
+
 def regional_balance_import_share(nc_path: str) -> pd.Series:
     """Sensitivity: import share from the region's own electricity balance,
     max(0, consumption - generation) / consumption, with generation = electricity output of all
