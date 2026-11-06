@@ -238,20 +238,20 @@ maps:
 # because the file names contain commas.
 scenarios:
     # scenario ID -> {weather year: result file in data.scenario_dir, or null if Mellot et al. did not publish that
-    # run; missing runs are skipped with a message}. 2017 baseline: the file ends in _no_self_sufficiency, but like
-    # the 2016 baseline it has the neighbours fixed and the winter constraint (overrides), so it is the baseline;
-    # EP2050+ without fixed neighbours (baseline_no_self_sufficiency) exists for 2016 only.
+    # run; missing runs are skipped with a message}. 2017/2018 baseline: the files end in _no_self_sufficiency, but
+    # like the 2016 baseline they have the neighbours fixed and the winter constraint (overrides), so they are the
+    # baseline; EP2050+ without fixed neighbours (baseline_no_self_sufficiency) exists for 2016 and 2018.
     baseline:
         2016: "barrier_baseline,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
         2017: "barrier_baseline,sensitivity_weather_2017,neighbours_fixed_by_EP2050_baseline_2017_no_self_sufficiency_result_4H.nc"
-        2018: null
+        2018: "barrier_baseline,sensitivity_weather_2018,neighbours_fixed_by_EP2050_baseline_2018_no_self_sufficiency_result_4H.nc"
     baseline_no_self_sufficiency_result_4H:
         2016: "barrier_baseline_no_self_sufficiency_result_4H.nc"
         2017: null
-        2018: null
+        2018: "barrier_baseline,sensitivity_weather_2018_no_self_sufficiency_result_4H.nc"
     policy_alpine_pv:
         2016: "barrier_policy_alpine_pv,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
-        2017: null
+        2017: "barrier_policy_alpine_pv,sensitivity_weather_2017,neighbours_fixed_by_EP2050_baseline_2017_result_4H.nc"
         2018: "barrier_policy_alpine_pv,sensitivity_weather_2018,neighbours_fixed_by_EP2050_baseline_2018_result_4H.nc"
     policy_chp:
         2016: "barrier_policy_chp,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
@@ -280,7 +280,7 @@ scenarios:
     policy_sccgt_no_h2:
         2016: "barrier_policy_sccgt_no_h2,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
         2017: "barrier_policy_sccgt_no_h2,sensitivity_weather_2017,neighbours_fixed_by_EP2050_baseline_2017_result_4H.nc"
-        2018: null
+        2018: "barrier_policy_sccgt_no_h2,sensitivity_weather_2018,neighbours_fixed_by_EP2050_baseline_2018_result_4H.nc"
     policy_sccgt_plus_h2:
         2016: "barrier_policy_sccgt_plus_h2,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
         2017: "barrier_policy_sccgt_plus_h2,sensitivity_weather_2017,neighbours_fixed_by_EP2050_baseline_2017_result_4H.nc"
