@@ -27,14 +27,15 @@ def fuel_power_gwh(nc_path: str, techs: list) -> float:
     return out
 
 
-def cost_groups(paths_to_nc, scenario_ids, groups, fuel_power_techs, power_fuel, energy_reference, fuel_techs,
+def cost_groups(paths_to_nc, scenario_ids, groups, fuel_power_techs, power_fuel, energy_reference, margin, fuel_techs,
                 diesel_techs, cost_scale, path_to_elcom, path_to_eur_chf, path_to_groups, path_to_technologies,
                 path_to_power_fuel, path_to_final_energy):
     elcom = json.loads(Path(path_to_elcom).read_text())
-    ref = {k: elcom[k] for k in ("total_rp_kwh", "taxes_levies_rp_kwh", "netznutzung_rp_kwh")}
+    ref = scope_reference({k: elcom[k] for k in ("total_rp_kwh", "taxes_levies_rp_kwh", "netznutzung_rp_kwh")},
+                          "total", energy_reference, margin)
     eur_to_chf = json.loads(Path(path_to_eur_chf).read_text())["eur_to_chf"]
     rows, techs, fuels, energy = [], [], [], []
-    energy_ref = scope_reference(ref, "energy", energy_reference)
+    energy_ref = scope_reference(ref, "energy", energy_reference, margin)
     for s, nc in zip(scenario_ids, paths_to_nc):
         by_tech = load_scenario_cost_by_technology(nc, groups).assign(scenario_id=s)
         techs.append(by_tech[["scenario_id", "tech", "group", "cost"]])
@@ -71,6 +72,6 @@ def cost_groups(paths_to_nc, scenario_ids, groups, fuel_power_techs, power_fuel,
 if __name__ == "__main__":
     p = snakemake.params
     cost_groups(list(snakemake.input.nc), p.scenario_ids, p.cost_groups, p.fuel_power_techs, p.power_fuel,
-                p.energy_reference, p.fuel_techs, p.diesel_techs, p.cost_scale, snakemake.input.elcom,
+                p.energy_reference, p.margin, p.fuel_techs, p.diesel_techs, p.cost_scale, snakemake.input.elcom,
                 snakemake.input.eur_chf, snakemake.output.groups, snakemake.output.technologies,
                 snakemake.output.power_fuel, snakemake.output.final_energy)

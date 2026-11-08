@@ -86,7 +86,7 @@ def regional_attributes(nc_path: str, scenario_id: str, area: dict, national: pd
     land = compute_land_from_capacity(capacity, area).groupby("canton")["land_use_km2"].sum()
     rows = []
     for region in sorted(capacity["canton"].unique()):
-        ref = elcom.loc[region, ["total_rp_kwh", "taxes_levies_rp_kwh", "netznutzung_rp_kwh"]].astype(float).to_dict()
+        ref = elcom.loc[region, ["total_rp_kwh", "taxes_levies_rp_kwh", "netznutzung_rp_kwh", "margin"]].astype(float).to_dict()
         rows.append({
             "scenario_id": scenario_id, "region": region, "language": CANTON_LANGUAGE.get(region),
             "transmission_change": 0.0,
@@ -215,7 +215,7 @@ def with_shifted_reference(attributes: pd.DataFrame, cost_and_demand: dict, elco
     """Attributes with price_change recomputed for all regional reference prices shifted by the same amount
     (Rp./kWh); taxes/levies and grid usage of the regions unchanged."""
     a = attributes.copy()
-    refs = {r: {**elcom.loc[r, ["taxes_levies_rp_kwh", "netznutzung_rp_kwh"]].astype(float).to_dict(),
+    refs = {r: {**elcom.loc[r, ["taxes_levies_rp_kwh", "netznutzung_rp_kwh", "margin"]].astype(float).to_dict(),
                 "total_rp_kwh": float(elcom.loc[r, "total_rp_kwh"]) + shift} for r in a["region"].unique()}
     a["price_change"] = [price_change_from_cost(*cost_and_demand[s], refs[r], eur_to_chf) for s, r in zip(a["scenario_id"], a["region"])]
     return a

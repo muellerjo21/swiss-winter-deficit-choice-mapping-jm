@@ -38,7 +38,7 @@ def weather_year(p, inp, out):
     eur_to_chf = json.loads(Path(inp.eur_chf).read_text())["eur_to_chf"]
     elcom = json.loads(Path(inp.elcom_national).read_text())
     elcom_ref = scope_reference({k: elcom[k] for k in ("total_rp_kwh", "taxes_levies_rp_kwh", "netznutzung_rp_kwh")},
-                                p.cost_scope, p.energy_reference)
+                                p.cost_scope, p.energy_reference, p.margin)
     cost_options = dict(cost_scale=p.cost_scale, cost_scope=p.cost_scope, cost_groups=p.cost_groups,
                         power_fuel=p.power_fuel)
     national = national_attributes(nc_by_scenario, area, elcom_ref, eur_to_chf, p.land_definition, cost_options)
@@ -48,7 +48,7 @@ def weather_year(p, inp, out):
         import_share = {s: import_quantities(nc, p.fuel_techs, p.diesel_techs, p.import_denominator)[
             f"import_share_{p.import_definition}"] for s, nc in nc_by_scenario.items()}
     price_reference = scope_reference_table(pd.read_csv(inp.elcom_regional).set_index("region"), p.cost_scope,
-                                            p.energy_reference)
+                                            p.energy_reference, p.margin)
     attributes = regional_attribute_table(nc_by_scenario, area, national.set_index("scenario_id"), price_reference,
                                           eur_to_chf, cost_options, import_share)
     attributes.assign(weather_year=p.year).to_csv(out.attributes, index=False)

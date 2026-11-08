@@ -1,6 +1,6 @@
-"""Import attribute definitions (rule import_shares, src/load_data.import_quantities): electricity only (main),
-+ natural gas, hydrogen and synthetic methane, + synthetic diesel. Annual sums at the Swiss locations divided by
-the electricity consumption, clipped to [0, 1]. Assumption of the fuel variants: 1 GWh fuel = 1 GWh electricity.
+"""Import attribute definitions (rule import_shares, src/load_data.import_quantities): electricity only,
++ natural gas, hydrogen and synthetic methane, + synthetic diesel (main). Annual sums at the Swiss locations divided by
+imports.denominator (electricity consumption or final energy), clipped to [0, 1]. Assumption of the fuel variants: 1 GWh fuel = 1 GWh electricity.
 
 Pytest fixtures are provided from within the test runner.
 """
@@ -11,7 +11,8 @@ DEFINITIONS = ["electricity", "electricity_fuels", "electricity_fuels_diesel"]
 EXACT_ATOL = 1e-9
 PERCENT_ATOL = 0.05 + 1e-9  # table values are rounded to 0.1 percentage points
 
-# Import attribute in % per scenario: (electricity, + fuels, + fuels + synthetic diesel), annual, clipped to [0, 100]
+# Import attribute in % of the electricity consumption per scenario: (electricity, + fuels, + fuels + synthetic diesel),
+# annual, clipped to [0, 100]
 EXPECTED_PERCENT = {
     "baseline": (12.4, 25.8, 34.4),
     "baseline_no_self_sufficiency_result_4H": (8.6, 20.1, 20.1),
@@ -31,10 +32,13 @@ VARIANTS = {"electricity_fuels": "import: electricity + fuels (year)",
 
 
 @pytest.mark.parametrize("scenario", sorted(EXPECTED_PERCENT))
-def test_import_shares_as_in_table(import_shares, scenario):
+def test_import_shares_as_in_table(import_shares, import_denominator, scenario):
     row = import_shares.set_index("scenario_id").loc[scenario]
+    # the table is over the electricity consumption; over the final energy the shares scale with consumption / final
+    # energy (the rounding error of the table values shrinks with it)
+    scale = 1.0 if import_denominator == "electricity" else row["consumption_gwh"] / row["final_energy_gwh"]
     for definition, expected in zip(DEFINITIONS, EXPECTED_PERCENT[scenario]):
-        assert abs(100 * row[f"import_share_{definition}"] - expected) < PERCENT_ATOL, definition
+        assert abs(100 * row[f"import_share_{definition}"] - expected * scale) < PERCENT_ATOL, definition
 
 
 def test_import_shares_regression(import_shares, reference_import_shares):

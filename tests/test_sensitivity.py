@@ -19,6 +19,14 @@ CURVE_KEYS = ["total_rp_kwh", "scenario_id", "region"]
 BASE_YEAR_KEYS = ["year", "scenario_id", "region"]
 
 
+def _max_abs_diff_or_zero(actual, expected) -> float:
+    """Largest difference of two aligned columns that may be empty (no rank-1 change) or NaN at the same places (no
+    crossing in the range)."""
+    assert (actual.isna().to_numpy() == expected.isna().to_numpy()).all()
+    diff = np.abs(actual.to_numpy(float) - expected.to_numpy(float))
+    return float(np.nanmax(diff)) if np.isfinite(diff).any() else 0.0
+
+
 def _aligned(actual, expected, keys):
     a, e = actual.set_index(keys).sort_index(), expected.set_index(keys).sort_index()
     assert list(a.index) == list(e.index)
@@ -40,7 +48,7 @@ def test_curve_values(sensitivity_curve, reference_sensitivity_curve):
 def test_crossings_regression(sensitivity_crossings, reference_sensitivity_crossings):
     a, e = sensitivity_crossings, reference_sensitivity_crossings
     assert list(a.columns) == list(e.columns) and list(a.index) == list(e.index)
-    assert np.abs(a["crossing_rp_kwh"] - e["crossing_rp_kwh"]).max() < CROSSING_ATOL
+    assert _max_abs_diff_or_zero(a["crossing_rp_kwh"], e["crossing_rp_kwh"]) < CROSSING_ATOL
     rank_cols = [c for c in a.columns if c.startswith("rank_")]
     assert (a[rank_cols] == e[rank_cols]).all().all()
 
@@ -69,6 +77,13 @@ def test_curve_reproduces_reference_rankings(sensitivity_curve, reference_rankin
 def test_crossing_in_range_and_ranks_swap(sensitivity_crossings, sensitivity_curve, tag):
     row = sensitivity_crossings.loc[tag]
     grid = sensitivity_curve[~sensitivity_curve["is_reference_year"]]
+    a, b = row["scenario_a"], row["scenario_b"]
+    if np.isnan(row["crossing_rp_kwh"]):
+        # no crossing in the range: the pair keeps its order at every grid point and at both ends
+        region = grid[grid["region"] == tag].pivot(index="total_rp_kwh", columns="scenario_id", values="rank")
+        assert len(set(np.sign(region[a] - region[b]))) == 1
+        assert np.sign(row["rank_a_below"] - row["rank_b_below"]) == np.sign(row["rank_a_above"] - row["rank_b_above"]) != 0
+        return
     assert grid["total_rp_kwh"].min() <= row["crossing_rp_kwh"] <= grid["total_rp_kwh"].max()
     # ranks just below and above the crossing point have the opposite order
     assert np.sign(row["rank_a_below"] - row["rank_b_below"]) == -np.sign(row["rank_a_above"] - row["rank_b_above"]) != 0
@@ -76,7 +91,6 @@ def test_crossing_in_range_and_ranks_swap(sensitivity_crossings, sensitivity_cur
     region = grid[grid["region"] == tag].pivot(index="total_rp_kwh", columns="scenario_id", values="rank")
     below = region.loc[region.index[region.index < row["crossing_rp_kwh"]].max()]
     above = region.loc[region.index[region.index > row["crossing_rp_kwh"]].min()]
-    a, b = row["scenario_a"], row["scenario_b"]
     assert np.sign(below[a] - below[b]) == -np.sign(above[a] - above[b]) != 0
 
 
@@ -85,7 +99,7 @@ def test_rank1_switches_regression(sensitivity_switches, reference_sensitivity_s
     assert list(a.columns) == list(e.columns)
     keys = ["region", "scenario_before", "scenario_after"]
     assert a[keys].values.tolist() == e[keys].values.tolist()
-    assert np.abs(a["switch_rp_kwh"] - e["switch_rp_kwh"]).max() < CROSSING_ATOL
+    assert _max_abs_diff_or_zero(a["switch_rp_kwh"], e["switch_rp_kwh"]) < CROSSING_ATOL
     rank_cols = [c for c in a.columns if c.startswith("rank_")]
     assert (a[rank_cols] == e[rank_cols]).all().all()
 

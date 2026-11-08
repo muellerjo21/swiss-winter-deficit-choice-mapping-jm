@@ -817,14 +817,15 @@ def load_scenario_final_energy(nc_path: str) -> dict:
     return out
 
 
-def scope_reference(ref: dict, cost_scope: str, energy_reference: dict = None) -> dict:
-    """ElCom reference values for the price formula. With cost_scope energy, energy_reference = {"reference": p_ref,
-    "surcharge": tau + g} (price.energy_reference_ct_per_kwh, price.energy_surcharge_ct_per_kwh): a number replaces the
-    reference price total_rp_kwh, or taxes/levies + grid usage as one value (taxes_levies_rp_kwh = surcharge, grid usage
-    0); null keeps the ElCom electricity values (first assumption). Other cost scopes: unchanged."""
+def scope_reference(ref: dict, cost_scope: str, energy_reference: dict, margin: float) -> dict:
+    """Constants of the price formula: the ElCom reference values plus the revenue margin (price.margin, key margin).
+    With cost_scope energy, energy_reference = {"reference": p_ref, "surcharge": tau + g}
+    (price.energy_reference_ct_per_kwh, price.energy_surcharge_ct_per_kwh): a number replaces the reference price
+    total_rp_kwh, or taxes/levies + grid usage as one value (taxes_levies_rp_kwh = surcharge, grid usage 0); null keeps
+    the ElCom electricity values (first assumption). Other cost scopes: ElCom values unchanged."""
+    out = {**ref, "margin": float(margin)}
     if cost_scope != "energy" or not energy_reference:
-        return ref
-    out = dict(ref)
+        return out
     if energy_reference.get("reference") is not None:
         out["total_rp_kwh"] = float(energy_reference["reference"])
     if energy_reference.get("surcharge") is not None:
@@ -832,11 +833,11 @@ def scope_reference(ref: dict, cost_scope: str, energy_reference: dict = None) -
     return out
 
 
-def scope_reference_table(elcom: pd.DataFrame, cost_scope: str, energy_reference: dict = None) -> pd.DataFrame:
+def scope_reference_table(elcom: pd.DataFrame, cost_scope: str, energy_reference: dict, margin: float) -> pd.DataFrame:
     """scope_reference for the regional ElCom table (index region): the same values in every region."""
+    out = elcom.assign(margin=float(margin))
     if cost_scope != "energy" or not energy_reference:
-        return elcom
-    out = elcom.copy()
+        return out
     if energy_reference.get("reference") is not None:
         out["total_rp_kwh"] = float(energy_reference["reference"])
     if energy_reference.get("surcharge") is not None:
@@ -857,9 +858,10 @@ def load_scenario_cost_and_demand(nc_path: str, cost_scale: float = 1.0, cost_sc
 
 
 def simulated_price(system_cost: float, demand: float, elcom_ref: dict, eur_to_chf: float) -> float:
-    """Simulated household price p_sim (Rp./kWh) = C/D * e * 100 * (1 + margin) + taxes/levies + grid usage."""
+    """Simulated household price p_sim (Rp./kWh) = C/D * e * 100 * (1 + margin) + taxes/levies + grid usage;
+    elcom_ref: return value of scope_reference (reference values and margin)."""
     cost_per_kwh_chf = (system_cost / demand) * eur_to_chf
-    simulated_rp_kwh = cost_per_kwh_chf * 100 * (1 + PRICE_MARGIN)
+    simulated_rp_kwh = cost_per_kwh_chf * 100 * (1 + elcom_ref["margin"])
     # Grid usage (distribution grid) is not included in the Calliope system cost -> constant surcharge
     simulated_rp_kwh += elcom_ref["taxes_levies_rp_kwh"] + elcom_ref["netznutzung_rp_kwh"]
     return simulated_rp_kwh
@@ -947,7 +949,7 @@ def compute_all_scenarios(scenario_dir: str = SCENARIO_DIR, area_csv_path: str =
     """Runs all finished attribute functions over all scenario files; the ElCom reference price and
     the EUR/CHF rate are fetched once (not per scenario) and reused."""
     area_dict = load_canton_area(area_csv_path)
-    elcom_ref = get_elcom_reference_price(PRICE_REFERENCE_YEAR, PRICE_CATEGORY)
+    elcom_ref = {**get_elcom_reference_price(PRICE_REFERENCE_YEAR, PRICE_CATEGORY), "margin": PRICE_MARGIN}
     eur_to_chf, _ = fetch_eur_to_chf(PRICE_REFERENCE_YEAR)
 
     rows = []

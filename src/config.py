@@ -155,11 +155,13 @@ SECTOR_COUPLING_ELEC_TECHS = [
 # calculation (compute_land_from_capacity via CAPACITY_DENSITY_GW_PER_KM2).
 PV_REFERENCE_TECHS = ["roof_mounted_pv", "open_field_pv", "alpine_pv_subsidised", "alpine_pv_not_subsidised"]
 
-PRICE_MARGIN = 0.10          # Tröndle's assumed 10% revenue margin
-
 # Price reference parameters: single source is config/default.yaml (section "price"), read here so
 # that notebooks and interactive runs use the same values as the Snakemake pipeline.
 _WORKFLOW_CONFIG = yaml.safe_load((PROJECT_ROOT / "config" / "default.yaml").read_text())
+
+# Revenue margin of the price formula (price.margin; 0.10 = Tröndle's assumed 10 %). The pipeline passes it via the
+# rules' params (load_data.scope_reference), so that --config overrides reach the scripts.
+PRICE_MARGIN = _WORKFLOW_CONFIG["price"]["margin"]
 
 # Base year of the price reference: ElCom reference price (tariffs change only once per year) and
 # EUR/CHF rate (annual mean of the daily ECB rates of that year, fetch_eur_to_chf). Reproducible as

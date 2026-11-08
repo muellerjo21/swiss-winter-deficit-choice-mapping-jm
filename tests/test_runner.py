@@ -132,6 +132,24 @@ def _create_config_plugin(snakemake):
             return pd.read_csv(snakemake.input.weather_rankings_main)
 
         @pytest.fixture()
+        def weather_regional_attributes(self):
+            return {int(y): pd.read_csv(p) for y, p in zip(snakemake.params.weather_years,
+                                                           snakemake.input.weather_regional_attributes)}
+
+        @pytest.fixture()
+        def reference_weather_rankings(self):
+            return pd.read_csv(snakemake.input.reference_weather_rankings)
+
+        @pytest.fixture()
+        def reference_weather_missing_runs(self):
+            return pd.read_csv(snakemake.input.reference_weather_missing_runs)
+
+        @pytest.fixture()
+        def reference_weather_regional_attributes(self):
+            return {int(y): pd.read_csv(p) for y, p in zip(snakemake.params.weather_years,
+                                                           snakemake.input.reference_weather_regional_attributes)}
+
+        @pytest.fixture()
         def weather_years(self):
             return list(snakemake.params.weather_years)
 

@@ -14,7 +14,7 @@ def attributes(paths_to_nc: list, scenario_ids: list, path_to_canton_area: str, 
                path_to_prices: str, path_to_cantons: str, path_to_statpop: str, path_to_eur_chf: str, overrides: dict,
                path_to_attributes: str, path_to_elcom: str, path_to_population: str, path_to_imports: str,
                import_definition: str, cost_scale: float, cost_scope: str, cost_groups: dict, power_fuel: dict,
-               energy_reference: float) -> None:
+               energy_reference: dict, margin: float) -> None:
     regions = municipality_regions(pd.read_csv(path_to_cantons), overrides)
     elcom = regional_elcom_reference(pd.read_csv(path_to_prices), regions)
     population = regional_population(pd.read_csv(path_to_statpop), regions)
@@ -22,7 +22,7 @@ def attributes(paths_to_nc: list, scenario_ids: list, path_to_canton_area: str, 
     national = pd.read_csv(path_to_national).set_index("scenario_id")
     eur_to_chf = json.loads(Path(path_to_eur_chf).read_text())["eur_to_chf"]
     imports = pd.read_csv(path_to_imports).set_index("scenario_id")
-    price_reference = scope_reference_table(elcom, cost_scope, energy_reference)  # elcom_by_region.csv stays ElCom
+    price_reference = scope_reference_table(elcom, cost_scope, energy_reference, margin)  # elcom_by_region.csv stays ElCom
     # default (electricity) keeps the national import_share unchanged
     import_share = None if import_definition == "electricity" else imports[f"import_share_{import_definition}"].to_dict()
     cost_options = dict(cost_scale=cost_scale, cost_scope=cost_scope, cost_groups=cost_groups, power_fuel=power_fuel)
@@ -46,4 +46,5 @@ if __name__ == "__main__":
         cost_groups=snakemake.params.cost_groups,
         power_fuel=snakemake.params.power_fuel,
         energy_reference=snakemake.params.energy_reference,
+        margin=snakemake.params.margin,
     )
