@@ -35,12 +35,13 @@ FIGURE_FORMATS = ["png", "pdf", "svg"]
 FIGURE_PATH = "build/figures/{fmt}/{figure}.{fmt}"  # one subfolder per format
 REFERENCE_YEAR = config["price"]["reference_year"]
 COST_SCALE = config["price"]["cost_scale_factor"]  # factor on the Calliope system cost (1.0 = main analysis)
-COST_SCOPE = config["price"]["cost_scope"]  # costs in the price formula: total (main analysis) | electricity
+COST_SCOPE = config["price"]["cost_scope"]  # costs in the price formula: energy (main analysis) | total | electricity | electricity_fuel
 COST_GROUPS = config["price"]["cost_groups"]
 POWER_FUEL = dict(plants=config["price"]["fuel_power_techs"], fuels=config["price"]["fuel_carriers"],
                   chp_allocation=config["price"]["chp_fuel_allocation"])  # cost_scope electricity_fuel
 ENERGY_REFERENCE = dict(reference=config["price"]["energy_reference_ct_per_kwh"],  # cost_scope energy: p_ref and tau + g
                         surcharge=config["price"]["energy_surcharge_ct_per_kwh"])  # (null = ElCom electricity values)
+MARGIN = config["price"]["margin"]  # revenue margin mu of the price formula
 SENSITIVITY = config["sensitivity"]
 FIGURE_SENSITIVITY = "fig6_p_rank1_vs_reference_price_national"  # created by src/make_graphics.fig_reference_price_sensitivity
 SENSITIVITY_YEARS = sorted(set(SENSITIVITY["base_years"]) | {REFERENCE_YEAR})
@@ -163,7 +164,8 @@ rule scenario_attributes:
         cost_scope = COST_SCOPE,
         cost_groups = COST_GROUPS,
         power_fuel = POWER_FUEL,
-        energy_reference = ENERGY_REFERENCE
+        energy_reference = ENERGY_REFERENCE,
+        margin = MARGIN
     input:
         nc = lambda wildcards: SCENARIO_DIR / SCENARIOS[wildcards.scenario],
         canton_area = config["data"]["canton_area"],
@@ -223,7 +225,8 @@ rule regional_attributes:
         cost_scope = COST_SCOPE,
         cost_groups = COST_GROUPS,
         power_fuel = POWER_FUEL,
-        energy_reference = ENERGY_REFERENCE
+        energy_reference = ENERGY_REFERENCE,
+        margin = MARGIN
     input:
         imports = rules.import_shares.output[0],
         nc = [SCENARIO_DIR / SCENARIOS[s] for s in SCENARIOS],
@@ -286,7 +289,8 @@ rule regional_reference_price:
         cost_scope = COST_SCOPE,
         cost_groups = COST_GROUPS,
         power_fuel = POWER_FUEL,
-        energy_reference = ENERGY_REFERENCE
+        energy_reference = ENERGY_REFERENCE,
+        margin = MARGIN
     input:
         attributes = rules.regional_attributes.output.attributes,
         population = rules.regional_attributes.output.population,
@@ -318,7 +322,8 @@ rule cost_scale_regional:
         cost_scope = COST_SCOPE,
         cost_groups = COST_GROUPS,
         power_fuel = POWER_FUEL,
-        energy_reference = ENERGY_REFERENCE
+        energy_reference = ENERGY_REFERENCE,
+        margin = MARGIN
     input:
         attributes = rules.regional_attributes.output.attributes,
         population = rules.regional_attributes.output.population,
@@ -341,6 +346,7 @@ rule cost_groups:
         fuel_power_techs = config["price"]["fuel_power_techs"],
         power_fuel = POWER_FUEL,
         energy_reference = ENERGY_REFERENCE,
+        margin = MARGIN,
         fuel_techs = config["imports"]["fuel_techs"],
         diesel_techs = config["imports"]["diesel_techs"],
         cost_scale = COST_SCALE
@@ -369,6 +375,7 @@ rule weather_year_rankings:
         cost_groups = COST_GROUPS,
         power_fuel = POWER_FUEL,
         energy_reference = ENERGY_REFERENCE,
+        margin = MARGIN,
         import_definition = config["imports"]["definition"],
         import_denominator = config["imports"]["denominator"],
         fuel_techs = config["imports"]["fuel_techs"],
@@ -564,7 +571,8 @@ rule sensitivity_reference_price:
         cost_scope = COST_SCOPE,
         cost_groups = COST_GROUPS,
         power_fuel = POWER_FUEL,
-        energy_reference = ENERGY_REFERENCE
+        energy_reference = ENERGY_REFERENCE,
+        margin = MARGIN
     input:
         attributes = rules.compute_attributes.output[0],
         choice_model = config["data"]["choice_model"],
@@ -698,6 +706,7 @@ rule test:
         cost_scale = COST_SCALE,
         cost_scope = COST_SCOPE,
         energy_reference = ENERGY_REFERENCE,
+        margin = MARGIN,
         weather_years = WEATHER_YEARS,
         weather_scenarios = {y: list(SCENARIOS_BY_YEAR[y]) for y in WEATHER_YEARS},
         common_scenarios = COMMON_SCENARIOS,
@@ -744,6 +753,11 @@ rule test:
         weather_summary = rules.weather_year_summary.output.summary,
         weather_missing = rules.weather_year_summary.output.missing,
         weather_rankings_main = f"build/data/weather/{WEATHER_YEAR}/utility_rankings_regional.csv",
+        weather_regional_attributes = expand("build/data/weather/{year}/regional_attributes.csv", year=WEATHER_YEARS),
+        reference_weather_rankings = config["reference"]["weather_rankings"],
+        reference_weather_missing_runs = config["reference"]["weather_missing_runs"],
+        reference_weather_regional_attributes = expand(config["reference"]["weather_regional_attributes"],
+                                                       year=WEATHER_YEARS),
         cost_groups = rules.cost_groups.output.groups,
         cost_by_technology = rules.cost_groups.output.technologies,
         power_fuel_cost = rules.cost_groups.output.power_fuel,
