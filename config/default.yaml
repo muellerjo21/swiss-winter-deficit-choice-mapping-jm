@@ -275,7 +275,7 @@ scenarios:
         2018: "barrier_policy_remix,sensitivity_weather_2018,neighbours_fixed_by_EP2050_baseline_2018_result_4H.nc"
     policy_roof_pv:
         2016: "barrier_policy_roof_pv,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
-        2017: null
+        2017: "barrier_policy_roof_pv,sensitivity_weather_2017,neighbours_fixed_by_EP2050_baseline_2017_result_4H.nc"
         2018: "barrier_policy_roof_pv,sensitivity_weather_2018,neighbours_fixed_by_EP2050_baseline_2018_result_4H.nc"
     policy_sccgt_daccs:
         2016: "barrier_policy_sccgt_daccs,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
