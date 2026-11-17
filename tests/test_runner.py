@@ -184,6 +184,15 @@ def _create_config_plugin(snakemake):
             return json.loads(Path(snakemake.input.eur_chf).read_text())["eur_to_chf"]
 
         @pytest.fixture()
+        def choice_model_check(self):
+            return pd.read_csv(snakemake.input.choice_model_check)
+
+        @pytest.fixture()
+        def choice_model_coefficients(self):
+            """Swiss coefficient group -> group/country of the choice model file (data.choice_models.<entry>)."""
+            return dict(snakemake.params.choice_model_coefficients)
+
+        @pytest.fixture()
         def ticino(self):
             """Coefficients TI is computed with (spatial.regional.ticino), None = TI excluded."""
             return snakemake.params.ticino

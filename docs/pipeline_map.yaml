@@ -55,11 +55,13 @@ rules:
     group: attr
     text: >-
       Berechnet pro Szenario alle Attribute des Choice-Modells für die Schweiz als Ganzes: Landanteil
-      ({land_definition}), Technologie- und Eigentümeranteile, Stromimport und Preisänderung (Systemkosten pro kWh
-      mit EUR/CHF und dem nationalen ElCom-Preis {price_year}).
+      ({land_definition}), Technologie- und Eigentümeranteile, Import und Preisänderung. Hauptszenario
+      (price.cost_scope: energy): gesamte Systemkosten pro kWh Endenergie (Strom, Wärme, Verkehr) mit EUR/CHF
+      {price_year}, Marge, Steuern und Abgaben (price.energy_surcharge) und MWST, verglichen mit dem heutigen
+      Durchschnittspreis der Endenergie (BFE GEST 2025).
     open: >-
-      Der Preis entsteht aus den gesamten Systemkosten geteilt durch den Stromverbrauch; die Kosten werden nicht auf
-      die Energieträger aufgeteilt. Ist das als Vereinfachung in Ordnung? (Gilt auch für den regionalen Preis.)
+      Die Umfrage fragt nach den Energiekosten des Haushalts (Strom, Heizung, Mobilität); verglichen wird der Preis
+      pro kWh. Die meisten Preisänderungen liegen nahe am unteren Ende des Umfragebereichs (−25 %).
   compute_attributes:
     group: attr
     text: >-
@@ -70,7 +72,8 @@ rules:
     group: attr
     text: >-
       Berechnet pro Szenario drei Importanteile: nur Netto-Stromimport; plus Erdgas, Wasserstoff und synthetisches
-      Methan; zusätzlich synthetischer Diesel. Jahressummen geteilt durch den Stromverbrauch, auf 0 bis 1 begrenzt;
+      Methan; zusätzlich synthetischer Diesel. Jahressummen geteilt durch den Nenner imports.denominator
+      (Hauptanalyse: Endenergie), auf 0 bis 1 begrenzt;
       Brennstoffe zählen mit ihrem Energiegehalt (1 GWh = 1 GWh Strom). Die Hauptanalyse nimmt die Definition
       „{import_definition}“ (Config imports.definition).
     open: >-
@@ -84,20 +87,23 @@ rules:
       Rest (Brennstoffe, Wärme, DAC, Brennstoffspeicher, Importe), Zuordnung in der Config price.cost_groups. Dazu
       der simulierte Preis mit allen Kosten und nur mit den Stromkosten und der Strom aus Brennstoff-Kraftwerken.
     open: >-
-      Die Preisformel teilt die Kosten des ganzen Energiesystems durch den Stromverbrauch. Die Sensitivität
-      price.cost_scope: electricity nimmt nur die Stromkosten, ohne die Brennstoffkosten der Kraftwerke;
-      electricity_fuel addiert sie (Brennstoff zu Durchschnittskosten des Modells, WKK nach Stromanteil). energy teilt
-      alle Kosten durch die Endenergie (Strom, Wärme, Verkehr); der Referenzpreis dafür
-      (price.energy_reference_ct_per_kwh) ist noch offen, ebenso ob Abgaben und Netz für die Gesamtenergie gelten.
+      Hauptszenario energy: alle Kosten durch die Endenergie, Steuern und Abgaben als konstanter Zuschlag
+      (constant_2025), Sensitivitäten nach Energieträger (by_carrier_2025) und ohne Brennstoffsteuern
+      (electricity_only_2025). Die Strompreis-Varianten electricity und electricity_fuel brauchen eine Annahme zur
+      Aufteilung der WKK-Brennstoffe (nach Stromanteil). Ob die Ausgaben für Strom in GEST T42 die MWST enthalten, ist
+      nicht dokumentiert.
   weather_year_rankings:
     group: util
     text: >-
       Rechnet die regionale Analyse für ein Wetterjahr (2016, 2017, 2018) mit allen Szenarien, für die Mellot et al.
       einen Lauf veröffentlicht haben, und einmal nur mit den Szenarien, die es in allen Jahren gibt.
-      Referenzpreise, Bevölkerung und EUR/CHF sind in allen Jahren gleich.
-    open: >-
-      Es fehlen Läufe (Alpine PV und Roof PV 2017, S/CCGT ohne H2 und Baseline 2018, EP2050+ 2017 und 2018); die
-      Ränge der Jahre beruhen deshalb auf verschiedenen Szenariomengen.
+      Referenzpreise, Bevölkerung und EUR/CHF sind in allen Jahren gleich. Die Baseline mit 5-TWh-Winterlimit gibt
+      es nur für 2016; die frühere Zuordnung für 2017 und 2018 war ein Mapping-Fehler (die Dateien mit dem Zusatz
+      _no_self_sufficiency sind EP2050+ mit 9 TWh Winterimport, geprüft über den Winterimport). Der Record von
+      Mellot et al. enthält die 2016-Version vom Juli 2024, die wir verwenden. Allen drei Jahren gemeinsam sind 11 der
+      12 Szenarien; S/CCGT (Ren. Methane) und S/CCGT (Ren. Methane) + H2 sind in allen Jahren praktisch identisch,
+      weil die Variante mit H2 nie Wasserstoff importiert (wie in Mellot et al., Table 3). Das CHP-Szenario ist auch
+      2017 und 2018 auf 2 × die CHP-Produktion von EP2050+ 2016 gedeckelt (etwa 3 × EP2050+ dieser Jahre).
   weather_year_summary:
     group: util
     text: >-
@@ -117,8 +123,9 @@ rules:
     text: >-
       Berechnet die Attribute pro Region für alle {n_regions} Regionen: Landanteil der eigenen Region,
       Technologieanteile (installierte Leistung ohne Wasserkraft), Eigentümeranteile (installierte Leistung mit
-      Wasserkraft), Preisänderung mit dem regionalen Referenzpreis. Import und Übertragung sind national. Dazu die
-      Bevölkerung pro Region.
+      Wasserkraft) und Preisänderung (mit cost_scope energy: in allen Regionen derselbe Referenzpreis und
+      Zuschlag; sonst der regionale ElCom-Preis). Import und Übertragung sind national. Dazu die Bevölkerung pro
+      Region.
     open: >-
       Beziehen sich Land und Preis in der Umfrage auf die eigene Region? Sind die Technologieanteile installierte
       Leistung oder Erzeugung, und gehört Wasserkraft in den Nenner? Wie wird hydrogen_electricity_storage
@@ -134,22 +141,21 @@ rules:
     national: true
     text: >-
       Nationales Aggregat (Anhang): Utility, Ranking, {interval} und P(Rang 1) aus den nationalen Attributen und
-      den Partworths von DE-CH und FR-CH.
+      den Schweizer Partworths (beim alten Modell jan_2026 von DE-CH und FR-CH).
 
   regional_utility:
     group: util
     text: >-
-      Hauptanalyse: Utility pro Region und Posterior-Draw mit den Partworths der Sprachregion, bevölkerungsgewichtet
+      Hauptanalyse: Utility pro Region und Posterior-Draw mit den Schweizer Partworths des Choice-Modells (beim alten
+      Modell jan_2026 die der Sprachregion), bevölkerungsgewichtet
       über {n_included} Regionen ({ticino_note}). Ergibt Ranking, {interval}, P(Rang 1), die Rangfolge
       pro Region, die Sensitivitätstabelle und die Kontrollen.
     open: >-
-      Das Modell hat keine Partworths für die italienische Schweiz; {ticino_handling}. Und welcher Wert für m: 0
-      (so rechnen wir) oder der Stichprobenanteil {mobile_sample_share}?
+      {ticino_open} {mobile_open}
   regional_reference_price:
     group: util
     text: >-
-      Verschiebt alle regionalen Referenzpreise um denselben Betrag Δ und rechnet P(Rang 1) neu. National wechselt
-      Rang 1 bei Δ = {switch_shift} Rp./kWh ({switch_pair}).
+      Verschiebt alle regionalen Referenzpreise um denselben Betrag Δ und rechnet P(Rang 1) neu. {switch_sentence}
   cost_scale_regional:
     group: util
     text: >-
@@ -158,7 +164,6 @@ rules:
       Faktoren, bei denen Rang 1 wechselt.
     open: >-
       In welchem Preisjahr sind die Calliope-Kosten angegeben? Tarife, Abgaben und EUR/CHF sind von {price_year}.
-      Die Kosten enthalten auch Wärme und Brennstoffe, geteilt wird durch den Stromverbrauch.
   pairwise_regional:
     group: util
     text: >-

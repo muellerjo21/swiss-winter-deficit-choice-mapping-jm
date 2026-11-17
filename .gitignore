@@ -30,8 +30,10 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Snakemake
+# Snakemake (build is a symlink to build.nosync/, which iCloud does not sync)
+build
 build/
+build.nosync/
 .snakemake/
 dag.pdf
 

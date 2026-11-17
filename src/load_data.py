@@ -2,11 +2,12 @@
 Load and extract fitted coefficients from Tröndle, Mey & Lilliestam's (2025)
 discrete choice model.
 
-The pipeline uses choice-model-jan-2026.nc (CHOICE_MODEL_PATH): 11 attributes, fitted per
-language region (country coord: DA/DE/DE-CH/EN/FR/FR-CH/PL/PT/SO/SV). For Switzerland, select
-DE-CH or FR-CH per canton via CANTON_LANGUAGE -- there is no generic "Switzerland" or
-"NOT_SAMPLED" level here. The older published-paper model (6 attributes, per country) is only
-used by the unmaintained first approach in legacy/.
+The pipeline selects the model file with data.choice_model (entries of data.choice_models, CHOICE_MODEL_PATH):
+11 attributes; the Swiss coefficient groups DE-CH / FR-CH (per canton via CANTON_LANGUAGE) are mapped to a group or
+country of the file (model_partworths): the January 2026 model has partworths per language group (DA/DE/DE-CH/EN/FR/
+FR-CH/PL/PT/SO/SV), the measured model (Nov 2026) a European mean plus a country effect per country (one level
+Switzerland). The older published-paper model (6 attributes, per country) is only used by the unmaintained first
+approach in legacy/.
 
 See the project proposal for background on the model.
 """
@@ -14,6 +15,7 @@ See the project proposal for background on the model.
 import os
 import re
 from datetime import date
+from pathlib import Path
 import ssl, certifi
 os.environ["SSL_CERT_FILE"] = certifi.where()
 import arviz as az
@@ -26,11 +28,23 @@ from SPARQLWrapper import SPARQLWrapper, JSON
 from config import (
     CANTON_LANGUAGE, FOREIGN_CODES, CANTON_NAME_TO_CODE, CANTON_MERGES,
     CAPACITY_DENSITY_GW_PER_KM2, OWNERSHIP_MAPPING, PRICE_MARGIN, PRICE_REFERENCE_YEAR, PRICE_CATEGORY,
-    TECH_SOURCE_MAPPING, PV_REFERENCE_TECHS, TRANSMISSION_REFERENCE_YEAR, CHOICE_MODEL_PATH,
+    TECH_SOURCE_MAPPING, PV_REFERENCE_TECHS, TRANSMISSION_REFERENCE_YEAR, CHOICE_MODEL_PATH, CHOICE_MODEL_COUNTRIES,
     SECTOR_COUPLING_ELEC_TECHS, SCENARIO_DIR, CANTON_AREA_CSV_PATH, RAW_DIR, PROCESSED_DIR,
-    MELLOT_COST_CHANGE_PCT, LAND_DEFINITION, PRICE_COST_SCALE_FACTOR, PRICE_COST_SCOPE, PRICE_COST_GROUPS,
+    MELLOT_COST_CHANGE_PCT, LAND_DEFINITION, PRICE_COST_SCALE_FACTOR, PRICE_COST_SCOPE, PRICE_COST_GROUPS, END_USE_TECHS,
     PRICE_POWER_FUEL,
 )
+
+
+def model_partworths(posterior, data_path, group: str):
+    """Partworths (chain, draw, attribute) of a coefficient group: the group's own beta_partworths if the file has them
+    per group (January 2026 model), otherwise the European mean beta_partworths plus the country effect effect_country
+    (measured model). The group (e.g. DE-CH) is mapped to the file's group/country by data.choice_models.<entry>.
+    coefficients (CHOICE_MODEL_COUNTRIES); a group without mapping is used as it is."""
+    country = CHOICE_MODEL_COUNTRIES.get(str(Path(data_path).resolve()), {}).get(group, group)
+    beta = posterior["beta_partworths"]
+    if "country" in beta.dims:
+        return beta.sel(country=country)
+    return beta + posterior["effect_country"].sel(country=country)
 
 
 def load_beta_partworths_mean(data_path, country: str) -> pd.DataFrame:
@@ -43,8 +57,8 @@ def load_beta_partworths_mean(data_path, country: str) -> pd.DataFrame:
     data_path : str or Path
         Path to the .nc file (CHOICE_MODEL_PATH, or legacy_config.DATA_PATH).
     country : str
-        Which level of the model's `country` coordinate to select.
-        For CHOICE_MODEL_PATH: one of DA/DE/DE-CH/EN/FR/FR-CH/PL/PT/SO/SV.
+        Coefficient group, mapped to the file's group/country by model_partworths
+        (DE-CH / FR-CH for Switzerland; the January 2026 model also takes DA/DE/EN/FR/PL/PT/SO/SV).
         For legacy_config.DATA_PATH: one of DNK/DEU/PRT/POL/NOT_SAMPLED.
         No default on purpose -- the valid values differ between the two files,
         so picking a wrong implicit default silently gives the wrong region.
@@ -58,7 +72,7 @@ def load_beta_partworths_mean(data_path, country: str) -> pd.DataFrame:
     pd.DataFrame with columns: attribute, beta_mean
     """
     idata = az.from_netcdf(data_path)
-    beta = idata.posterior["beta_partworths"].sel(country=country)
+    beta = model_partworths(idata.posterior, data_path, country)
     beta_mean = beta.mean(dim=["chain", "draw"])
     df = beta_mean.to_dataframe(name="beta_mean").reset_index()
     return df[["attribute", "beta_mean"]]
@@ -96,7 +110,7 @@ def load_beta_partworths_samples(data_path, country: str) -> dict:
         utility per sample.
     """
     idata = az.from_netcdf(data_path)
-    beta = idata.posterior["beta_partworths"].sel(country=country)
+    beta = model_partworths(idata.posterior, data_path, country)
 
     # Combine the chain and draw dimensions into one "sample" dimension,
     # so each attribute's samples are a simple 1D array.
@@ -120,9 +134,11 @@ def load_mobile_partworths_mean(data_path) -> pd.DataFrame:
 
     Returns
     -------
-    pd.DataFrame with columns: attribute, mobile_mean
+    pd.DataFrame with columns: attribute, mobile_mean; None if the model has no mobile_partworths
     """
     idata = az.from_netcdf(data_path)
+    if "mobile_partworths" not in idata.posterior:
+        return None  # model without mobile shift (measured model); utility checks that mobile_share is 0
     mobile_mean = idata.posterior["mobile_partworths"].mean(dim=["chain", "draw"])
     df = mobile_mean.to_dataframe(name="mobile_mean").reset_index()
     return df[["attribute", "mobile_mean"]]
@@ -139,6 +155,8 @@ def load_mobile_partworths_samples(data_path) -> dict:
     dict[str, np.ndarray] with the same keys and array length as load_beta_partworths_samples
     """
     idata = az.from_netcdf(data_path)
+    if "mobile_partworths" not in idata.posterior:
+        return None  # see load_mobile_partworths_mean
     mobile_stacked = idata.posterior["mobile_partworths"].stack(sample=("chain", "draw"))
     return {attr: mobile_stacked.sel(attribute=attr).values
             for attr in mobile_stacked.coords["attribute"].values}
@@ -792,8 +810,8 @@ def compute_price_change(nc_path: str, elcom_ref: dict, eur_to_chf: float, cost_
     elcom_ref: return value of get_elcom_reference_price; eur_to_chf: rate (first element of fetch_eur_to_chf);
     cost_scale, cost_scope, cost_groups, power_fuel: price.cost_scale_factor, cost_scope, cost_groups and the power
     plant fuel settings (see load_scenario_cost_and_demand)."""
-    system_cost, demand = load_scenario_cost_and_demand(nc_path, cost_scale, cost_scope, cost_groups, power_fuel)
-    return price_change_from_cost(system_cost, demand, elcom_ref, eur_to_chf)
+    return price_change_from_cost(*load_scenario_cost_and_demand(nc_path, cost_scale, cost_scope, cost_groups, power_fuel),
+                                  elcom_ref, eur_to_chf)
 
 
 HEAT_DEMAND_TECHS = ("demand_buildings_heat", "demand_low_temp_process_heat", "demand_medium_temp_process_heat",
@@ -817,60 +835,100 @@ def load_scenario_final_energy(nc_path: str) -> dict:
     return out
 
 
-def scope_reference(ref: dict, cost_scope: str, energy_reference: dict, margin: float) -> dict:
-    """Constants of the price formula: the ElCom reference values plus the revenue margin (price.margin, key margin).
-    With cost_scope energy, energy_reference = {"reference": p_ref, "surcharge": tau + g}
-    (price.energy_reference_ct_per_kwh, price.energy_surcharge_ct_per_kwh): a number replaces the reference price
-    total_rp_kwh, or taxes/levies + grid usage as one value (taxes_levies_rp_kwh = surcharge, grid usage 0); null keeps
-    the ElCom electricity values (first assumption). Other cost scopes: ElCom values unchanged."""
-    out = {**ref, "margin": float(margin)}
-    if cost_scope != "energy" or not energy_reference:
-        return out
+def _energy_reference_terms(energy_reference: dict) -> dict:
+    """Price-formula constants of cost_scope energy (see scope_reference)."""
+    out = {"vat": float(energy_reference.get("vat") or 0.0)}
     if energy_reference.get("reference") is not None:
         out["total_rp_kwh"] = float(energy_reference["reference"])
-    if energy_reference.get("surcharge") is not None:
-        out["taxes_levies_rp_kwh"], out["netznutzung_rp_kwh"] = float(energy_reference["surcharge"]), 0.0
+    surcharge = energy_reference.get("surcharge")
+    if isinstance(surcharge, dict):
+        out["taxes_levies_rp_kwh"], out["netznutzung_rp_kwh"] = 0.0, 0.0
+        out.update({f"surcharge_rate_{c}": float(r) for c, r in surcharge.items()})
+    elif surcharge is not None:
+        out["taxes_levies_rp_kwh"], out["netznutzung_rp_kwh"] = float(surcharge), 0.0
     return out
+
+
+def scope_reference(ref: dict, cost_scope: str, energy_reference: dict, margin: float) -> dict:
+    """Constants of the price formula: the ElCom reference values plus the revenue margin (price.margin, key margin)
+    and the VAT rate (key vat, 0 outside cost_scope energy). With cost_scope energy, energy_reference = {"reference":
+    p_ref, "surcharge": tau + g, "vat": rate} (price.energy_reference_ct_per_kwh, the entry price.energy_surcharge of
+    price.energy_surcharges, price.energy_vat): a number replaces the reference price total_rp_kwh; a number as
+    surcharge replaces taxes/levies + grid usage (taxes_levies_rp_kwh = surcharge, grid usage 0), a dict carrier ->
+    Rp./kWh gives the rates per end-use carrier (keys surcharge_rate_<carrier>, see simulated_price); null keeps the
+    ElCom electricity values. Other cost scopes: ElCom values unchanged."""
+    out = {**ref, "margin": float(margin), "vat": 0.0}
+    if cost_scope != "energy" or not energy_reference:
+        return out
+    return {**out, **_energy_reference_terms(energy_reference)}
 
 
 def scope_reference_table(elcom: pd.DataFrame, cost_scope: str, energy_reference: dict, margin: float) -> pd.DataFrame:
     """scope_reference for the regional ElCom table (index region): the same values in every region."""
-    out = elcom.assign(margin=float(margin))
+    out = elcom.assign(margin=float(margin), vat=0.0)
     if cost_scope != "energy" or not energy_reference:
         return out
-    if energy_reference.get("reference") is not None:
-        out["total_rp_kwh"] = float(energy_reference["reference"])
-    if energy_reference.get("surcharge") is not None:
-        out["taxes_levies_rp_kwh"], out["netznutzung_rp_kwh"] = float(energy_reference["surcharge"]), 0.0
-    return out
+    return out.assign(**_energy_reference_terms(energy_reference))
+
+
+def price_reference_columns(table: pd.DataFrame) -> list[str]:
+    """Columns of a scope_reference_table that enter the price formula."""
+    return [c for c in table.columns if c in ("total_rp_kwh", "taxes_levies_rp_kwh", "netznutzung_rp_kwh", "margin", "vat")
+            or c.startswith("surcharge_rate_")]
+
+
+def load_scenario_end_use(nc_path: str) -> dict:
+    """End-use consumption per carrier (GWh/year, carrier_con at the Swiss locations) of the technologies in
+    price.end_use_techs, for the taxes and levies per carrier (simulated_price)."""
+    ds = xr.open_dataset(nc_path)
+    con = ds["carrier_con"].sum("timesteps").to_pandas().abs()
+    ds.close()
+    con = con[[i.split("::")[0] not in FOREIGN_CODES for i in con.index]]
+    parts = [i.split("::") for i in con.index]
+    return {name: float(con[[p[1] in spec["techs"] and p[2] == spec["carrier"] for p in parts]].sum())
+            for name, spec in END_USE_TECHS.items()}
 
 
 def load_scenario_cost_and_demand(nc_path: str, cost_scale: float = 1.0, cost_scope: str = "total",
-                                  cost_groups: dict = None, power_fuel: dict = None) -> tuple[float, float]:
+                                  cost_groups: dict = None, power_fuel: dict = None) -> tuple[float, float, dict]:
     """Swiss system cost (million EUR/year; all technologies, or with cost_scope only one cost group, see
-    load_scenario_scoped_cost) times cost_scale (price.cost_scale_factor, 1.0 = costs as in the result file) and
-    national electricity demand (GWh) of a scenario, the two scenario inputs of price_change_from_cost.
-    cost_scope energy: all costs over the final energy demand (load_scenario_final_energy) instead of electricity."""
+    load_scenario_scoped_cost) times cost_scale (price.cost_scale_factor, 1.0 = costs as in the result file),
+    national electricity demand (GWh) and None, the scenario inputs of price_change_from_cost.
+    cost_scope energy: all costs over the final energy demand (load_scenario_final_energy) instead of electricity,
+    and the end-use consumption per carrier (load_scenario_end_use) for taxes and levies per carrier."""
     if cost_scope == "energy":
-        return cost_scale * load_scenario_system_cost(nc_path), load_scenario_final_energy(nc_path)["final_energy"]
+        return (cost_scale * load_scenario_system_cost(nc_path), load_scenario_final_energy(nc_path)["final_energy"],
+                load_scenario_end_use(nc_path))
     return (cost_scale * load_scenario_scoped_cost(nc_path, cost_scope, cost_groups, power_fuel),
-            aggregate_national(load_scenario_demand(nc_path), "demand_gwh"))
+            aggregate_national(load_scenario_demand(nc_path), "demand_gwh"), None)
 
 
-def simulated_price(system_cost: float, demand: float, elcom_ref: dict, eur_to_chf: float) -> float:
-    """Simulated household price p_sim (Rp./kWh) = C/D * e * 100 * (1 + margin) + taxes/levies + grid usage;
-    elcom_ref: return value of scope_reference (reference values and margin)."""
+def price_surcharge(demand: float, elcom_ref: dict, end_use: dict = None) -> float:
+    """Taxes/levies + grid usage tau + g (Rp./kWh of demand): taxes_levies_rp_kwh + netznutzung_rp_kwh, or with
+    rates per carrier (keys surcharge_rate_<carrier>, scope_reference) sum(rate * end-use GWh) / demand."""
+    rates = {k[len("surcharge_rate_"):]: v for k, v in elcom_ref.items() if k.startswith("surcharge_rate_")}
+    if not rates:
+        return elcom_ref["taxes_levies_rp_kwh"] + elcom_ref["netznutzung_rp_kwh"]
+    if end_use is None:
+        raise ValueError("taxes and levies per carrier need the end-use consumption (cost_scope energy)")
+    return sum(r * end_use[c] for c, r in rates.items()) / demand
+
+
+def simulated_price(system_cost: float, demand: float, elcom_ref: dict, eur_to_chf: float, end_use: dict = None) -> float:
+    """Simulated price p_sim (Rp./kWh) = (C/D * e * 100 * (1 + margin) + tau + g) * (1 + VAT); elcom_ref: return value
+    of scope_reference (reference values, margin, VAT rate, rates per carrier); tau + g see price_surcharge."""
     cost_per_kwh_chf = (system_cost / demand) * eur_to_chf
     simulated_rp_kwh = cost_per_kwh_chf * 100 * (1 + elcom_ref["margin"])
     # Grid usage (distribution grid) is not included in the Calliope system cost -> constant surcharge
-    simulated_rp_kwh += elcom_ref["taxes_levies_rp_kwh"] + elcom_ref["netznutzung_rp_kwh"]
-    return simulated_rp_kwh
+    simulated_rp_kwh += price_surcharge(demand, elcom_ref, end_use)
+    return simulated_rp_kwh * (1 + elcom_ref["vat"])
 
 
-def price_change_from_cost(system_cost: float, demand: float, elcom_ref: dict, eur_to_chf: float) -> float:
-    """Price-change formula of compute_price_change for already loaded system cost and demand, so that
-    several reference prices / rates can be evaluated without re-reading the scenario file."""
-    simulated_rp_kwh = simulated_price(system_cost, demand, elcom_ref, eur_to_chf)
+def price_change_from_cost(system_cost: float, demand: float, end_use: dict, elcom_ref: dict, eur_to_chf: float) -> float:
+    """Price-change formula of compute_price_change for already loaded system cost, demand and end-use consumption
+    (load_scenario_cost_and_demand), so that several reference prices / rates can be evaluated without re-reading the
+    scenario file."""
+    simulated_rp_kwh = simulated_price(system_cost, demand, elcom_ref, eur_to_chf, end_use)
     return (simulated_rp_kwh - elcom_ref["total_rp_kwh"]) / elcom_ref["total_rp_kwh"]
 
 
@@ -949,7 +1007,7 @@ def compute_all_scenarios(scenario_dir: str = SCENARIO_DIR, area_csv_path: str =
     """Runs all finished attribute functions over all scenario files; the ElCom reference price and
     the EUR/CHF rate are fetched once (not per scenario) and reused."""
     area_dict = load_canton_area(area_csv_path)
-    elcom_ref = {**get_elcom_reference_price(PRICE_REFERENCE_YEAR, PRICE_CATEGORY), "margin": PRICE_MARGIN}
+    elcom_ref = {**get_elcom_reference_price(PRICE_REFERENCE_YEAR, PRICE_CATEGORY), "margin": PRICE_MARGIN, "vat": 0.0}
     eur_to_chf, _ = fetch_eur_to_chf(PRICE_REFERENCE_YEAR)
 
     rows = []

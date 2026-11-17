@@ -448,13 +448,14 @@ def fig_reference_price_sensitivity(curve: pd.DataFrame, crossings: pd.DataFrame
     crossings only provides the reference-year values for the footnote."""
     scenarios = list(fs.highlight)
     grid = curve[~curve["is_reference_year"]]
-    lo, hi = grid["total_rp_kwh"].min(), grid["total_rp_kwh"].max()
+    reference = float(curve.loc[curve["is_reference_year"], "total_rp_kwh"].iloc[0])
+    lo, hi = min(grid["total_rp_kwh"].min(), reference), max(grid["total_rp_kwh"].max(), reference)
     fig, axes = plt.subplots(1, 3, figsize=(13.5, 4.6), sharey=True)
     for ax, tag in zip(axes, GROUPS):
         ax.set_title(fs.title(tag), loc="left", fontweight="bold", pad=20, fontsize=11)
         ax.set_xlim(lo, hi)
         ax.set_ylim(-0.04, 1.07)
-        ax.set_xlabel("ElCom reference price, total (Rp./kWh)")
+        ax.set_xlabel(fs.price_axis)
         ax.yaxis.grid(True, color=GRID, lw=0.8)
         ax.set_axisbelow(True)
         ax.spines["left"].set_visible(False)
@@ -474,6 +475,8 @@ def fig_reference_price_sensitivity(curve: pd.DataFrame, crossings: pd.DataFrame
         for xc in region_switches["switch_rp_kwh"]:
             ax.axvline(xc, color=NEUTRAL, lw=1, ls="--", zorder=1)
             obstacles.append(np.column_stack([np.full(400, xc), np.linspace(*ax.get_ylim(), 400)]))
+        ax.axvline(reference, color=TEXT_SECONDARY, lw=1, zorder=1)  # reference price of the reference year
+        obstacles.append(np.column_stack([np.full(400, reference), np.linspace(*ax.get_ylim(), 400)]))
         years = base_years[base_years["region"] == tag]
         markers = years[years["scenario_id"].isin(scenarios)]
         for _, r in markers.iterrows():
@@ -512,10 +515,14 @@ def fig_reference_price_sensitivity(curve: pd.DataFrame, crossings: pd.DataFrame
     grid_usage = crossings["netznutzung_rp_kwh"].iloc[0]
     rate = crossings["eur_to_chf"].iloc[0]
     year = int(crossings["reference_year"].iloc[0])
+    same_price = base_years["total_rp_kwh"].nunique() == 1  # e.g. cost_scope energy: one p_ref for all base years
+    markers_note = (f"Markers: real base years (labelled at the {display_name(scenarios[0])} marker); with this price "
+                    "basis they share the reference price and taxes, only the annual EUR/CHF rate differs.\n" if same_price
+                    else f"Markers: real base years (labelled at the {display_name(scenarios[0])} marker) with their own "
+                         "surcharges and annual EUR/CHF rate, same colours as the lines; therefore not exactly on the lines.\n")
     footnote(fig, f"Lines: only the national reference price varies; taxes/levies ({taxes:.2f} Rp./kWh), grid usage "
-             f"({grid_usage:.2f} Rp./kWh) and EUR/CHF ({rate:.4f}, annual mean) as in {year}.\n"
-             f"Markers: real base years (labelled at the {display_name(scenarios[0])} marker) with their own surcharges "
-             "and annual EUR/CHF rate, same colours as the lines; therefore not exactly on the lines.\n"
+             f"({grid_usage:.2f} Rp./kWh) and EUR/CHF ({rate:.4f}, annual mean) as in {year}. Solid vertical line: "
+             f"reference price {year} ({reference:.2f} Rp./kWh).\n" + markers_note +
              "Dashed: reference price at which the rank-1 scenario changes (posterior-mean utility), "
              "labelled 'before → after (price)'.", fs, y=-0.06)
     save(fig, "fig6_p_rank1_vs_reference_price" + fs.suffix, out_dir)
@@ -612,9 +619,9 @@ def fig_reference_price_shift(curve: pd.DataFrame, switches: pd.DataFrame, natio
             _place_label(ax, text, cands, obstacles, placed, fontsize=8, color=TEXT_SECONDARY)
         if tag == GROUPS[0]:
             _scenario_curve_labels(ax, region, "shift_rp_kwh", fs, lo, hi, obstacles, placed)
-    footnote(fig, "All regional ElCom reference prices are shifted by the same Δ; taxes/levies, grid usage and EUR/CHF "
-             f"stay at their {fs.year} values. Solid vertical line: Δ = 0 ({fs.year} prices).\n"
-             f"Top axis: national median reference price {fs.year} ({reference:.2f} Rp./kWh) plus Δ, for orientation "
+    footnote(fig, f"All regional reference prices ({fs.price_label}) are shifted by the same Δ; taxes/levies, grid "
+             f"usage and EUR/CHF stay at their {fs.year} values. Solid vertical line: Δ = 0 ({fs.year} prices).\n"
+             f"Top axis: national reference price {fs.year} ({reference:.2f} Rp./kWh) plus Δ, for orientation "
              "only. Dashed: shift at which the rank-1 scenario changes (posterior-mean utility), "
              "labelled 'before → after (Δ, ≙ national median + Δ)'.", fs, y=-0.06)
     save(fig, "fig6_p_rank1_vs_reference_price_shift" + fs.suffix, out_dir)
@@ -816,7 +823,8 @@ def figure_settings(analysis: str, params, cost: pd.Series = None) -> FigureSett
         order = tuple(scenario_order(cost, params.order))
         note = scenario_order_note(list(order), cost, not params.order)
     return FigureSettings(analysis, params.credible_interval, params.interval_type, params.year, order, note,
-                          tuple(params.highlight), params.ticino)
+                          tuple(params.highlight), params.ticino, params.price_label, params.price_axis,
+                          params.coefficients_label)
 
 
 def scenario_order_note(order: list, cost: pd.Series, by_cost: bool) -> str:

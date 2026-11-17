@@ -1,3 +1,4 @@
+import re
 import sys
 
 from snakemake.utils import min_version
@@ -5,6 +6,21 @@ from pathlib import Path
 
 configfile: "config/default.yaml"
 min_version("9.6")
+
+
+def numbers_from_text(value):
+    """--config passes values inside nested dicts as text ("0.5"); turn numeric text back into numbers, recursively
+    (values from config/default.yaml are numbers already and stay unchanged)."""
+    if isinstance(value, dict):
+        return {k: numbers_from_text(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [numbers_from_text(v) for v in value]
+    if isinstance(value, str) and re.fullmatch(r"-?\d+(\.\d*)?([eE][-+]?\d+)?", value.strip()):
+        return int(value) if re.fullmatch(r"-?\d+", value.strip()) else float(value)
+    return value
+
+
+config.update(numbers_from_text(dict(config)))
 
 WEATHER_YEAR = config["weather_year"]  # weather year of the main analysis (2016 = main result)
 WEATHER_YEARS = config["sensitivity"]["weather_years"]  # weather years compared (rule weather_year_rankings)
@@ -39,8 +55,16 @@ COST_SCOPE = config["price"]["cost_scope"]  # costs in the price formula: energy
 COST_GROUPS = config["price"]["cost_groups"]
 POWER_FUEL = dict(plants=config["price"]["fuel_power_techs"], fuels=config["price"]["fuel_carriers"],
                   chp_allocation=config["price"]["chp_fuel_allocation"])  # cost_scope electricity_fuel
-ENERGY_REFERENCE = dict(reference=config["price"]["energy_reference_ct_per_kwh"],  # cost_scope energy: p_ref and tau + g
-                        surcharge=config["price"]["energy_surcharge_ct_per_kwh"])  # (null = ElCom electricity values)
+# cost_scope energy: p_ref, tau + g (entry price.energy_surcharge of price.energy_surcharges: a number, a dict carrier ->
+# rate, or null = ElCom electricity values) and VAT
+# Choice model: entry data.choice_model of data.choice_models (file, Swiss coefficient groups, mobile shift)
+CHOICE_MODEL = config["data"]["choice_models"][config["data"]["choice_model"]]
+if float(config["utility"]["mobile_share"]) != 0 and not CHOICE_MODEL["mobile_partworths"]:
+    raise ValueError(f"utility.mobile_share needs a choice model with mobile_partworths, not {config['data']['choice_model']}")
+ENERGY_SURCHARGE = config["price"]["energy_surcharges"][config["price"]["energy_surcharge"]]
+ENERGY_REFERENCE = dict(reference=config["price"]["energy_reference_ct_per_kwh"],
+                        surcharge=ENERGY_SURCHARGE.get("ct_per_kwh_by_carrier", ENERGY_SURCHARGE.get("ct_per_kwh")),
+                        vat=config["price"]["energy_vat"])
 MARGIN = config["price"]["margin"]  # revenue margin mu of the price formula
 SENSITIVITY = config["sensitivity"]
 FIGURE_SENSITIVITY = "fig6_p_rank1_vs_reference_price_national"  # created by src/make_graphics.fig_reference_price_sensitivity
@@ -76,6 +100,14 @@ FIGURE_PARAMS = dict(  # what every figure states (analysis, interval, year), it
     highlight = FIGURES_CONFIG["highlight_scenarios"],
     ticino = TICINO,
     scenario_ids = list(SCENARIOS),
+    # price basis of the footers and the reference-price axis (price.cost_scope)
+    price_label = (f"energy price p_ref {ENERGY_REFERENCE['reference']} Rp./kWh (BFE GEST {REFERENCE_YEAR})"
+                   if COST_SCOPE == "energy" else "ElCom prices"),
+    price_axis = ("Energy reference price p_ref (Rp./kWh of final energy)" if COST_SCOPE == "energy"
+                  else "ElCom reference price, total (Rp./kWh)"),
+    # coefficients of the regional analysis: one Swiss set of the choice model, or per language region with TI
+    coefficients_label = (f"Swiss coefficients of choice model {config['data']['choice_model']}"
+                          if len(set(CHOICE_MODEL["coefficients"].values())) == 1 else None),
 )
 PAIRWISE_FORMATS = ["png", "pdf"]
 REGIONAL_OUTPUTS = [  # part of rule all only with spatial.resolution: regional
@@ -194,7 +226,7 @@ rule compute_utility:
         interval_type = config["utility"]["interval_type"]
     input:
         attributes = rules.compute_attributes.output[0],
-        choice_model = config["data"]["choice_model"]
+        choice_model = CHOICE_MODEL["file"]
     output: "build/data/utility_rankings.csv"
     conda: "envs/default.yaml"
     script: "scripts/compute_utility.py"
@@ -258,7 +290,7 @@ rule regional_utility:
         attributes = rules.regional_attributes.output.attributes,
         population = rules.regional_attributes.output.population,
         national = rules.compute_attributes.output[0],
-        choice_model = config["data"]["choice_model"],
+        choice_model = CHOICE_MODEL["file"],
         canton_area = config["data"]["canton_area"],
         cantons = rules.fetch_municipality_cantons.output[0],
         statpop = f"build/data/reference/statpop_{REGIONAL['population_year']}.csv",
@@ -297,7 +329,7 @@ rule regional_reference_price:
         elcom = rules.regional_attributes.output.elcom,
         eur_chf = f"build/data/reference/eur_chf_{REFERENCE_YEAR}.json",
         nc = [SCENARIO_DIR / SCENARIOS[s] for s in SCENARIOS],
-        choice_model = config["data"]["choice_model"]
+        choice_model = CHOICE_MODEL["file"]
     output:
         curve = "build/data/sensitivity/reference_price_curve_regional.csv",
         switches = "build/data/sensitivity/reference_price_rank1_switches_regional.csv"
@@ -330,7 +362,7 @@ rule cost_scale_regional:
         elcom = rules.regional_attributes.output.elcom,
         eur_chf = f"build/data/reference/eur_chf_{REFERENCE_YEAR}.json",
         nc = [SCENARIO_DIR / SCENARIOS[s] for s in SCENARIOS],
-        choice_model = config["data"]["choice_model"]
+        choice_model = CHOICE_MODEL["file"]
     output:
         curve = "build/data/sensitivity/cost_scale_curve_regional.csv",
         switches = "build/data/sensitivity/cost_scale_rank1_switches_regional.csv"
@@ -392,7 +424,7 @@ rule weather_year_rankings:
         eur_chf = f"build/data/reference/eur_chf_{REFERENCE_YEAR}.json",
         elcom_regional = rules.regional_attributes.output.elcom,
         population = rules.regional_attributes.output.population,
-        choice_model = config["data"]["choice_model"]
+        choice_model = CHOICE_MODEL["file"]
     output:
         national = "build/data/weather/{year}/scenario_attributes_summary.csv",
         attributes = "build/data/weather/{year}/regional_attributes.csv",
@@ -434,9 +466,13 @@ rule plot_weather_years:
 
 rule beta_real_units:
     message: "Choice-model coefficients in real units (beta / sigma)."
-    params: mobile_share = config["utility"]["mobile_share"]
-    input: choice_model = config["data"]["choice_model"]
-    output: "build/data/beta_real_units.csv"
+    params:
+        mobile_share = config["utility"]["mobile_share"],
+        coefficients = CHOICE_MODEL["coefficients"]
+    input: choice_model = CHOICE_MODEL["file"]
+    output:
+        table = "build/data/beta_real_units.csv",
+        check = "build/data/choice_model_check.csv"
     conda: "envs/default.yaml"
     script: "scripts/beta_real_units.py"
 
@@ -449,7 +485,7 @@ rule make_plots:
     input:
         attributes = rules.compute_attributes.output[0],
         rankings = rules.compute_utility.output[0],
-        choice_model = config["data"]["choice_model"]  # fig3/fig5 need the betas directly
+        choice_model = CHOICE_MODEL["file"]  # fig3/fig5 need the betas directly
     output:
         figures = expand(FIGURE_PATH, figure=FIGURES, fmt=FIGURE_FORMATS),
         contributions = "build/data/contributions_national.csv"
@@ -463,6 +499,8 @@ rule make_plots_regional:
         exclude = EXCLUDE,
         coefficient_overrides = COEFFICIENT_OVERRIDES,
         mobile_share = config["utility"]["mobile_share"],
+        # fig6 top axis: national reference price (cost_scope energy: p_ref; otherwise the ElCom median, input elcom)
+        reference_price = ENERGY_REFERENCE["reference"] if COST_SCOPE == "energy" else None,
         **FIGURE_PARAMS
     input:
         attributes = rules.regional_attributes.output.attributes,
@@ -473,7 +511,7 @@ rule make_plots_regional:
         curve = rules.regional_reference_price.output.curve,
         switches = rules.regional_reference_price.output.switches,
         elcom = f"build/data/reference/elcom_price_{REFERENCE_YEAR}.json",  # national median, fig6 top axis
-        choice_model = config["data"]["choice_model"]
+        choice_model = CHOICE_MODEL["file"]
     output:
         figures = expand(FIGURE_PATH, figure=FIGURES_REGIONAL, fmt=FIGURE_FORMATS),
         contributions = "build/data/regional/contributions_regional.csv"
@@ -495,7 +533,7 @@ rule pairwise_regional:
     input:
         attributes = rules.regional_attributes.output.attributes,
         population = rules.regional_attributes.output.population,
-        choice_model = config["data"]["choice_model"]
+        choice_model = CHOICE_MODEL["file"]
     output:
         matrix = "build/data/pairwise/pairwise_matrix_regional.csv",
         regions = "build/data/pairwise/pairwise_regions_regional.csv",
@@ -541,6 +579,8 @@ rule choice_maps:
         interval_type = config["utility"]["interval_type"],
         ticino = TICINO,
         year = REFERENCE_YEAR,
+        price_label = FIGURE_PARAMS["price_label"],
+        coefficients_label = FIGURE_PARAMS["coefficients_label"],
         names = FIGURES_MAPS_BY_PAIR,
         color_ranges = MAP_RANGES,
         formats = PAIRWISE_FORMATS,
@@ -575,7 +615,7 @@ rule sensitivity_reference_price:
         margin = MARGIN
     input:
         attributes = rules.compute_attributes.output[0],
-        choice_model = config["data"]["choice_model"],
+        choice_model = CHOICE_MODEL["file"],
         nc = [SCENARIO_DIR / SCENARIOS[s] for s in SCENARIOS],
         elcom = expand("build/data/reference/elcom_price_{year}.json", year=SENSITIVITY_YEARS),
         eur_chf = expand("build/data/reference/eur_chf_{year}.json", year=SENSITIVITY_YEARS)
@@ -646,6 +686,7 @@ rule pipeline_map:
     message: "Interactive pipeline map (open build/pipeline_map.html in a browser)."
     params:
         ticino = TICINO,
+        choice_model_coefficients = CHOICE_MODEL["coefficients"],
         price_year = REFERENCE_YEAR,
         price_category = config["price"]["category"],
         base_years = SENSITIVITY["base_years"],
@@ -678,7 +719,7 @@ rule pipeline_map:
         switches_regional = rules.regional_reference_price.output.switches,
         import_shares = rules.import_shares.output[0],
         pairwise_matrix = rules.pairwise_regional.output.matrix,
-        choice_model = config["data"]["choice_model"],
+        choice_model = CHOICE_MODEL["file"],
         tests = "build/test.success"
     output: "build/pipeline_map.html"
     conda: "envs/default.yaml"
@@ -689,8 +730,12 @@ rule clean: # removes all generated results
     message: "Remove all build results but keep downloaded data."
     run:
          import shutil
+         from pathlib import Path
 
-         shutil.rmtree("build")
+         # build may be a symlink to build.nosync/ (outside the iCloud sync): empty the target, keep the link
+         build = Path("build")
+         for item in (build.resolve().iterdir() if build.exists() else []):
+             shutil.rmtree(item) if item.is_dir() and not item.is_symlink() else item.unlink()
          print("Data in data/ (incl. frozen references in data/processed/) has not been cleaned.")
 
 
@@ -707,6 +752,7 @@ rule test:
         cost_scope = COST_SCOPE,
         energy_reference = ENERGY_REFERENCE,
         margin = MARGIN,
+        choice_model_coefficients = CHOICE_MODEL["coefficients"],
         weather_years = WEATHER_YEARS,
         weather_scenarios = {y: list(SCENARIOS_BY_YEAR[y]) for y in WEATHER_YEARS},
         common_scenarios = COMMON_SCENARIOS,
@@ -720,7 +766,8 @@ rule test:
         tests = map(str, Path("tests").glob("**/test_*.py")),
         attributes = rules.compute_attributes.output[0],
         rankings = rules.compute_utility.output[0],
-        beta_real_units = rules.beta_real_units.output[0],
+        beta_real_units = rules.beta_real_units.output.table,
+        choice_model_check = rules.beta_real_units.output.check,
         regional_attributes = rules.regional_attributes.output.attributes,
         regional_checks = rules.regional_utility.output.checks,
         pairwise_matrix = rules.pairwise_regional.output.matrix,

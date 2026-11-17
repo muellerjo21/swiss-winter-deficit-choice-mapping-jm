@@ -25,6 +25,7 @@ if __name__ == "__main__":
         attributes, weights, pd.read_csv(snakemake.input.rankings), pd.read_csv(snakemake.input.regions),
         pd.read_csv(snakemake.input.rank1_share), pd.read_csv(snakemake.input.curve),
         pd.read_csv(snakemake.input.switches), national,
-        json.loads(Path(snakemake.input.elcom).read_text())["total_rp_kwh"], figure_settings("regional", p, cost),
+        float(p.reference_price) if p.reference_price is not None
+        else json.loads(Path(snakemake.input.elcom).read_text())["total_rp_kwh"], figure_settings("regional", p, cost),
         model_path=snakemake.input.choice_model, out_dir=Path(snakemake.output.figures[0]).parent.parent,
         mobile_share=p.mobile_share, coefficients=coefficients).to_csv(snakemake.output.contributions, index=False)

@@ -125,7 +125,8 @@ def test_switches_regional(sensitivity_switches_regional, reference_sensitivity_
     assert list(a.columns) == list(e.columns)
     keys = ["region", "scenario_before", "scenario_after", "rank1_below", "rank1_above"]
     assert a[keys].values.tolist() == e[keys].values.tolist()
-    assert np.abs(a["switch_shift_rp_kwh"] - e["switch_shift_rp_kwh"]).max() < SWITCH_ATOL
+    diff = np.abs(a["switch_shift_rp_kwh"].to_numpy(float) - e["switch_shift_rp_kwh"].to_numpy(float))
+    assert diff.size == 0 or diff.max() < SWITCH_ATOL  # empty: no rank-1 change in the swept range
 
 
 def test_switches_regional_are_rank1_changes(sensitivity_switches_regional, sensitivity_curve_regional):

@@ -7,95 +7,95 @@ Semester project mapping winter-gap mitigation energy scenarios from Mellot et a
 
 ## Overview
 
-This project applies an existing discrete choice model (Tröndle, Mey & Lilliestam 2025), fitted on European stated-preference data, out-of-sample to Switzerland. The model's five attributes (dominant technology, land requirement, transmission capacity, import share, household price change) are mapped from Mellot et al.'s (2024) twelve winter-deficit mitigation scenarios, in order to rank them by predicted citizen utility and compare this ranking against Mellot et al.'s cost-optimal ranking.
+The project applies an existing discrete choice model (Tröndle, Mey & Lilliestam 2025), fitted on European stated-preference data, to Switzerland. The model's attributes (technology shares, land use, transmission, import share, household energy cost change, ownership) are computed from the Calliope results of Mellot et al.'s (2024) twelve winter-deficit scenarios, which are then ranked by predicted utility and compared with Mellot et al.'s cost ranking.
 
-## Data sources
+- **Main analysis:** regional, on the 23 Calliope regions (20 cantons, AI_AR, BL_BS, NW_OW, TI), with the Swiss coefficients of the measured choice model (European mean + country effect Switzerland, the same for all regions) and population weights; 96 % HDI; weather year 2016. DE-CH and FR-CH are reported as groups of regions (canton language).
+- **Cost attribute:** change of the energy price per kWh of final energy (electricity, heat, transport) against today's average energy price, `price.cost_scope: energy`: p_sim = (C / final energy · EUR/CHF · 100 · (1 + margin) + taxes and levies) · (1 + VAT), p_ref = BFE GEST 2025 consumer expenditure / final energy.
+- **Import attribute:** electricity + fuel imports over final energy (`imports.definition: electricity_fuels_diesel`, `imports.denominator: final_energy`).
+- **Secondary analyses:** national aggregate (appendix), weather years 2016–2018, sensitivities (reference price, cost factor, Ticino, land, import definition, taxes and levies, margin).
 
-| Source | Content | Link |
+## Reproduce everything with one command
+
+1. **Software.** Install [conda](https://conda.org) and create the workflow environment once:
+
+       conda env create -f environment.yaml --no-default-packages
+       conda activate swiss-winter-deficit
+
+   If a Python virtual environment (e.g. `.venv`) is active, run `deactivate` first: its `python` would shadow the rules' conda environments.
+
+2. **Input data** (git-ignored, not downloaded by the workflow), in `data/raw/`:
+
+   | File | Content | Source |
+   |---|---|---|
+   | `data/raw/<year>/<file>.nc` for 2016, 2017, 2018 | Calliope results of Mellot et al., one file per scenario and weather year; the file names per year are listed in `scenarios` in `config/default.yaml` (`null` = no run); EP2050+ 2017 comes from Mellot's control files (`docs/data_provenance.md`) | record "Swiss-Calliope scenario results data" by A. Mellot (Zenodo, not yet published; preview access from the authors) |
+   | `data/raw/choice-model-measured/measured.nc` | posterior of the choice model with the cleaned choice data (November 2026), unpacked from `measured.nc.cpgz` | Kristiina Joon, Climate Policy Lab; sender, date, sizes and SHA-256 in `docs/data_provenance.md` |
+   | `data/raw/choice-model-jan-2026.nc` | previous choice model (January 2026), for comparison | provided by the authors; published model: Zenodo, DOI 10.5281/zenodo.14501018 |
+   | `data/raw/flache_der_schweiz_nach_kantonen_in_quadratkilometern.csv` | canton areas, `data.canton_area` | Statista |
+
+   Everything else is fetched by the workflow, for completed years only: ElCom tariffs and the municipality register (LINDAS), BFS STATPOP, the annual EUR/CHF rate (Frankfurter API), and swisstopo swissBOUNDARIES3D (release 2025-01, SHA-256 checked).
+
+3. **Run** the whole analysis, all figures, the regression tests and the interactive pipeline map:
+
+       snakemake all pipeline_map
+
+   The profile `profiles/default` sets conda environments per rule (`envs/`) and one core. A full run takes about 6 minutes. Results go to `build/`: tables in `build/data/`, figures in `build/figures/{png,pdf,svg}/`, the test report in `build/test-report.html` and the map in `build/pipeline_map.html` (open it in a browser). Two consecutive runs give byte-identical results (except SVG and HTML).
+
+Other useful commands: `snakemake --list`, `snakemake dag` (rule graph as `build/dag.pdf`), `snakemake clean` (removes `build/`).
+
+## Configuration
+
+`config/default.yaml` is the only place for parameters; every value has its source in a comment. Switches can be changed there or for one run with `--config`, e.g. `snakemake all --config 'price={"energy_surcharge": "by_carrier_2025"}'`.
+
+| Key | Main analysis | Alternatives |
 |---|---|---|
-| Mellot et al. (2024) | Winter-deficit scenario data (Swiss-Calliope) | Zenodo, DOI 10.5281/zenodo.10887523 |
-| Tröndle, Mey & Lilliestam (2025) | Fitted model coefficients (posterior inference, NetCDF) | Zenodo, DOI 10.5281/zenodo.14501018 |
-| Tröndle, Mey & Lilliestam (2025) | Reproducible analysis code (Snakemake) | Zenodo, DOI 10.5281/zenodo.14501036 |
-| swisstopo, swissBOUNDARIES3D, release 2025-01 | Canton boundaries for the maps (GeoPackage, LV95), downloaded by the rule `fetch_boundaries` with SHA-256 check | [data.geo.admin.ch](https://data.geo.admin.ch/ch.swisstopo.swissboundaries3d/swissboundaries3d_2025-01/swissboundaries3d_2025-01_2056_5728.gpkg.zip) |
+| `data.choice_model` | `measured_2026` (cleaned choice data, Nov 2026; one coefficient set for Switzerland) | `jan_2026` (previous model, partworths per language group DE-CH / FR-CH, with mobile shift) |
+| `price.cost_scope` | `energy` (system cost / final energy, p_ref `energy_reference_ct_per_kwh` = 16.94 Rp./kWh) | `total`, `electricity`, `electricity_fuel` (electricity price variants with the ElCom reference price) |
+| `price.energy_surcharge` | `constant_2025`: today's taxes and levies over today's energy mix, 7.74 Rp./kWh | `by_carrier_2025` (today's rate per end-use carrier, per scenario), `electricity_only_2025` (4.88, previous estimate) |
+| `price.energy_vat` | 0.081 (MWSTG Art. 25) | `0` |
+| `price.margin` | 0.10 | e.g. 0.2, 0.3 |
+| `utility.mobile_share` | 0 | 0..1, **only meaningful with `jan_2026`** (the measured model has no mobile shift; the workflow stops otherwise) |
+| `imports.definition` / `imports.denominator` | `electricity_fuels_diesel` / `final_energy` | `electricity`, `electricity_fuels` / `electricity` |
+| `spatial.regional.ticino` | `de` | `fr`, `mixed`, `exclude`; **the choice of coefficients is only meaningful with `jan_2026`**: with the measured model `de`, `fr` and `mixed` give identical results (tested), only `exclude` differs |
+| `weather_year` | 2016 | 2017, 2018 (all three are always compared, rule `weather_year_rankings`) |
+| `spatial.resolution` | `regional` | `national` (only the national aggregate in rule `all`) |
 
-**Licence of the boundaries.** swissBOUNDARIES3D is free geodata of the Federal Office of Topography swisstopo (open government data); use, also commercial, is free with source attribution: "Source: Federal Office of Topography swisstopo" / "© swisstopo". Terms of use: https://www.swisstopo.admin.ch/en/terms-of-use-free-geodata-and-geoservices. The figures credit swisstopo in their footnote. Release 2025-01 is the status of 1 January 2025 (Moutier still in Bern, consistent with STATPOP 2024).
+Note: `--config` passes nested numbers as text; numeric switches that are not converted in the code (e.g. `price.cost_scale_factor`) should be changed in the file.
 
-Large data files are **not** committed to this repository. Download them directly from the Zenodo links above into `data/raw/` (git-ignored).
+## Outputs and tests
 
-## Run the analysis
-
-The pipeline is a Snakemake workflow. You need [conda](https://conda.org); create the workflow environment once:
-
-    conda env create -f environment.yaml --no-default-packages
-    conda activate swiss-winter-deficit
-
-Then run the entire workflow (attribute extraction -> utility -> figures -> regression tests):
-
-    snakemake
-
-Results go to `build/` (git-ignored); figures in `build/figures/` with one subfolder per format (`png/`, `pdf/`, `svg/`). Each rule runs in its own conda environment (`envs/`), pinned to the versions the reference results were validated with. The rule `test` compares `build/` against the frozen reference results in `data/processed/`. Other useful rules: `snakemake --list`, `snakemake dag` (dependency graph as `build/dag.pdf`), `snakemake clean`.
-
-`snakemake pipeline_map` writes an interactive map of the workflow to `build/pipeline_map.html` (open it in a browser): the rule graph drawn by graphviz as in `snakemake dag`; click a step to see what it does, what it needs and what it feeds, with the open points of the method. Texts in `docs/pipeline_map.yaml` (every rule needs an entry, otherwise the rule fails); the numbers in the texts are read from the results when the map is built.
-
-The two live data sources are pinned in `config/default.yaml` by one base year (`price.reference_year`): the ElCom reference price of that year and the EUR/CHF rate as the annual mean of the daily ECB reference rates of the same year (the year must be completed). This file is the single source for these price parameters; `src/config.py` reads them from there, so notebooks and the pipeline use the same values.
-
-In the national aggregate, the attribute `relative_land` (land used by wind and open-field PV) is by default the national share: national land use divided by the area of Switzerland (sum of the canton areas), like all other attributes national. The switch `land.definition` in `config/default.yaml` selects the previous definition `canton_mean` (unweighted mean of the cantons' shares, about twice as large for most scenarios) for comparison; the choice changes the ranking of the leading scenarios. In the regional main analysis it is the land share of the own region.
-
-If a Python virtual environment (e.g. `.venv`) is active, run `deactivate` first: otherwise its `python` shadows the rules' conda environments.
-
-### Sensitivity to the reference price
-
-The rule `sensitivity_reference_price` (`src/sensitivity.py`) checks how the ranking depends on the ElCom reference price, with the settings in the `sensitivity` section of `config/default.yaml`:
-
-- a curve of rank and P(rank 1) of all scenarios over the reference price (default 20–35 Rp./kWh, step 0.25), with taxes/levies, grid usage and EUR/CHF rate of `price.reference_year`;
-- the reference price at which Alpine PV and S/CCGT (Fossil) + DACCS swap rank, per language region and national;
-- the real base years (default 2022–2025), each with its own ElCom reference values and annual EUR/CHF rate (the reference fetch rules run once per year).
-
-Fig6 marks the reference prices at which the rank-1 scenario changes (`reference_price_rank1_switches.csv`); the rank swap of the pair Alpine PV / S/CCGT (Fossil) + DACCS is kept as a separate CSV (`reference_price_crossing_points.csv`). Results go to `build/data/sensitivity/`, the figure to `build/figures/{png,pdf,svg}/fig6_p_rank1_vs_reference_price_national.*` (rule `plot_sensitivity`). Both are part of `snakemake` (rule `all`) and of the regression tests; to run only this part: `snakemake build/figures/png/fig6_p_rank1_vs_reference_price_national.png`.
-
-### Regional analysis (main analysis)
-
-The main analysis runs on the 23 Swiss locations of the Calliope model (20 cantons, the merged regions AI_AR, BL_BS and NW_OW, and TI; `src/regional.py`), set by `spatial.resolution: regional` in `config/default.yaml`:
-
-- land use (regional area), technology and ownership shares are computed from each region's own capacities; the price change uses the national system cost per kWh with the region's ElCom reference price and surcharges (median of its municipalities); the import share stays national (import from abroad); transmission is 0;
-- utility per region with the coefficients of its language region (draw by draw), aggregated with the population (BFS STATPOP) to DE-CH, FR-CH and national; TI has no coefficients in the choice model and is excluded in the main regional analysis (sensitivities with DE-CH, FR-CH and mixed coefficients);
-- inputs (ElCom tariffs per municipality, LINDAS municipality register, STATPOP) are fetched by own rules for completed years only.
-
-Figures of the regional main analysis (main text; rule `make_plots_regional`, `build/figures/{png,pdf,svg}/*_regional.*`): fig1 preference rank vs. cost rank (both on the 11 scenarios with a cost value), fig2 utility with 96 % HDI and fig3/figA1 attribute contributions (Switzerland, DE-CH, FR-CH; contributions = population-weighted mean of the regional z × β̃, totals in `build/data/regional/contributions_regional.csv`), fig4 ranks DE-CH vs. FR-CH, fig5 cost vs. choice share, fig6 P(rank 1) over a common shift Δ of all regional reference prices, fig7 a schematic tile map of the rank-1 scenario per region, fig8 the population share per rank-1 scenario. The national aggregate has the same figures with the suffix `_national` (appendix). All figures share the scenario order and colours of the section `figures` in `config/default.yaml` and state analysis, interval and price year in their caption.
-
-Pairwise choice probabilities (as in Tröndle et al. 2025, Fig. 1–4; rules `pairwise_regional`, `plot_pairwise`, `choice_maps`, settings in the sections `pairwise` and `maps` of `config/default.yaml`): per posterior draw and region p = logistic(u_1 − u_2), aggregated as the population-weighted mean of the regional probabilities. fig9 is the matrix of all pairs (lower triangle, scenarios by cost), fig10 the maps per configured pair (expected value and both bounds of the credible interval per region; TI no data), each with the colour range 0–100 % and a narrowed variant (`maps.color_range_variant`, suffix `_range40-60`). Tables in `build/data/pairwise/`, including the deviation from the aggregation of the utilities (`aggregation_comparison_regional.csv`). The maps run in their own conda environment `envs/maps.yaml` (geopandas).
-
-The import attribute is the net electricity import from abroad divided by the electricity consumption (annual sums). The switch `imports.definition` in `config/default.yaml` (default `electricity`) selects for the regional main analysis instead `electricity_fuels` (+ imports of natural gas, hydrogen and synthetic methane) or `electricity_fuels_diesel` (+ synthetic diesel); both fuel variants are always part of the regional sensitivity table (rule `import_shares`, `build/data/regional/import_shares_regional.csv`). Assumption: fuels are counted with their energy content, 1 GWh fuel = 1 GWh electricity.
-
-Regional results are written to files with the suffix `_regional` (`build/data/utility_rankings_regional.csv`, `build/data/regional/`, `build/data/sensitivity/*_regional.csv`) and tested against the frozen references `data/processed/*_regional.csv` and `data/processed/regional_attributes.csv`.
-
-The national aggregate (attributes computed for Switzerland as a whole, utility per language region; tables without suffix, figures with the suffix `_national`, and the reference-price sensitivity above) is always computed as a secondary analysis and keeps its own references. With `spatial.resolution: national` the rule `all` builds only the national aggregate (the regional outputs are still built for the tests).
+- Regional main analysis: `build/data/utility_rankings_regional.csv`, `build/data/regional/` (attributes, region rankings, population share with rank 1, sensitivities), figures `*_regional.*` (fig1–fig10).
+- Weather years: `build/data/weather/` and fig11. Baseline (5 TWh winter import limit) exists for 2016 only: Mellot et al. have no 5 TWh runs for 2017 and 2018, also not in the new record. The files used as Baseline (5 TWh) 2017/2018 until 17 Nov 2026 end in `_no_self_sufficiency` and are EP2050+ with 9 TWh winter import: a mapping error of this workflow, corrected. The record contains the 2016 files of July 2024 used here. 12 scenarios in 2016, 11 in 2017 and 2018; 11 scenarios (all except Baseline 5 TWh) are common to all three years. S/CCGT (Ren. Methane) and S/CCGT (Ren. Methane) + H2 give practically identical results in every year because the + H2 variant never uses hydrogen imports, as in Mellot et al., Table 3. The CHP scenario is capped at 2 × the CHP production of EP2050+ 2016 (10.28 TWh) also in 2017 and 2018, i.e. about 3 × EP2050+ of these weather years (inferred from the results).
+- Checks of the input files (standalone, not part of the workflow): `scripts/independent_check.py` (winter and annual net import, cost per file), `scripts/weather_year_check.py` (weather year from the content, Mellot et al. Table 1S) and `scripts/strategy_check.py` (strategy content against Mellot et al. Table 1); results in `docs/independent_check.csv`, `docs/weather_year_check.csv` and `docs/strategy_check.csv`, method in `docs/data_provenance.md`.
+- Numbers of the paper that are not workflow outputs (run from the project root after `snakemake all`):
+  - Named sensitivities for 2016-2018 (tax B, without VAT, previous surcharge 4.88, p_ref ±20 %, margin 20/30 %, cost scopes, import definitions, choice model jan_2026): `SNAKEMAKE=<path to snakemake> bash scripts/sensitivity_runs.sh [years]` writes `docs/sensitivities/<year>/<variant>/` and rebuilds the main analysis at the end (about 2 h for three years).
+  - Summary per year and variant (rank 1 national, DE-CH, FR-CH, P(rank 1), utility gap rank 1 - rank 2, including the in-run variants "import: regional balance" and "land: national share"): `python scripts/sensitivity_summary.py docs/sensitivity_summary.csv`.
+  - Neighbouring ranks per weather year (utility difference, P(A > B), P(A chosen over B); ranks with P(A > B) < 0.95 are reported as tied): `python scripts/adjacent_pairs.py build/data docs/adjacent_pairs.csv` with the Python of the workflow's conda environment.
+- National aggregate (appendix): tables without suffix, figures `*_national.*`, reference-price sensitivity with real base years (fig6 national).
+- Reproduction of the previous results: with the previous model and taxes, `snakemake all --config 'data={"choice_model": "jan_2026"}' 'price={"energy_surcharge": "electricity_only_2025", "energy_vat": 0}'` reproduces the references frozen on 8 Nov 2026 exactly.
+- The rule `test` compares `build/` with the frozen references in `data/processed/` (including `data/processed/weather/`) and `graphics/` (fig6 national) and checks the consistency of the results. After a deliberate change of the method, the references are refrozen by copying the new results there.
 
 ## Repository structure
 
 ```
 .
 ├── Snakefile          # workflow definition
-├── config/            # workflow configuration (scenario mapping, price reference, sensitivity)
+├── config/            # all parameters (default.yaml)
 ├── envs/              # conda environments per rule
 ├── profiles/          # Snakemake execution profile (conda, 1 core)
 ├── scripts/           # thin Snakemake wrappers around src/
-├── tests/             # regression tests against data/processed/ and graphics/ (fig6)
-├── src/               # mapping and prediction library code
+├── src/               # library code (attributes, price, utility, regional analysis, figures, maps)
+├── tests/             # regression and consistency tests
+├── docs/              # texts and template of the pipeline map
 ├── data/
-│   ├── raw/           # downloaded Zenodo data (git-ignored)
+│   ├── raw/           # input data (git-ignored)
 │   └── processed/     # frozen, validated reference results
-├── graphics/          # frozen thesis figures
+├── graphics/          # frozen reference figure (fig6 national)
 ├── legacy/            # first approach and exploratory notebooks (not maintained, see legacy/README.md)
 └── build/             # workflow results (git-ignored)
 ```
 
-The regression tests use `data/processed/scenario_attributes_summary.csv`,
-`data/processed/utility_rankings.csv`, `data/processed/reference_price_*.csv` and
-`graphics/fig6_p_rank1_vs_reference_price.{png,pdf}`. The other files in `data/processed/`
-(`beta_real_units.csv`, `scenario_*.csv`) and `graphics/cost_vs_preference.png` are outdated
-intermediate products of the first approach in `legacy/`.
+**Licence of the boundaries.** swissBOUNDARIES3D is free geodata of swisstopo (open government data); use is free with source attribution "© swisstopo" (https://www.swisstopo.admin.ch/en/terms-of-use-free-geodata-and-geoservices). The figures credit swisstopo in their footnote.
 
 ## Status
 
-Work in progress.
+Work in progress (code freeze in preparation).

@@ -18,7 +18,7 @@ import xarray as xr
 from config import ATTRIBUTE_COLUMN_TO_MODEL_TERM, CANTON_LANGUAGE, CANTON_MERGES, FOREIGN_CODES
 from load_data import (
     compute_land_from_capacity, compute_ownership_shares, compute_technology_mix_shares,
-    elcom_reference_from_prices, load_scenario_capacity, price_change_from_cost,
+    elcom_reference_from_prices, load_scenario_capacity, price_change_from_cost, price_reference_columns,
 )
 from utility import compute_utility, compute_utility_samples, probability_rank1, rank_scenarios, rankings_from_utilities
 
@@ -77,23 +77,23 @@ def _shares(capacity: pd.DataFrame) -> dict:
     return {k: (0.0 if pd.isna(v) else float(v)) for k, v in out.items()}
 
 
-def regional_attributes(nc_path: str, scenario_id: str, area: dict, national: pd.Series, system_cost: float,
-                        demand: float, elcom: pd.DataFrame, eur_to_chf: float) -> pd.DataFrame:
+def regional_attributes(nc_path: str, scenario_id: str, area: dict, national: pd.Series, cost_and_demand: tuple,
+                        elcom: pd.DataFrame, eur_to_chf: float) -> pd.DataFrame:
     """Attributes of one scenario per Calliope region (rows), columns as in scenario_attributes_summary.
     national: the scenario's national attribute row (import_share, mellot_cost_change_pct and, for the
-    comparison, relative_land of the national definition)."""
+    comparison, relative_land of the national definition); cost_and_demand: load_scenario_cost_and_demand."""
     capacity = load_scenario_capacity(nc_path)
     land = compute_land_from_capacity(capacity, area).groupby("canton")["land_use_km2"].sum()
     rows = []
     for region in sorted(capacity["canton"].unique()):
-        ref = elcom.loc[region, ["total_rp_kwh", "taxes_levies_rp_kwh", "netznutzung_rp_kwh", "margin"]].astype(float).to_dict()
+        ref = elcom.loc[region, price_reference_columns(elcom)].astype(float).to_dict()
         rows.append({
             "scenario_id": scenario_id, "region": region, "language": CANTON_LANGUAGE.get(region),
             "transmission_change": 0.0,
             "relative_land": land.get(region, 0.0) / area[region],
             "import_share": national["import_share"],
             **_shares(capacity[capacity["canton"] == region]),
-            "price_change": price_change_from_cost(system_cost, demand, ref, eur_to_chf),
+            "price_change": price_change_from_cost(*cost_and_demand, ref, eur_to_chf),
             "mellot_cost_change_pct": national["mellot_cost_change_pct"],
             "relative_land_national": national["relative_land"],
         })
@@ -111,7 +111,7 @@ def regional_attribute_table(nc_by_scenario: dict, area: dict, national: pd.Data
     frames = []
     for s, nc in nc_by_scenario.items():
         cost_and_demand = load_scenario_cost_and_demand(nc, **cost_options)
-        a = regional_attributes(nc, s, area, national.loc[s], *cost_and_demand, price_reference, eur_to_chf)
+        a = regional_attributes(nc, s, area, national.loc[s], cost_and_demand, price_reference, eur_to_chf)
         if import_share is not None:
             a["import_share"] = import_share[s]
         a["import_share_balance"] = a["region"].map(regional_balance_import_share(nc))
@@ -215,7 +215,8 @@ def with_shifted_reference(attributes: pd.DataFrame, cost_and_demand: dict, elco
     """Attributes with price_change recomputed for all regional reference prices shifted by the same amount
     (Rp./kWh); taxes/levies and grid usage of the regions unchanged."""
     a = attributes.copy()
-    refs = {r: {**elcom.loc[r, ["taxes_levies_rp_kwh", "netznutzung_rp_kwh", "margin"]].astype(float).to_dict(),
+    columns = [c for c in price_reference_columns(elcom) if c != "total_rp_kwh"]
+    refs = {r: {**elcom.loc[r, columns].astype(float).to_dict(),
                 "total_rp_kwh": float(elcom.loc[r, "total_rp_kwh"]) + shift} for r in a["region"].unique()}
     a["price_change"] = [price_change_from_cost(*cost_and_demand[s], refs[r], eur_to_chf) for s, r in zip(a["scenario_id"], a["region"])]
     return a
@@ -261,7 +262,7 @@ def with_scaled_cost(attributes: pd.DataFrame, cost_and_demand: dict, elcom: pd.
                      factor: float) -> pd.DataFrame:
     """Attributes with price_change recomputed for the system cost of all scenarios multiplied by factor
     (cost_and_demand: unscaled cost and demand); regional reference prices, taxes/levies and grid usage unchanged."""
-    scaled = {s: (factor * cost, demand) for s, (cost, demand) in cost_and_demand.items()}
+    scaled = {s: (factor * cost, demand, end_use) for s, (cost, demand, end_use) in cost_and_demand.items()}
     return with_shifted_reference(attributes, scaled, elcom, eur_to_chf, 0.0)
 
 

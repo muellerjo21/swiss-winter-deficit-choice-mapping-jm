@@ -8,8 +8,14 @@ SRC_DIR = Path(__file__).resolve().parent
 # Project root is one level above src/
 PROJECT_ROOT = SRC_DIR.parent
 
-# Choice model (Jan 2026), per language region
-CHOICE_MODEL_PATH = PROJECT_ROOT / "data" / "raw" / "choice-model-jan-2026.nc"
+# Workflow configuration (config/default.yaml), single source of the parameters read here
+_WORKFLOW_CONFIG = yaml.safe_load((PROJECT_ROOT / "config" / "default.yaml").read_text())
+
+# Choice model (data.choice_model, an entry of data.choice_models) and, for every entry, the mapping of the Swiss
+# coefficient groups (DE-CH, FR-CH) to the group/country of its file (load_data.model_partworths)
+_CHOICE_MODELS = _WORKFLOW_CONFIG["data"]["choice_models"]
+CHOICE_MODEL_PATH = PROJECT_ROOT / _CHOICE_MODELS[_WORKFLOW_CONFIG["data"]["choice_model"]]["file"]
+CHOICE_MODEL_COUNTRIES = {str((PROJECT_ROOT / m["file"]).resolve()): m["coefficients"] for m in _CHOICE_MODELS.values()}
 
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
@@ -115,6 +121,8 @@ OWNERSHIP_MAPPING = {
     "wind_onshore_competing": "community",
     "ccgt": "commercial",
     "ccgt_natgas": "commercial",
+    "scgt_natgas": "commercial",
+    "scgt_renewable": "commercial",
     "chp_methane": "commercial",
     "chp_waste": "commercial",
     "chp_biofuel": "commercial",
@@ -137,6 +145,8 @@ TECH_SOURCE_MAPPING = {
     "wind_onshore_competing": "source_wind",
     "ccgt": "source_gas",
     "ccgt_natgas": "source_gas",
+    "scgt_natgas": "source_gas",
+    "scgt_renewable": "source_gas",
     "chp_methane": "source_gas",
     "chp_biofuel": "source_biomass",
     "chp_waste": "source_biomass",
@@ -155,9 +165,8 @@ SECTOR_COUPLING_ELEC_TECHS = [
 # calculation (compute_land_from_capacity via CAPACITY_DENSITY_GW_PER_KM2).
 PV_REFERENCE_TECHS = ["roof_mounted_pv", "open_field_pv", "alpine_pv_subsidised", "alpine_pv_not_subsidised"]
 
-# Price reference parameters: single source is config/default.yaml (section "price"), read here so
+# Price reference parameters: single source is config/default.yaml (section "price", _WORKFLOW_CONFIG above), so
 # that notebooks and interactive runs use the same values as the Snakemake pipeline.
-_WORKFLOW_CONFIG = yaml.safe_load((PROJECT_ROOT / "config" / "default.yaml").read_text())
 
 # Revenue margin of the price formula (price.margin; 0.10 = Tröndle's assumed 10 %). The pipeline passes it via the
 # rules' params (load_data.scope_reference), so that --config overrides reach the scripts.
@@ -176,6 +185,8 @@ PRICE_COST_SCALE_FACTOR = _WORKFLOW_CONFIG["price"]["cost_scale_factor"]
 PRICE_COST_SCOPE = _WORKFLOW_CONFIG["price"]["cost_scope"]
 PRICE_COST_GROUPS = _WORKFLOW_CONFIG["price"]["cost_groups"]
 # Fuel costs of the power plants for cost_scope electricity_fuel (load_data.load_power_fuel_cost keyword arguments)
+# End-use technologies per carrier for the taxes and levies per carrier of cost_scope energy (price.end_use_techs)
+END_USE_TECHS = _WORKFLOW_CONFIG["price"]["end_use_techs"]
 PRICE_POWER_FUEL = {"plants": _WORKFLOW_CONFIG["price"]["fuel_power_techs"], "fuels": _WORKFLOW_CONFIG["price"]["fuel_carriers"],
                     "chp_allocation": _WORKFLOW_CONFIG["price"]["chp_fuel_allocation"]}
 # Definition of relative_land (land.definition): national_share or canton_mean, see

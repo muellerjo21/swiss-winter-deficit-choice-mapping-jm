@@ -59,3 +59,20 @@ def test_ticino_sensitivity_with_main_coefficients(sensitivities_regional, ranki
         assert np.abs(variant[column] - main[column]).max() < CONSISTENCY_ATOL, column
     for column in ["rank_DE_CH", "rank_FR_CH", "rank_national"]:
         assert (variant[column] == main[column]).all(), column
+
+
+def test_ticino_variants_identical_with_one_swiss_coefficient_set(sensitivities_regional, choice_model_coefficients,
+                                                                  ticino):
+    """With a choice model that has one coefficient set for Switzerland (DE-CH and FR-CH mapped to the same country,
+    e.g. the measured model), the TI variants with DE-CH, FR-CH and mixed coefficients give identical results
+    (mixed = language-weighted sum of the same coefficients, equal up to rounding)."""
+    if ticino is None or len(set(choice_model_coefficients.values())) > 1:
+        return
+    variants = [f"TI with {c} coefficients" for c in ("DE-CH", "FR-CH", "mixed")]
+    tables = [sensitivities_regional[sensitivities_regional["variant"] == v].set_index("scenario_id").sort_index()
+              for v in variants]
+    columns = [c for c in tables[0].columns if c.startswith(("utility_", "p_rank1_"))]
+    for other in tables[1:]:
+        assert np.abs(other[columns] - tables[0][columns]).to_numpy().max() < CONSISTENCY_ATOL
+        ranks = ["rank_DE_CH", "rank_FR_CH", "rank_national"]
+        assert (other[ranks] == tables[0][ranks]).all().all()

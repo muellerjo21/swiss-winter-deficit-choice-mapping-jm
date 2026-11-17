@@ -8,7 +8,22 @@ data:
     # the original download stays in data/raw/scenario_data/)
     scenario_dir: data/raw/{weather_year}
     canton_area: data/raw/flache_der_schweiz_nach_kantonen_in_quadratkilometern.csv
-    choice_model: data/raw/choice-model-jan-2026.nc
+    # Choice model: name of an entry of choice_models (provenance, sizes and checksums: docs/data_provenance.md).
+    # coefficients: Swiss coefficient group -> group/country of the model file; mobile_partworths: the file has the
+    # mobile shift (utility.mobile_share > 0 is only possible then).
+    choice_model: measured_2026
+    choice_models:
+        # cleaned choice data (Kristiina Joon, Climate Policy Lab, Nov 2026): European mean + country effect, one
+        # Swiss coefficient set for all regions (no language split)
+        measured_2026:
+            file: data/raw/choice-model-measured/measured.nc
+            coefficients: {DE-CH: Switzerland, FR-CH: Switzerland}
+            mobile_partworths: false
+        # previous model (Jan 2026): partworths per language group DE-CH / FR-CH, with the mobile shift
+        jan_2026:
+            file: data/raw/choice-model-jan-2026.nc
+            coefficients: {DE-CH: DE-CH, FR-CH: FR-CH}
+            mobile_partworths: true
 
 # Weather year of the main analysis (Calliope runs with the weather of 2016, 2017 or 2018); the other years are
 # compared in the sensitivity sensitivity.weather_years. 2016 = main result.
@@ -34,8 +49,8 @@ price:
     # fall on electricity. The demand D_s stays the electricity consumption in these cases. With electricity the
     # costs of the fuels burnt in power plants (cost_groups.other) are missing. energy = all costs over the final
     # energy demand (electricity + heat + transport, load_data.load_scenario_final_energy) instead of D_s (main
-    # analysis); then the reference price is energy_reference_ct_per_kwh. Taxes/levies and grid usage are the ElCom electricity values in
-    # all cases (for energy still to be checked).
+    # analysis); then the reference price is energy_reference_ct_per_kwh, taxes/levies and grid usage are
+    # energy_surcharge and VAT energy_vat is added. Otherwise taxes/levies and grid usage are the ElCom electricity values.
     cost_scope: energy
     # Reference price p_ref for cost_scope energy (CHF cents = Rp. per kWh of final energy), the same in every region;
     # null = the ElCom electricity reference. 16.94 = (a) national average 2025: final consumer expenditure for energy
@@ -46,12 +61,52 @@ price:
     # heat only: 15.82 Rp./kWh (T17a consumption; electricity 29.9 and gas 15.0 Rp./kWh from T37, heating oil, wood
     # and district heat at the T42/T01 averages); household mobility is not reported separately.
     energy_reference_ct_per_kwh: 16.94
-    # Taxes/levies + grid usage tau + g for cost_scope energy (Rp. per kWh of final energy), replacing the ElCom
-    # electricity values; null = the ElCom electricity values. 4.88 = estimate: ElCom tau + g of electricity 2025
-    # (H4, 16.30 Rp./kWh) x electricity share of final energy excl. aviation (57.97 / 193.80 TWh, GEST 2025 T01).
-    # Lower bound: mineral oil tax and CO2 levy on fuels are not included (no open data source found), and the H4
-    # household value overstates tau + g of large consumers.
-    energy_surcharge_ct_per_kwh: 4.88
+    # Taxes/levies + grid usage tau + g for cost_scope energy: name of an entry of energy_surcharges (main analysis:
+    # constant_2025; sensitivities: by_carrier_2025, electricity_only_2025).
+    energy_surcharge: constant_2025
+    # Entries: ct_per_kwh = one value in Rp. per kWh of final energy for every scenario (null = the ElCom electricity
+    # values), or ct_per_kwh_by_carrier = today's rate per kWh of each end-use carrier (end_use_techs), applied to the
+    # end-use consumption of each scenario and divided by its final energy. All values without VAT. Sources:
+    # ElCom 2025 H4 national median tau + g 3.13 + 13.17 = 16.30 Rp./kWh (LINDAS, build/data/reference); mineral oil
+    # tax MinöStG SR 641.61 Anhang 1 (state 1 Jan 2025: petrol 431.20, diesel 458.70, heating oil extra-light 3.00
+    # Fr./1000 l, natural gas for heating 2.10 Fr./1000 kg) plus surcharge Art. 12 Abs. 2 (300 Fr./1000 l, motor
+    # fuels); CO2 levy CO2-Verordnung SR 641.711 Art. 94 and Anhang 11 (state 1 May 2025, 120 Fr./t CO2: heating oil
+    # extra-light 318.00 Fr./1000 l, natural gas 321.60 Fr./1000 kg); heating values and densities BAFU Faktenblatt
+    # CO2-Emissionsfaktoren des THG-Inventars (Jan 2026), Tab. 1 and 2 (petrol 0.0426 TJ/t, 0.737 t/m3; diesel
+    # 0.0430, 0.830; heating oil 0.0429, 0.839; natural gas 2025 0.0484 TJ/t); quantities BFE GEST 2025 T01 (retrieved
+    # 15 Nov 2026 via the fedlex SPARQL endpoint and the publishers' downloads).
+    energy_surcharges:
+        # Today's taxes and levies over today's final energy mix: electricity tau + g 9'449 + mineral oil tax and
+        # surcharge on petrol 2'046 and diesel 2'193 + heating oil (tax and CO2 levy) 690 + natural gas 631 =
+        # 15'009 Mio. Fr. / 193.80 TWh final energy excl. aviation (GEST 2025 T01). Plausibility: petrol and diesel
+        # within -2.7 and +0.2 % of the BAZG net revenue 2025 (table T 2.2, Q4: 2'102 and 2'188 Mio. Fr.); CO2 levy
+        # gross 1'311 Mio. Fr. vs. "ungefähr 1.2 Mrd. Franken" per year (BAFU, exemptions not deducted); taxes =
+        # 46 % of the final consumer expenditure 32.8 bn Fr. (GEST T42).
+        constant_2025:
+            ct_per_kwh: 7.74
+        # Today's rates per kWh of the carrier: diesel 758.70 Fr./1000 l / 9.914 MWh/m3; natural gas (2.10 + 321.60)
+        # Fr./t / 13.44 MWh/t; hydrogen has no tariff in the MinöStG; biofuels are assumed renewable (tax relief).
+        by_carrier_2025:
+            ct_per_kwh_by_carrier: {electricity: 16.30, gas: 2.41, diesel: 7.65, hydrogen: 0.0, biofuel: 0.0}
+        # Previous estimate: ElCom tau + g of electricity (16.30 Rp./kWh) x electricity share of final energy (57.97 /
+        # 193.80 TWh); without the taxes on fuels.
+        electricity_only_2025:
+            ct_per_kwh: 4.88
+    # VAT on p_sim for cost_scope energy, because p_ref (GEST T42) includes it: the expenditure is valued with LIK
+    # average prices "inkl. MwSt." and with PPI prices "korrigiert um die MwSt." (BFE, Methodik zur Schätzung der
+    # Endverbraucherausgaben für Energie der GEST, July 2024, pp. 3-6, pubdb 11798; for electricity the level comes
+    # from the electricity statistics, VAT not stated). 0.081 = standard rate, MWSTG SR 641.20 Art. 25 Abs. 1 (state
+    # 31 Mar 2025); energy is not in the reduced-rate list (Abs. 2).
+    energy_vat: 0.081
+    # End-use technologies per carrier (Calliope carrier they consume) for by_carrier surcharges; conversion
+    # technologies (power plants, electrolysis, DAC, storage) are not end use.
+    end_use_techs:
+        electricity: {carrier: electricity, techs: [demand_elec, hp, electrode_boiler, electric_heater, light_transport_ev,
+                                                    heavy_transport_ev]}
+        gas: {carrier: methane, techs: [buildings_methane_boiler, industry_methane_boiler]}
+        diesel: {carrier: diesel, techs: [light_transport_ice, heavy_transport_ice]}
+        hydrogen: {carrier: hydrogen, techs: [light_transport_fcev, heavy_transport_fcev]}
+        biofuel: {carrier: biofuel, techs: [buildings_biofuel_boiler, industry_biofuel_boiler]}
     # Every Swiss technology with a cost in the result files belongs to exactly one group (checked when loading);
     # ac_transmission stands for all ac_transmission:<region> links.
     cost_groups:
@@ -135,8 +190,9 @@ spatial:
 sensitivity:
     # Curve: only total_rp_kwh varies (Rp./kWh); taxes/levies, grid usage and EUR/CHF rate stay at
     # price.reference_year. The reference year's own total is added to the grid.
+    # Range covers the ElCom electricity price (28.97 Rp./kWh in 2025) and the energy reference price (16.94).
     reference_price:
-        start: 20.0
+        start: 10.0
         stop: 35.0
         step: 0.25
     # Real base years with their own ElCom reference values and annual EUR/CHF rate. Must be
@@ -242,16 +298,18 @@ maps:
 # because the file names contain commas.
 scenarios:
     # scenario ID -> {weather year: result file in data.scenario_dir, or null if Mellot et al. did not publish that
-    # run; missing runs are skipped with a message}. 2017/2018 baseline: the files end in _no_self_sufficiency, but
-    # like the 2016 baseline they have the neighbours fixed and the winter constraint (overrides), so they are the
-    # baseline; EP2050+ without fixed neighbours (baseline_no_self_sufficiency) exists for 2016 and 2018.
+    # run; missing runs are skipped with a message}. Baseline (5 TWh) vs. EP2050+ decided by content, not by the file
+    # names: the winter (Oct-Mar) net electricity import is 5.0 TWh only in the 2016 baseline; all files ending in
+    # _no_self_sufficiency have 9.0 TWh, i.e. EP2050+ without the 5 TWh limit (checked 17 Nov 2026 with Mellot's
+    # control files, docs/data_provenance.md). There are no 5 TWh runs for 2017 and 2018. EP2050+ uses the runs
+    # without fixed neighbours as in 2016 (2017: control file of the Zenodo Sandbox preview).
     baseline:
         2016: "barrier_baseline,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
-        2017: "barrier_baseline,sensitivity_weather_2017,neighbours_fixed_by_EP2050_baseline_2017_no_self_sufficiency_result_4H.nc"
-        2018: "barrier_baseline,sensitivity_weather_2018,neighbours_fixed_by_EP2050_baseline_2018_no_self_sufficiency_result_4H.nc"
+        2017: null
+        2018: null
     baseline_no_self_sufficiency_result_4H:
         2016: "barrier_baseline_no_self_sufficiency_result_4H.nc"
-        2017: null
+        2017: "barrier_baseline,sensitivity_weather_2017_no_self_sufficiency_result_4H.nc"
         2018: "barrier_baseline,sensitivity_weather_2018_no_self_sufficiency_result_4H.nc"
     policy_alpine_pv:
         2016: "barrier_policy_alpine_pv,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"

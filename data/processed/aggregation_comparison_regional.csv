@@ -1,2 +1,2 @@
 n_pairs,max_abs_diff,mean_abs_diff,max_pair_scenario_1,max_pair_scenario_2,max_pair_p_mean,max_pair_p_mean_utility_aggregation
-132,0.00027287961353600343,4.739705674122362e-05,baseline,policy_alpine_pv,0.3870957297572097,0.3868228501436737
+132,0.00015802074128212773,2.6531557751931433e-05,policy_mix,policy_alpine_pv,0.45335432278352517,0.45319630204224304

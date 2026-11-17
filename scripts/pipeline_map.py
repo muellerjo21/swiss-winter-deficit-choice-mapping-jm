@@ -45,14 +45,17 @@ def read_rulegraph(path: str) -> tuple[dict, list]:
     return names, [list(e) for e in edges]
 
 
-def survey_values(path_to_choice_model: str) -> tuple[list, float]:
-    """Import levels shown in the survey and the share of Swiss respondents (DE-CH, FR-CH) with m = 1."""
+def survey_values(path_to_choice_model: str, coefficients: dict) -> tuple[list, float]:
+    """Import levels shown in the survey and the share of Swiss respondents (the file's groups/countries of the Swiss
+    coefficient groups, data.choice_models.<entry>.coefficients) with m = 1; None if the model has no m."""
     idata = az.from_netcdf(path_to_choice_model)
     cd = idata.constant_data
     levels = np.unique(np.round(np.concatenate([cd["attribute_values_left"].sel(attribute="import").values,
                                                 cd["attribute_values_right"].sel(attribute="import").values]), 6))
-    countries = list(idata.posterior["beta_partworths"]["country"].values)
-    swiss = [countries.index(c) for c in ("DE-CH", "FR-CH")]
+    if "m" not in cd:
+        return [float(v) for v in levels], None
+    countries = [str(c) for c in idata.posterior["country"].values]
+    swiss = [countries.index(c) for c in set(coefficients.values())]
     resp = pd.DataFrame({"r": cd["r"].values, "c": cd["c"].values, "m": cd["m"].values})
     resp = resp[resp["c"].isin(swiss)].groupby("r")["m"].max()
     return [float(v) for v in levels], float(resp.mean())
@@ -71,9 +74,11 @@ def values(inp, p) -> dict:
     by_leader = {}
     for _, r in leaders.iterrows():
         by_leader.setdefault(r["scenario_id"], []).append(int(r["year"]))
-    switch = pd.read_csv(inp.switches_regional).set_index("region").loc["national"]
+    switches = pd.read_csv(inp.switches_regional).set_index("region")
+    switch = switches.loc["national"] if "national" in switches.index else None  # None: no rank-1 change in the range
     imports = pd.read_csv(inp.import_shares).set_index("scenario_id")
-    levels, mobile_share = survey_values(inp.choice_model)
+    levels, mobile_share = survey_values(inp.choice_model, p.choice_model_coefficients)
+    one_swiss_set = len(set(p.choice_model_coefficients.values())) == 1
     unclipped = imports["import_share_electricity_unclipped"]
     exporters = [(name(s), v) for s, v in unclipped.items() if v < 0]
     matrix = pd.read_csv(inp.pairwise_matrix)
@@ -96,9 +101,13 @@ def values(inp, p) -> dict:
         "n_included": len(population) - len(excluded),
         "ticino_note": ("TI ausgeschlossen" if p.ticino is None
                         else f"TI mit den {p.ticino}-Koeffizienten, zählt nur zu CH, nicht zu DE-CH oder FR-CH"),
-        "ticino_handling": (f"TI ({ti_share} der Bevölkerung) ist deshalb ausgeschlossen" if p.ticino is None
-                            else f"TI ({ti_share} der Bevölkerung) wird mit den {p.ticino}-Koeffizienten gerechnet; "
-                                 "die Sensitivität rechnet TI mit DE-CH, FR-CH und gemischten Koeffizienten"),
+        "ticino_open": (f"Das Choice-Modell hat einen Koeffizientensatz für die ganze Schweiz; TI ({ti_share} der "
+                        "Bevölkerung) rechnet damit wie alle Regionen. Die Tessin-Sensitivität (DE-CH, FR-CH, gemischt) "
+                        "ist nur mit dem alten Modell (jan_2026) sinnvoll." if one_swiss_set else
+                        f"Das Modell hat keine Partworths für die italienische Schweiz; TI ({ti_share} der Bevölkerung) "
+                        + ("ist deshalb ausgeschlossen." if p.ticino is None else
+                           f"wird mit den {p.ticino}-Koeffizienten gerechnet; die Sensitivität rechnet TI mit DE-CH, "
+                           "FR-CH und gemischten Koeffizienten.")),
         "ref_price_regional_range": f"{fixed(regions.min())} Rp./kWh in {regions.idxmin()} bis {fixed(regions.max())} "
                                     f"in {regions.idxmax()}",
         "boundaries_release": "Release " + re.search(r"swissboundaries3d_(\d{4}-\d{2})", p.boundaries_url).group(1),
@@ -114,9 +123,13 @@ def values(inp, p) -> dict:
                             "der Anteil wird auf 0 gesetzt." if exporters else "kein Szenario exportiert netto."),
         "interval": interval,
         "curve_range": f"{p.curve_start:g} bis {p.curve_stop:g}",
-        "mobile_sample_share": fixed(mobile_share, 3),
-        "switch_shift": fixed(switch["switch_shift_rp_kwh"], 1),
-        "switch_pair": f"{name(switch['scenario_before'])} → {name(switch['scenario_after'])}",
+        "mobile_open": ("Das gewählte Choice-Modell hat keinen Mobile-Effekt (m); die Mobile-Sensitivität "
+                        "(utility.mobile_share) ist nur mit dem alten Modell (jan_2026) sinnvoll." if mobile_share is None
+                        else f"Welcher Wert für m: 0 (so rechnen wir) oder der Stichprobenanteil {fixed(mobile_share, 3)}? "
+                             "(Nur mit dem alten Modell jan_2026 sinnvoll.)"),
+        "switch_sentence": ("National wechselt Rang 1 im untersuchten Bereich nicht." if switch is None else
+                            f"National wechselt Rang 1 bei Δ = {fixed(switch['switch_shift_rp_kwh'], 1)} Rp./kWh "
+                            f"({name(switch['scenario_before'])} → {name(switch['scenario_after'])})."),
         "n_pairs": int((matrix["scenario_1"] != matrix["scenario_2"]).sum()),
         "test_count": int(tests.group(1)),
         "n_map_pairs": len(p.map_pairs),

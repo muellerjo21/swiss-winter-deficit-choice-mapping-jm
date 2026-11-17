@@ -7,6 +7,7 @@ costs over the final energy demand, with its own reference price), and the impor
 Pytest fixtures are provided from within the test runner.
 """
 import numpy as np
+import pandas as pd
 
 CONSISTENCY_ATOL = 1e-12
 
@@ -75,14 +76,20 @@ def test_energy_reference_price(final_energy, energy_reference, elcom_national):
 
 
 def test_energy_surcharge(final_energy, energy_reference, elcom_national, cost_groups):
-    """p_sim of the energy scope = C_s / final energy * e * 100 * (1 + margin) + surcharge, with the surcharge
-    price.energy_surcharge_ct_per_kwh or, if null, the ElCom taxes/levies + grid usage: checked through the
-    difference to p_sim of all costs over D_s, which uses the ElCom surcharge (same margin)."""
-    value = energy_reference["surcharge"]
+    """p_sim of the energy scope = (C_s / final energy * e * 100 * (1 + margin) + surcharge) * (1 + VAT), with the
+    surcharge price.energy_surcharge (a value, rates per end-use carrier, or if null the ElCom taxes/levies + grid
+    usage) and VAT price.energy_vat: checked through the difference to p_sim of all costs over D_s, which uses the
+    ElCom surcharge, the same margin and no VAT."""
+    value, vat = energy_reference["surcharge"], float(energy_reference["vat"] or 0.0)
     elcom = elcom_national["taxes_levies_rp_kwh"] + elcom_national["netznutzung_rp_kwh"]
-    surcharge = elcom if value is None else float(value)
     t = final_energy.loc[cost_groups.index]
-    variable_energy = t["p_sim_energy_rp_kwh"] - surcharge
+    if isinstance(value, dict):
+        expected = sum(float(r) * t[f"end_use_{c}_gwh"] for c, r in value.items()) / t["final_energy_gwh"]
+    else:
+        expected = pd.Series(elcom if value is None else float(value), index=t.index)
+    assert np.allclose(t["surcharge_rp_kwh"], expected, rtol=1e-12, atol=0)
+    assert (t["vat"] == vat).all()
+    variable_energy = t["p_sim_energy_rp_kwh"] / (1 + vat) - t["surcharge_rp_kwh"]
     variable_total = cost_groups["p_sim_total_rp_kwh"] - elcom
     # same cost and margin, different denominator: variable parts scale with D_s / final energy
     assert np.allclose(variable_energy, variable_total * t["demand_gwh"] / t["final_energy_gwh"], rtol=1e-9, atol=0)

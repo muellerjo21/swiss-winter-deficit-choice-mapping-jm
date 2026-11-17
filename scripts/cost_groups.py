@@ -13,7 +13,8 @@ import xarray as xr
 sys.path.insert(0, str(Path(snakemake.scriptdir).parent / "src"))
 from config import FOREIGN_CODES
 from load_data import (aggregate_national, import_quantities, load_power_fuel_cost, load_scenario_cost_by_technology,
-                       load_scenario_demand, load_scenario_final_energy, scope_reference, simulated_price)
+                       load_scenario_demand, load_scenario_end_use, load_scenario_final_energy, price_surcharge,
+                       scope_reference, simulated_price)
 
 
 def fuel_power_gwh(nc_path: str, techs: list) -> float:
@@ -54,11 +55,14 @@ def cost_groups(paths_to_nc, scenario_ids, groups, fuel_power_techs, power_fuel,
                      "fuel_power_gwh": fuel_power_gwh(nc, fuel_power_techs), "cost_electricity_fuel": electricity_fuel,
                      "p_sim_electricity_fuel_rp_kwh": simulated_price(cost_scale * electricity_fuel, demand, ref,
                                                                       eur_to_chf)})
-        final = load_scenario_final_energy(nc)
-        p_sim = simulated_price(cost_scale * total, final["final_energy"], energy_ref, eur_to_chf)
+        final, end_use = load_scenario_final_energy(nc), load_scenario_end_use(nc)
+        p_sim = simulated_price(cost_scale * total, final["final_energy"], energy_ref, eur_to_chf, end_use)
         imports = import_quantities(nc, fuel_techs, diesel_techs, "final_energy")
         energy.append({"scenario_id": s, **{f"{k}_gwh": v for k, v in final.items()}, "demand_gwh": demand,
+                       **{f"end_use_{k}_gwh": v for k, v in end_use.items()},
                        "cost_total": total, "cost_scale_factor": cost_scale, "p_ref_rp_kwh": energy_ref["total_rp_kwh"],
+                       "surcharge_rp_kwh": price_surcharge(final["final_energy"], energy_ref, end_use),
+                       "vat": energy_ref["vat"],
                        "p_sim_energy_rp_kwh": p_sim,
                        "price_change_energy": (p_sim - energy_ref["total_rp_kwh"]) / energy_ref["total_rp_kwh"],
                        **{k: v for k, v in imports.items() if k.startswith("import_share_")}})
