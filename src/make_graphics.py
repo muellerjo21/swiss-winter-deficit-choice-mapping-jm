@@ -16,8 +16,8 @@ import pandas as pd
 from pathlib import Path
 
 from config import (
-    PROJECT_ROOT, CHOICE_MODEL_PATH, ATTRIBUTE_COLUMN_TO_MODEL_TERM, SCENARIO_DISPLAY_NAMES,
-    LANGUAGE_REGION_WEIGHTS, CANTON_LANGUAGE,
+    ATTRIBUTE_COLUMN_TO_MODEL_TERM, SCENARIO_DISPLAY_NAMES, LANGUAGE_REGION_WEIGHTS, CANTON_LANGUAGE, GROUP_TAGS,
+    LANGUAGE_GROUPS, MELLOT_COST_CHANGE_PCT,
 )
 from load_data import (
     load_beta_partworths_mean, load_beta_partworths_samples,
@@ -33,12 +33,10 @@ from plot_style import (  # colours, Matplotlib settings, save() and FigureSetti
     FigureSettings, save, text_color_on,
 )
 
-PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
-GRAPHICS_DIR = PROJECT_ROOT / "graphics"
-
-REFERENCE_SCENARIO = "baseline"  # not in Mellot Table 3
-GROUPS = ["national", "DE_CH", "FR_CH"]  # panel order: Switzerland, DE-CH, FR-CH
-LANGUAGES = ["DE-CH", "FR-CH"]
+# The scenario without a cost value in Mellot Table 3 (open marker, no cost rank)
+REFERENCE_SCENARIO = next(s for s, v in MELLOT_COST_CHANGE_PCT.items() if np.isnan(v))
+GROUPS = GROUP_TAGS  # panel order: Switzerland, DE-CH, FR-CH
+LANGUAGES = LANGUAGE_GROUPS
 
 
 def display_name(scenario_id: str) -> str:
@@ -65,15 +63,14 @@ def scenario_handles(fs: FigureSettings, shown: list, marker: str = "o", others:
     return handles
 
 
-def load_results(attrs_path: Path = PROCESSED_DIR / "scenario_attributes_summary.csv",
-                 rankings_path: Path = PROCESSED_DIR / "utility_rankings.csv") -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_results(attrs_path: Path, rankings_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     return pd.read_csv(attrs_path), pd.read_csv(rankings_path)
 
 
 # ---------------------------------------------------------------------------
 # 1. Preference rank vs. Mellot cost rank, both on the 11 scenarios with a cost value
 # ---------------------------------------------------------------------------
-def fig_rank_vs_cost(rankings: pd.DataFrame, fs: FigureSettings, out_dir: Path = GRAPHICS_DIR) -> None:
+def fig_rank_vs_cost(rankings: pd.DataFrame, fs: FigureSettings, out_dir: Path) -> None:
     df = rankings.dropna(subset=["mellot_cost_change_pct"]).copy()
     df["preference_rank"] = df["utility_national"].rank(ascending=False, method="min").astype(int)
     df["cost_rank"] = df["mellot_cost_change_pct"].rank(method="min").astype(int)
@@ -122,7 +119,7 @@ def fig_rank_vs_cost(rankings: pd.DataFrame, fs: FigureSettings, out_dir: Path =
 # ---------------------------------------------------------------------------
 # 2. Forest plot: utility with credible interval
 # ---------------------------------------------------------------------------
-def fig_forest(rankings: pd.DataFrame, fs: FigureSettings, out_dir: Path = GRAPHICS_DIR) -> None:
+def fig_forest(rankings: pd.DataFrame, fs: FigureSettings, out_dir: Path) -> None:
     ci_tag = credible_interval_tag(fs.credible_interval, fs.interval_type)
     df = rankings.set_index("scenario_id").loc[list(fs.order)].reset_index()
     y = np.arange(len(df))[::-1]  # first scenario of the order at the top
@@ -173,7 +170,7 @@ CONTRIBUTION_LABEL = r"$\tilde\beta$ × attribute value (per unit of the attribu
 
 
 def compute_contributions(attrs: pd.DataFrame, region: str, scale: dict,
-                          model_path: Path = CHOICE_MODEL_PATH, mobile_share: float = 0.0) -> pd.DataFrame:
+                          model_path: Path, mobile_share: float) -> pd.DataFrame:
     """z_k * (beta_real_k + mobile_share * gamma_real_k) per scenario and contribution group, with raw
     attributes z and coefficients in real units (same as utility.compute_utility). With the posterior-mean
     coefficients this equals the posterior mean of the per-draw contributions (linear in beta)."""
@@ -190,8 +187,8 @@ def compute_contributions(attrs: pd.DataFrame, region: str, scale: dict,
     return pd.DataFrame(rows).T
 
 
-def group_contributions(attrs_by_language: dict, language_weights: dict, model_path: Path = CHOICE_MODEL_PATH,
-                        mobile_share: float = 0.0, national_attrs_by_language: dict = None) -> dict:
+def group_contributions(attrs_by_language: dict, language_weights: dict, model_path: Path, mobile_share: float,
+                        national_attrs_by_language: dict = None) -> dict:
     """Contributions per group (national, DE_CH, FR_CH). DE-CH/FR-CH: attributes of the language region with its
     coefficients; Switzerland: mean of the two weighted with language_weights (population shares in the regional
     analysis, sample shares in the national aggregate), so that the totals equal utility_<group>.
@@ -219,7 +216,7 @@ def contributions_table(contributions: dict) -> pd.DataFrame:
 
 
 def fig_contributions(contributions: dict, fs: FigureSettings, centered: bool, name: str, note: str,
-                      out_dir: Path = GRAPHICS_DIR) -> None:
+                      out_dir: Path) -> None:
     """centered=True: each segment = contribution minus the mean of that attribute over all scenarios (per
     group). Constant terms vanish; what remains visible is what explains the utility differences. The diamond
     then sits at U - mean(U) (= sum of the visible segments); the top axis is shifted by mean(U) and shows the
@@ -306,7 +303,7 @@ CONTRIBUTIONS_NATIONAL_NOTE = (
 # ---------------------------------------------------------------------------
 # 4. Slope chart DE-CH vs. FR-CH
 # ---------------------------------------------------------------------------
-def fig_slope_regions(rankings: pd.DataFrame, fs: FigureSettings, out_dir: Path = GRAPHICS_DIR) -> None:
+def fig_slope_regions(rankings: pd.DataFrame, fs: FigureSettings, out_dir: Path) -> None:
     df = rankings.copy()
     fig, ax = plt.subplots(figsize=(6.5, 6.2))
     for _, r in df.iterrows():
@@ -342,9 +339,8 @@ def fig_slope_regions(rankings: pd.DataFrame, fs: FigureSettings, out_dir: Path 
 # ---------------------------------------------------------------------------
 # 5. Cost vs. predicted preference
 # ---------------------------------------------------------------------------
-def fig_cost_vs_preference(attrs: pd.DataFrame, fs: FigureSettings, model_path: Path = CHOICE_MODEL_PATH,
-                           out_dir: Path = GRAPHICS_DIR, mobile_share: float = 0.0,
-                           national_samples: dict = None) -> None:
+def fig_cost_vs_preference(attrs: pd.DataFrame, fs: FigureSettings, model_path: Path, out_dir: Path,
+                           mobile_share: float, national_samples: dict = None) -> None:
     """Top: Mellot cost change vs. EP2050+; bottom: softmax choice share (national) over the 11 scenarios from
     Mellot Table 3, with credible interval from the posterior samples. national_samples: national utility
     samples per scenario (regional analysis); default: from the national attributes with LANGUAGE_REGION_WEIGHTS."""
@@ -441,8 +437,8 @@ def _scenario_curve_labels(ax, region: pd.DataFrame, x_col: str, fs: FigureSetti
 
 
 def fig_reference_price_sensitivity(curve: pd.DataFrame, crossings: pd.DataFrame, base_years: pd.DataFrame,
-                                    switches: pd.DataFrame, fs: FigureSettings, out_dir: Path = GRAPHICS_DIR) -> None:
-    """National aggregate: P(rank 1) of the highlighted scenarios vs. the ElCom reference price, one panel per
+                                    switches: pd.DataFrame, fs: FigureSettings, out_dir: Path) -> None:
+    """National aggregate: P(rank 1) of the highlighted scenarios vs. the reference price (fs.price_axis), one panel per
     group. Lines: only the reference price varies (surcharges and EUR/CHF of the reference year); markers: real
     base years with their own surcharges and annual rate; dashed: changes of the rank-1 scenario (switches).
     crossings only provides the reference-year values for the footnote."""
@@ -566,7 +562,7 @@ def language_population_weights(weights: pd.Series) -> dict:
 
 
 def fig_reference_price_shift(curve: pd.DataFrame, switches: pd.DataFrame, national_reference: float,
-                              fs: FigureSettings, out_dir: Path = GRAPHICS_DIR) -> None:
+                              fs: FigureSettings, out_dir: Path) -> None:
     """Regional main analysis: P(rank 1) vs. a common additive shift Δ of all regional reference prices; top
     axis: national median reference price plus Δ (orientation only). Dashed: rank-1 changes; solid: Δ = 0."""
     scenarios = list(fs.highlight)
@@ -638,7 +634,7 @@ REGION_TILES = {
 REGION_TILE_LABELS = {"BL_BS": "BL/BS", "AI_AR": "AI/AR", "NW_OW": "NW/OW"}
 
 
-def fig_rank1_by_region(regions: pd.DataFrame, fs: FigureSettings, out_dir: Path = GRAPHICS_DIR) -> None:
+def fig_rank1_by_region(regions: pd.DataFrame, fs: FigureSettings, out_dir: Path) -> None:
     """Schematic tile map: scenario with rank 1 (posterior-mean utility) per region, with its P(rank 1).
     Scenario colours as in all figures; bold outline = FR-CH; excluded regions hatched."""
     first = regions[regions["rank"] == 1].set_index("region")
@@ -682,7 +678,7 @@ def fig_rank1_by_region(regions: pd.DataFrame, fs: FigureSettings, out_dir: Path
 
 
 def fig_rank1_population_share(share: pd.DataFrame, rankings: pd.DataFrame, fs: FigureSettings,
-                               out_dir: Path = GRAPHICS_DIR) -> None:
+                               out_dir: Path) -> None:
     """Share of the population (included regions) living in regions where a scenario has rank 1; only
     scenarios with a non-zero share, in the figure order."""
     s = share.set_index("scenario_id")["population_share_rank1"]
@@ -712,8 +708,8 @@ def fig_rank1_population_share(share: pd.DataFrame, rankings: pd.DataFrame, fs: 
 def make_all_regional(attributes: pd.DataFrame, weights: pd.Series, rankings: pd.DataFrame,
                       regions: pd.DataFrame, share: pd.DataFrame, curve: pd.DataFrame, switches: pd.DataFrame,
                       national_samples: dict, national_reference: float, fs: FigureSettings,
-                      model_path: Path = CHOICE_MODEL_PATH, out_dir: Path = GRAPHICS_DIR,
-                      mobile_share: float = 0.0, coefficients: dict = None) -> pd.DataFrame:
+                      model_path: Path, out_dir: Path, mobile_share: float,
+                      coefficients: dict = None) -> pd.DataFrame:
     """Figures of the regional main analysis (suffix _regional; list in the Snakefile: FIGURES_REGIONAL).
     coefficients: region -> coefficient set (regional.region_coefficients); None = those of the language region.
     Returns the absolute contributions per group and scenario (fig3/figA1) with their totals."""
@@ -740,8 +736,8 @@ def make_all_regional(attributes: pd.DataFrame, weights: pd.Series, rankings: pd
     return contributions_table(contributions)
 
 
-def make_all(attrs: pd.DataFrame, rankings: pd.DataFrame, fs: FigureSettings, model_path: Path = CHOICE_MODEL_PATH,
-             out_dir: Path = GRAPHICS_DIR, mobile_share: float = 0.0) -> pd.DataFrame:
+def make_all(attrs: pd.DataFrame, rankings: pd.DataFrame, fs: FigureSettings, model_path: Path, out_dir: Path,
+             mobile_share: float) -> pd.DataFrame:
     """Figures of the national aggregate (appendix, suffix _national; list in the Snakefile: FIGURES).
     fs must carry the interval and mobile_share the value the rankings were computed with.
     Returns the absolute contributions per group and scenario (fig3/figA1) with their totals."""
@@ -760,7 +756,7 @@ def make_all(attrs: pd.DataFrame, rankings: pd.DataFrame, fs: FigureSettings, mo
 # ---------------------------------------------------------------------------
 # Weather years (sensitivity.weather_years)
 # ---------------------------------------------------------------------------
-def fig_rank_by_weather_year(summary: pd.DataFrame, years: list, fs: FigureSettings, out_dir: Path = GRAPHICS_DIR,
+def fig_rank_by_weather_year(summary: pd.DataFrame, years: list, main_year: int, fs: FigureSettings, out_dir: Path,
                              name: str = "fig11_rank_by_weather_year", formats=("png", "pdf", "svg")) -> None:
     """Rank (posterior-mean utility, Switzerland) per weather year: (A) over the scenarios with a result file in that
     year, (B) over the scenarios available in every weather year. A scenario missing in a year has no point there;
@@ -805,7 +801,9 @@ def fig_rank_by_weather_year(summary: pd.DataFrame, years: list, fs: FigureSetti
             ax.spines[side].set_visible(False)
         ax.set_title(title, loc="right", fontweight="bold", pad=30)
     fig.text(0.5, 1.0, "Rank in Switzerland (posterior-mean utility) per weather year", ha="center", fontsize=12)
-    footnote(fig, "Calliope runs of Mellot et al. (2024) with the weather of 2016 (main analysis), 2017 and 2018; "
+    named = [f"{y} (main analysis)" if y == main_year else str(y) for y in years]
+    weather = ", ".join(named[:-1]) + " and " + named[-1] if len(named) > 1 else named[0]
+    footnote(fig, f"Calliope runs of Mellot et al. (2024) with the weather of {weather}; "
              "reference prices, population and EUR/CHF are the same in every year.\nDashed: no run for the year in "
              "between. Number above a rank-1 point: its P(rank 1). The ranks in (A) are over a different set of "
              "scenarios in each year.", fs, y=0.0)
@@ -836,7 +834,7 @@ def scenario_order_note(order: list, cost: pd.Series, by_cost: bool) -> str:
     return f"Scenarios ordered by system cost change (Mellot et al. 2024, Table 3, cheapest first){tail}."
 
 
-def fig_pairwise_matrix(matrix: pd.DataFrame, fs: FigureSettings, out_dir: Path = GRAPHICS_DIR, decimals: int = 1,
+def fig_pairwise_matrix(matrix: pd.DataFrame, fs: FigureSettings, out_dir: Path, decimals: int,
                         name: str = "fig9_pairwise_choice_probability", formats=("png", "pdf")) -> None:
     """Lower triangle incl. diagonal: P(scenario 1 (row) > scenario 2 (column)) in %, expected value large,
     credible interval small below. Colour: orange (0 %) - beige (50 %) - blue (100 %)."""

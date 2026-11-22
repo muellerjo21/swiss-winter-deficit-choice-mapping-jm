@@ -46,19 +46,19 @@ def test_probabilities_in_unit_interval(pairwise_matrix, pairwise_regions):
         assert (table["p_low"] <= table["p_mean"] + ATOL).all() and (table["p_mean"] <= table["p_high"] + ATOL).all()
 
 
-def test_map_tables_match_regions(pairwise_map_tables, pairwise_regions, ticino):
-    """One table per map pair, each the subset of the region table; 22 regions with TI excluded, else 23."""
+def test_map_tables_match_regions(pairwise_map_tables, pairwise_regions, ticino, population_by_region):
+    """One table per map pair, each the subset of the region table; all regions, without TI if TI is excluded."""
     for table in pairwise_map_tables:
         a, b = table["scenario_1"].iloc[0], table["scenario_2"].iloc[0]
         subset = pairwise_regions[(pairwise_regions["scenario_1"] == a) & (pairwise_regions["scenario_2"] == b)]
         assert table.reset_index(drop=True).equals(subset.reset_index(drop=True))
-        assert table["region"].nunique() == (22 if ticino is None else 23)
+        assert table["region"].nunique() == len(population_by_region) - (ticino is None)
         assert ("TI" in set(table["region"])) == (ticino is not None)
 
 
-def test_every_region_has_one_geometry(geometry_checks):
+def test_every_region_has_one_geometry(geometry_checks, population_by_region):
     analysis = geometry_checks[geometry_checks["in_analysis"]]
-    assert len(analysis) == 23
+    assert len(analysis) == len(population_by_region)
     assert (analysis["n_geometries"] == 1).all(), analysis[analysis["n_geometries"] != 1]
     assert geometry_checks["in_analysis"].all(), geometry_checks[~geometry_checks["in_analysis"]]
     assert geometry_checks["passed"].all(), geometry_checks[~geometry_checks["passed"]]

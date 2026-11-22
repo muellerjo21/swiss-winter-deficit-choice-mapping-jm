@@ -38,7 +38,7 @@ def hdi(samples, probability: float) -> tuple[float, float]:
     return float(x[i]), float(x[i + inc])
 
 
-def credible_interval(samples, probability: float, interval_type: str = "hdi") -> tuple[float, float]:
+def credible_interval(samples, probability: float, interval_type: str) -> tuple[float, float]:
     """(low, high) of the credible interval of 1-d posterior samples."""
     _check(probability, interval_type)
     if interval_type == "hdi":
@@ -48,14 +48,14 @@ def credible_interval(samples, probability: float, interval_type: str = "hdi") -
     return float(q[0]), float(q[1])
 
 
-def credible_interval_tag(probability: float, interval_type: str = "hdi") -> str:
+def credible_interval_tag(probability: float, interval_type: str) -> str:
     """Tag of the interval in column and file names: 'hdi96' for a 96 % HDI, 'eti94' for a 94 % equal-tailed
     interval (utility_<group>_<tag>_low/high)."""
     _check(probability, interval_type)
     return f"{'hdi' if interval_type == 'hdi' else 'eti'}{probability * 100:g}"
 
 
-def credible_interval_label(probability: float, interval_type: str = "hdi") -> str:
+def credible_interval_label(probability: float, interval_type: str) -> str:
     """Text for figure captions, e.g. '96% HDI' or '94% equal-tailed credible interval'."""
     _check(probability, interval_type)
     kind = "HDI" if interval_type == "hdi" else "equal-tailed credible interval"

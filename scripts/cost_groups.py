@@ -8,23 +8,22 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-import xarray as xr
 
 sys.path.insert(0, str(Path(snakemake.scriptdir).parent / "src"))
-from config import FOREIGN_CODES
+from config import ELECTRICITY_CARRIER, FOREIGN_CODES
 from load_data import (aggregate_national, import_quantities, load_power_fuel_cost, load_scenario_cost_by_technology,
+                       result_dataset,
                        load_scenario_demand, load_scenario_end_use, load_scenario_final_energy, price_surcharge,
                        scope_reference, simulated_price)
 
 
 def fuel_power_gwh(nc_path: str, techs: list) -> float:
     """Annual electricity production (GWh) of the given technologies at the Swiss locations."""
-    ds = xr.open_dataset(nc_path)
+    ds = result_dataset(nc_path)
     prod = ds.coords["loc_tech_carriers_prod"].values
     sel = [c for c in prod if c.split("::")[0] not in FOREIGN_CODES and c.split("::")[1] in techs
-           and c.split("::")[2] == "electricity"]
+           and c.split("::")[2] == ELECTRICITY_CARRIER]
     out = float(ds["carrier_prod"].sel(loc_tech_carriers_prod=sel).sum()) if sel else 0.0
-    ds.close()
     return out
 
 

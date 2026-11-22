@@ -6,6 +6,10 @@
 #   open      optional: open point of the method
 # Numbers are not typed in: {name} is filled in from the results when the map is built (scripts/pipeline_map.py,
 # function values); an unknown {name} makes the build fail.
+# Explanation of the land definitions (land.definition), filled in as {land_definition}
+land_definitions:
+  national_share: Landnutzung geteilt durch die Fläche der Schweiz
+  canton_mean: Mittel der Kantonsanteile
 groups:
   data: Daten holen
   attr: Attribute
@@ -66,8 +70,8 @@ rules:
     group: attr
     text: >-
       Fasst die Attribute der {n_scenarios} Szenarien in einer Tabelle zusammen (scenario_attributes_summary.csv).
-      Grundlage des nationalen Aggregats; die regionale Analyse nimmt daraus den Stromimport, die Kostenänderung
-      nach Mellot et al. und die Werte für Vergleich und Kontrollen.
+      Grundlage des nationalen Aggregats (Import wie in der Hauptanalyse, „{import_definition}“); die regionale
+      Analyse nimmt daraus die Kostenänderung nach Mellot et al. und die Werte für Vergleich und Kontrollen.
   import_shares:
     group: attr
     text: >-
@@ -95,11 +99,11 @@ rules:
   weather_year_rankings:
     group: util
     text: >-
-      Rechnet die regionale Analyse für ein Wetterjahr (2016, 2017, 2018) mit allen Szenarien, für die Mellot et al.
+      Rechnet die regionale Analyse für ein Wetterjahr ({weather_years}) mit allen Szenarien, für die Mellot et al.
       einen Lauf veröffentlicht haben, und einmal nur mit den Szenarien, die es in allen Jahren gibt.
-      Referenzpreise, Bevölkerung und EUR/CHF sind in allen Jahren gleich. Die Baseline mit 5-TWh-Winterlimit gibt
-      es nur für 2016; die frühere Zuordnung für 2017 und 2018 war ein Mapping-Fehler (die Dateien mit dem Zusatz
-      _no_self_sufficiency sind EP2050+ mit 9 TWh Winterimport, geprüft über den Winterimport). Der Record von
+      Referenzpreise, Bevölkerung und EUR/CHF sind in allen Jahren gleich. Ohne Lauf: {missing_runs}; die frühere
+      Zuordnung dieser Jahre war ein Mapping-Fehler (die Dateien mit dem Zusatz _no_self_sufficiency sind EP2050+ mit
+      9 TWh Winterimport, geprüft über den Winterimport). Der Record von
       Mellot et al. enthält die 2016-Version vom Juli 2024, die wir verwenden. Allen drei Jahren gemeinsam sind 11 der
       12 Szenarien; S/CCGT (Ren. Methane) und S/CCGT (Ren. Methane) + H2 sind in allen Jahren praktisch identisch,
       weil die Variante mit H2 nie Wasserstoff importiert (wie in Mellot et al., Table 3). Das CHP-Szenario ist auch
@@ -118,14 +122,20 @@ rules:
       Rechnet die Partworths des Modellfiles in die Einheiten der Attribute um (β̃ = β/σ) und schreibt sie als
       Tabelle. Hängt nur an den Tests, die damit die Umrechnung prüfen.
 
+  regional_reference:
+    group: data
+    text: >-
+      Ordnet die Gemeinden über das LINDAS-Register den {n_regions} Regionen zu und berechnet pro Region den
+      ElCom-Referenzpreis (Median der Tarife, {ref_price_regional_range}) und die Bevölkerung (STATPOP
+      {population_date}). Hängt nicht von Preis- oder Szenario-Einstellungen ab und wird deshalb bei
+      Sensitivitätsläufen nicht neu geschrieben.
   regional_attributes:
     group: attr
     text: >-
       Berechnet die Attribute pro Region für alle {n_regions} Regionen: Landanteil der eigenen Region,
       Technologieanteile (installierte Leistung ohne Wasserkraft), Eigentümeranteile (installierte Leistung mit
       Wasserkraft) und Preisänderung (mit cost_scope energy: in allen Regionen derselbe Referenzpreis und
-      Zuschlag; sonst der regionale ElCom-Preis). Import und Übertragung sind national. Dazu die Bevölkerung pro
-      Region.
+      Zuschlag; sonst der regionale ElCom-Preis aus regional_reference). Import und Übertragung sind national.
     open: >-
       Beziehen sich Land und Preis in der Umfrage auf die eigene Region? Sind die Technologieanteile installierte
       Leistung oder Erzeugung, und gehört Wasserkraft in den Nenner? Wie wird hydrogen_electricity_storage

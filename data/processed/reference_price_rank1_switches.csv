@@ -1,4 +1,4 @@
 region,switch_rp_kwh,scenario_before,scenario_after,rank_before_below,rank_after_below,rank_before_above,rank_after_above
-DE_CH,10.410835810442222,policy_remix,policy_alpine_pv,1,2,2,1
-FR_CH,10.410835810442222,policy_remix,policy_alpine_pv,1,2,2,1
-national,10.410835810442222,policy_remix,policy_alpine_pv,1,2,2,1
+DE_CH,11.20157220881083,policy_remix,policy_alpine_pv,1,2,2,1
+FR_CH,11.20157220881083,policy_remix,policy_alpine_pv,1,2,2,1
+national,11.20157220881083,policy_remix,policy_alpine_pv,1,2,2,1

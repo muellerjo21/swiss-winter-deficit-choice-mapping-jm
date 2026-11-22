@@ -24,7 +24,8 @@ def test_merged_regions_summed(regional_checks):
     assert merged["passed"].all(), merged[~merged["passed"]]
 
 
-def test_regional_attributes_complete(regional_attributes):
-    assert regional_attributes["region"].nunique() == 23
-    assert regional_attributes.groupby("scenario_id")["region"].nunique().eq(23).all()
+def test_regional_attributes_complete(regional_attributes, population_by_region):
+    n_regions = len(population_by_region)  # all Calliope regions
+    assert regional_attributes["region"].nunique() == n_regions
+    assert regional_attributes.groupby("scenario_id")["region"].nunique().eq(n_regions).all()
     assert not regional_attributes.drop(columns=["language", "mellot_cost_change_pct"]).isna().any().any()

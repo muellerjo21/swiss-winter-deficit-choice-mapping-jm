@@ -18,8 +18,9 @@ from sensitivity import (
 from utility import load_attribute_scale
 
 
-def load_model(path_to_choice_model: str, mobile_share: float, weights: dict = LANGUAGE_REGION_WEIGHTS) -> dict:
-    """Betas loaded once, as keyword arguments of utility.rank_with_uncertainty."""
+def load_model(path_to_choice_model: str, mobile_share: float, credible_interval: float, interval_type: str,
+               weights: dict = LANGUAGE_REGION_WEIGHTS) -> dict:
+    """Betas loaded once and the interval settings, as keyword arguments of utility.rank_with_uncertainty."""
     return {
         "scale": load_attribute_scale(path_to_choice_model),
         "betas_mean": {r: load_beta_partworths_mean(path_to_choice_model, r) for r in weights},
@@ -28,6 +29,8 @@ def load_model(path_to_choice_model: str, mobile_share: float, weights: dict = L
         "mobile_mean": load_mobile_partworths_mean(path_to_choice_model),
         "mobile_samples": load_mobile_partworths_samples(path_to_choice_model),
         "mobile_share": mobile_share,
+        "credible_interval": credible_interval,
+        "interval_type": interval_type,
     }
 
 
@@ -47,14 +50,15 @@ def load_year_files(paths_to_elcom: list[str], paths_to_eur_chf: list[str]) -> t
 def sensitivity(path_to_attributes: str, path_to_choice_model: str, paths_to_nc: list[str], scenario_ids: list[str],
                 paths_to_elcom: list[str], paths_to_eur_chf: list[str], reference_year: int, base_years: list[int],
                 reference_price: dict, crossing_scenarios: list[str], crossing_tolerance: float,
-                crossing_check_delta: float, mobile_share: float, cost_scale: float, cost_scope: str, cost_groups: dict, power_fuel: dict,
+                crossing_check_delta: float, mobile_share: float, credible_interval: float, interval_type: str,
+                cost_scale: float, cost_scope: str, cost_groups: dict, power_fuel: dict,
                 energy_reference: dict, margin: float,
                 path_to_curve: str, path_to_crossings: str, path_to_base_years: str,
                 path_to_switches: str) -> None:
     check_completed_years(base_years)
     attributes = pd.read_csv(path_to_attributes)
     scenario_cost = {s: load_scenario_cost_and_demand(p, cost_scale, cost_scope, cost_groups, power_fuel) for s, p in zip(scenario_ids, paths_to_nc)}
-    model = load_model(path_to_choice_model, mobile_share)
+    model = load_model(path_to_choice_model, mobile_share, credible_interval, interval_type)
     elcom, rates = load_year_files(paths_to_elcom, paths_to_eur_chf)
     elcom = {y: scope_reference(r, cost_scope, energy_reference, margin) for y, r in elcom.items()}
     ref, (rate, _) = elcom[reference_year], rates[reference_year]
@@ -93,6 +97,8 @@ if __name__ == "__main__":
         crossing_tolerance=p.crossing_tolerance,
         crossing_check_delta=p.crossing_check_delta,
         mobile_share=p.mobile_share,
+        credible_interval=p.credible_interval,
+        interval_type=p.interval_type,
         cost_scale=p.cost_scale,
         cost_scope=p.cost_scope,
         cost_groups=p.cost_groups,

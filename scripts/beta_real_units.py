@@ -11,12 +11,13 @@ import pandas as pd
 import xarray as xr
 
 sys.path.insert(0, str(Path(snakemake.scriptdir).parent / "src"))
-from config import LANGUAGE_REGION_WEIGHTS, ATTRIBUTE_UNITS, ATTRIBUTE_COLUMN_TO_MODEL_TERM
+from config import LANGUAGE_REGION_WEIGHTS, ATTRIBUTE_COLUMN_TO_MODEL_TERM, attribute_units
 from load_data import load_beta_partworths_mean, load_beta_partworths_samples, load_mobile_partworths_mean
 from utility import load_attribute_scale, to_real_units
 
 
-def beta_real_table(path_to_choice_model: str, mobile_share: float, weights: dict = LANGUAGE_REGION_WEIGHTS) -> pd.DataFrame:
+def beta_real_table(path_to_choice_model: str, mobile_share: float, units: dict,
+                    weights: dict = LANGUAGE_REGION_WEIGHTS) -> pd.DataFrame:
     scale = load_attribute_scale(path_to_choice_model)
     mobile = load_mobile_partworths_mean(path_to_choice_model)
     gamma = (pd.Series(0.0, index=list(scale)) if mobile is None   # model without mobile shift
@@ -30,7 +31,7 @@ def beta_real_table(path_to_choice_model: str, mobile_share: float, weights: dic
         for term in beta.index:
             rows.append({"region": region, "attribute": term, "scenario_column": column_of[term], "sigma": scale[term], "beta_mean": beta[term],
                          "beta_real": beta_real[term], "gamma_mean": gamma[term], "gamma_real": gamma_real[term],
-                         "mobile_share": mobile_share, "unit_of_raw_attribute": ATTRIBUTE_UNITS[term]})
+                         "mobile_share": mobile_share, "unit_of_raw_attribute": units[term]})
     return pd.DataFrame(rows)
 
 
@@ -68,5 +69,7 @@ def coefficient_check(path_to_choice_model: str, coefficients: dict) -> pd.DataF
 
 
 if __name__ == "__main__":
-    beta_real_table(snakemake.input.choice_model, snakemake.params.mobile_share).to_csv(snakemake.output.table, index=False)
+    p = snakemake.params
+    units = attribute_units(p.cost_scope, p.import_definition, p.import_denominator)
+    beta_real_table(snakemake.input.choice_model, p.mobile_share, units).to_csv(snakemake.output.table, index=False)
     coefficient_check(snakemake.input.choice_model, snakemake.params.coefficients).to_csv(snakemake.output.check, index=False)

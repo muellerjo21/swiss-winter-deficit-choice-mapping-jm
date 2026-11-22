@@ -3,12 +3,14 @@ variants computed inside every run (sensitivity_regional.csv: "import: regional 
 Ticino variants). One row per weather year x variant: rank 1 in Switzerland (national), DE-CH and FR-CH with
 P(rank 1), rank 2 and the utility difference rank 1 - rank 2 (posterior means, national), and whether rank 1 of
 DE-CH or FR-CH differs from the national rank 1.
-2016 in-run variants: data/processed/sensitivity_regional.csv (main analysis); 2017/2018: the file of the run "main".
+In-run variants of the main weather year: data/processed/sensitivity_regional.csv (main analysis); other years: the
+file of the run "main".
 Usage (project root): python scripts/sensitivity_summary.py docs/sensitivity_summary.csv"""
 import glob, os, sys
 import pandas as pd
 
-GROUPS = ["national", "DE_CH", "FR_CH"]
+sys.path.insert(0, "src")
+from config import GROUP_TAGS as GROUPS, setting  # noqa: E402  (national, DE_CH, FR_CH)
 
 
 def summarise(u: pd.DataFrame) -> dict:
@@ -28,8 +30,10 @@ rows = []
 for path in sorted(glob.glob("docs/sensitivities/20*/*/utility_rankings_regional.csv")):
     year, name = path.split(os.sep)[-3:-1]
     rows.append({"weather_year": int(year), "variant": name, "source": path, **summarise(pd.read_csv(path))})
-in_run = {2016: "data/processed/sensitivity_regional.csv"}
-in_run.update({y: f"docs/sensitivities/{y}/main/sensitivity_regional.csv" for y in (2017, 2018)})
+main_year = setting("weather_year")
+in_run = {main_year: "data/processed/sensitivity_regional.csv"}
+in_run.update({y: f"docs/sensitivities/{y}/main/sensitivity_regional.csv" for y in setting("sensitivity", "weather_years")
+               if y != main_year})
 for year, path in in_run.items():
     if not os.path.exists(path):
         continue

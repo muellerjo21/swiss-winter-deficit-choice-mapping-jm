@@ -10,7 +10,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(snakemake.scriptdir).parent / "src"))
-from config import LANGUAGE_REGION_WEIGHTS, CREDIBLE_INTERVAL, INTERVAL_TYPE
+from config import LANGUAGE_REGION_WEIGHTS
 from load_data import (
     load_beta_partworths_mean, load_beta_partworths_samples,
     load_mobile_partworths_mean, load_mobile_partworths_samples,
@@ -18,9 +18,8 @@ from load_data import (
 from utility import load_attribute_scale, rank_with_uncertainty
 
 
-def build_rankings(attributes: pd.DataFrame, path_to_choice_model: str,
-                   weights: dict = LANGUAGE_REGION_WEIGHTS, mobile_share: float = 0.0,
-                   credible_interval: float = CREDIBLE_INTERVAL, interval_type: str = INTERVAL_TYPE) -> pd.DataFrame:
+def build_rankings(attributes: pd.DataFrame, path_to_choice_model: str, weights: dict, mobile_share: float,
+                   credible_interval: float, interval_type: str) -> pd.DataFrame:
     scale = load_attribute_scale(path_to_choice_model)
     betas_mean = {region: load_beta_partworths_mean(path_to_choice_model, region) for region in weights}
     betas_samples = {region: load_beta_partworths_samples(path_to_choice_model, region) for region in weights}
@@ -35,6 +34,7 @@ if __name__ == "__main__":
     build_rankings(
         attributes=pd.read_csv(snakemake.input.attributes),
         path_to_choice_model=snakemake.input.choice_model,
+        weights=LANGUAGE_REGION_WEIGHTS,
         mobile_share=snakemake.params.mobile_share,
         credible_interval=snakemake.params.credible_interval,
         interval_type=snakemake.params.interval_type,

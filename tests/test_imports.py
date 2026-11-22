@@ -71,10 +71,11 @@ def test_units_and_ordering(import_shares):
 
 
 @pytest.mark.parametrize("definition", sorted(VARIANTS))
-def test_sensitivity_rows(sensitivities_regional, definition):
+def test_sensitivity_rows(sensitivities_regional, import_shares, definition):
     rows = sensitivities_regional[sensitivities_regional["variant"] == VARIANTS[definition]]
-    assert len(rows) == 12
+    n_scenarios = len(import_shares)
+    assert len(rows) == n_scenarios
     for tag in ["national", "DE_CH", "FR_CH"]:
         assert rows[f"p_rank1_{tag}"].between(0, 1).all()
         assert abs(rows[f"p_rank1_{tag}"].sum() - 1) < 1e-9
-        assert sorted(rows[f"rank_{tag}"]) == list(range(1, 13))
+        assert sorted(rows[f"rank_{tag}"]) == list(range(1, n_scenarios + 1))

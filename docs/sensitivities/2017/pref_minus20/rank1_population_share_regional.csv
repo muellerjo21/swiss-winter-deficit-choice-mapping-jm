@@ -1,6 +1,6 @@
 scenario_id,population_share_rank1
-baseline_no_self_sufficiency_result_4H,0.06379672410728107
-policy_alpine_pv,0.8782478765674047
+baseline_no_self_sufficiency_result_4H,0.37916882157818743
+policy_alpine_pv,0.5628757790964983
 policy_chp,0.0
 policy_h2_imports_only,0.0
 policy_mix,0.0

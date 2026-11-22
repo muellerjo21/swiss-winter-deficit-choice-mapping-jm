@@ -3,32 +3,25 @@ Regional analysis on the 23 Swiss locations of the Calliope model (20 cantons, t
 BL_BS, NW_OW, and TI).
 
 - Attributes per region r and scenario: land use, technology and ownership shares from the region's own
-  capacities; price change with the national system cost per kWh and the region's ElCom reference price
-  and surcharges; import share national (import from abroad, same value in every region); transmission 0.
-- Utility per region with the coefficients of the region's language region (CANTON_LANGUAGE), draw by
-  draw: posterior draw i of a language region is used for all regions of that language region.
+  capacities; price change with the national system cost per kWh and the reference values of the region (cost_scope
+  energy: the same p_ref, surcharge and VAT in every region; otherwise the region's ElCom values); import share
+  national (same value in every region); transmission attributes.transmission_change.
+- Utility per region with the coefficients of the region's coefficient group (regions.language, mapped to the model
+  file by data.choice_models.<entry>.coefficients; the measured model has one Swiss set), draw by draw: posterior
+  draw i is used for all regions of a group.
 - Aggregation: population-weighted mean of the utility samples (and point utilities) over the included
   regions, per language region and nationally; rank, credible interval and P(rank 1) as in the national
   analysis (utility.rankings_from_utilities).
 """
-import numpy as np
 import pandas as pd
-import xarray as xr
 
-from config import ATTRIBUTE_COLUMN_TO_MODEL_TERM, CANTON_LANGUAGE, CANTON_MERGES, FOREIGN_CODES
+from config import (ATTRIBUTE_COLUMN_TO_MODEL_TERM, CANTON_LANGUAGE, ELECTRICITY_CARRIER, FOREIGN_CODES, LANGUAGE_GROUPS,
+                    TRANSMISSION_CHANGE, TRANSMISSION_TECH, region_of_canton)
 from load_data import (
     compute_land_from_capacity, compute_ownership_shares, compute_technology_mix_shares,
     elcom_reference_from_prices, load_scenario_capacity, price_change_from_cost, price_reference_columns,
 )
 from utility import compute_utility, compute_utility_samples, probability_rank1, rank_scenarios, rankings_from_utilities
-
-LANGUAGE_GROUPS = ["DE-CH", "FR-CH"]
-
-
-def region_of_canton(canton: str) -> str:
-    """Canton abbreviation -> Calliope region (merged codes for AI/AR, BL/BS, NW/OW)."""
-    return next((merged for merged, parts in CANTON_MERGES.items() if canton in parts), canton)
-
 
 def municipality_regions(cantons: pd.DataFrame, overrides: dict) -> pd.Series:
     """bfs_nr -> Calliope region, from fetch_municipality_cantons plus overrides {bfs_nr: canton} for
@@ -89,7 +82,7 @@ def regional_attributes(nc_path: str, scenario_id: str, area: dict, national: pd
         ref = elcom.loc[region, price_reference_columns(elcom)].astype(float).to_dict()
         rows.append({
             "scenario_id": scenario_id, "region": region, "language": CANTON_LANGUAGE.get(region),
-            "transmission_change": 0.0,
+            "transmission_change": TRANSMISSION_CHANGE,
             "relative_land": land.get(region, 0.0) / area[region],
             "import_share": national["import_share"],
             **_shares(capacity[capacity["canton"] == region]),
@@ -123,14 +116,14 @@ def regional_balance_import_share(nc_path: str) -> pd.Series:
     """Sensitivity: import share from the region's own electricity balance,
     max(0, consumption - generation) / consumption, with generation = electricity output of all
     non-transmission technologies and consumption = demand_elec plus sector coupling (as nationally)."""
-    from load_data import get_ch_total_electricity_demand_techs
-    ds = xr.open_dataset(nc_path)
+    from load_data import get_ch_total_electricity_demand_techs, result_dataset
+    ds = result_dataset(nc_path)
     prod = ds["carrier_prod"].sum("timesteps").to_pandas()
     con = ds["carrier_con"].sum("timesteps").to_pandas()
     demand_techs = get_ch_total_electricity_demand_techs(ds)
-    ds.close()
     loc = pd.Series(prod.index.str.split("::").str[0], index=prod.index)
-    gen_mask = prod.index.str.endswith("::electricity") & ~prod.index.str.contains("::ac_transmission") & ~loc.isin(FOREIGN_CODES)
+    gen_mask = (prod.index.str.endswith(f"::{ELECTRICITY_CARRIER}") & ~prod.index.str.contains(f"::{TRANSMISSION_TECH}", regex=False)
+                & ~loc.isin(FOREIGN_CODES))
     generation = prod[gen_mask].groupby(loc[gen_mask]).sum()
     demand = (-con.loc[demand_techs]).groupby(pd.Index([d.split("::")[0] for d in demand_techs])).sum()
     return ((demand - generation.reindex(demand.index).fillna(0.0)) / demand).clip(lower=0.0, upper=1.0)
@@ -148,8 +141,8 @@ def language_coefficients(betas_mean: dict, betas_samples: dict, language_weight
 
 
 def regional_utilities(attributes: pd.DataFrame, weights: pd.Series, coefficient_of_region: dict, betas_mean: dict,
-                       betas_samples: dict, scale: dict, mobile_mean=None, mobile_samples=None,
-                       mobile_share: float = 0.0, with_samples: bool = True) -> tuple:
+                       betas_samples: dict, scale: dict, mobile_mean, mobile_samples, mobile_share: float,
+                       with_samples: bool = True) -> tuple:
     """Utility per included region (point estimate and posterior samples, coefficients
     coefficient_of_region[region] in betas_mean/betas_samples), aggregated with the population weights per
     language region and nationally. Returns (utilities, samples, region_points, region_samples) with
@@ -236,11 +229,19 @@ def regional_price_curve(attributes, cost_and_demand, elcom, eur_to_chf, shifts,
     return pd.concat(frames, ignore_index=True)
 
 
-def regional_rank1_switches(attributes, cost_and_demand, elcom, eur_to_chf, curve, leader_at, tolerance: float,
+def regional_rank1_switches(attributes, cost_and_demand, elcom, eur_to_chf, curve, leaders_at, tolerance: float,
                             check_delta: float) -> pd.DataFrame:
     """Shifts at which the rank-1 scenario (posterior-mean utility) of a group changes, refined by bisection
-    (sensitivity.bisect_change); leader_at(attributes, group) -> scenario on rank 1."""
+    (sensitivity.bisect_change); leaders_at(attributes) -> {group: scenario on rank 1}, evaluated once per shift for
+    all groups."""
     from sensitivity import bisect_change
+    cache = {}
+
+    def leader_at_shift(shift, tag):
+        if shift not in cache:
+            cache[shift] = leaders_at(with_shifted_reference(attributes, cost_and_demand, elcom, eur_to_chf, shift))
+        return cache[shift][tag]
+
     rows = []
     grid = curve[~curve["is_reference_year"] | (curve["shift_rp_kwh"] == 0.0)]
     for tag in grid["region"].unique():
@@ -249,11 +250,10 @@ def regional_rank1_switches(attributes, cost_and_demand, elcom, eur_to_chf, curv
         for (low, before), (high, after) in zip(items, items[1:]):
             if before == after:
                 continue
-            at = lambda shift: leader_at(with_shifted_reference(attributes, cost_and_demand, elcom, eur_to_chf, shift), tag)
-            x, after = bisect_change(at, low, high, before, after, tolerance)
+            x, after = bisect_change(lambda shift: leader_at_shift(shift, tag), low, high, before, after, tolerance)
             row = {"region": tag, "switch_shift_rp_kwh": x, "scenario_before": before, "scenario_after": after}
             for side, shift in [("below", x - check_delta), ("above", x + check_delta)]:
-                row[f"rank1_{side}"] = leader_at(with_shifted_reference(attributes, cost_and_demand, elcom, eur_to_chf, shift), tag)
+                row[f"rank1_{side}"] = leader_at_shift(shift, tag)
             rows.append(row)
     return pd.DataFrame(rows, columns=["region", "switch_shift_rp_kwh", "scenario_before", "scenario_after", "rank1_below", "rank1_above"])
 
@@ -303,12 +303,19 @@ def regional_cost_scale_curve(attributes, cost_and_demand, elcom, eur_to_chf, fa
     return pd.concat(frames, ignore_index=True)
 
 
-def regional_cost_scale_switches(attributes, cost_and_demand, elcom, eur_to_chf, grid, leader_at, tolerance: float,
+def regional_cost_scale_switches(attributes, cost_and_demand, elcom, eur_to_chf, grid, leaders_at, tolerance: float,
                                  check_delta: float) -> pd.DataFrame:
     """Cost factors at which the rank-1 scenario (posterior-mean utility) of a group changes: rank 1 on the grid,
-    each change narrowed down by bisection (sensitivity.bisect_change); leader_at(attributes, group) -> rank 1."""
+    each change narrowed down by bisection (sensitivity.bisect_change); leaders_at(attributes) -> {group: rank 1},
+    evaluated once per factor for all groups."""
     from sensitivity import bisect_change
-    at = lambda factor, tag: leader_at(with_scaled_cost(attributes, cost_and_demand, elcom, eur_to_chf, factor), tag)
+    cache = {}
+
+    def at(factor, tag):
+        if factor not in cache:
+            cache[factor] = leaders_at(with_scaled_cost(attributes, cost_and_demand, elcom, eur_to_chf, factor))
+        return cache[factor][tag]
+
     rows = []
     for tag in [g.replace("-", "_") for g in [*LANGUAGE_GROUPS, "national"]]:
         items = [(float(f), at(float(f), tag)) for f in grid]

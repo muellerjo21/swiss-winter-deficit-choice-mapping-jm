@@ -15,9 +15,9 @@ def _regions(region_rankings_regional):
     return region_rankings_regional.drop_duplicates("region").set_index("region")
 
 
-def test_regions_included(region_rankings_regional, ticino):
+def test_regions_included(region_rankings_regional, ticino, population_by_region):
     regions = _regions(region_rankings_regional)
-    assert len(regions) == (22 if ticino is None else 23)
+    assert len(regions) == len(population_by_region) - (ticino is None)
     assert ("TI" in regions.index) == (ticino is not None)
 
 

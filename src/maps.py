@@ -9,12 +9,8 @@ import shapely
 from matplotlib.gridspec import GridSpec
 from matplotlib.patches import Patch
 
-from config import CANTON_MERGES, CANTON_NUMBER_TO_CODE, SCENARIO_DISPLAY_NAMES
-from plot_style import CHOICE_CMAP, NEUTRAL, TEXT_SECONDARY, FigureSettings, save
-
-
-def region_of_canton(canton: str) -> str:
-    return next((merged for merged, parts in CANTON_MERGES.items() if canton in parts), canton)
+from config import CANTON_NUMBER_TO_CODE, SCENARIO_DISPLAY_NAMES, region_of_canton
+from plot_style import CHOICE_CMAP, EXCLUDED_FILL, TEXT_SECONDARY, FigureSettings, save
 
 
 def load_region_geometries(zip_path: str, member: str, layer: str, crs: str, tolerance: float) -> gpd.GeoDataFrame:
@@ -57,7 +53,7 @@ def _draw(ax, geometries: gpd.GeoDataFrame, values: pd.Series, excluded: list, t
     shown = data[data["value"].notna()]
     shown.plot(ax=ax, column="value", cmap=CHOICE_CMAP, vmin=vmin, vmax=vmax, edgecolor="white", linewidth=0.6)
     if excluded:
-        data[data["region"].isin(excluded)].plot(ax=ax, color="#d9d8d4", edgecolor="white", linewidth=0.6,
+        data[data["region"].isin(excluded)].plot(ax=ax, color=EXCLUDED_FILL, edgecolor="white", linewidth=0.6,
                                                  hatch="///")
     ax.set_title(title, loc="left", fontweight="bold", fontsize=title_size)
     ax.set_axis_off()
@@ -65,7 +61,7 @@ def _draw(ax, geometries: gpd.GeoDataFrame, values: pd.Series, excluded: list, t
 
 
 def fig_choice_map(geometries: gpd.GeoDataFrame, table: pd.DataFrame, excluded: list, fs: FigureSettings,
-                   out_dir, name: str, color_range=(0, 100), formats=("png", "pdf")) -> None:
+                   out_dir, name: str, color_range, formats) -> None:
     """(A) expected value (large), (B) upper and (C) lower bound of the credible interval of P(scenario 1 >
     scenario 2) per region; common colour bar over color_range (%, default 0-100 as in Tröndle et al. 2025; the
     beige midpoint stays at the middle of the range, values outside take the end colours)."""
@@ -81,7 +77,7 @@ def fig_choice_map(geometries: gpd.GeoDataFrame, table: pd.DataFrame, excluded: 
     _draw(ax_b, geometries, t["p_high"], excluded, "(B) Upper uncertainty bound", 11, vmin, vmax)
     _draw(ax_c, geometries, t["p_low"], excluded, "(C) Lower uncertainty bound", 11, vmin, vmax)
     if excluded:
-        ax_a.legend(handles=[Patch(facecolor="#d9d8d4", edgecolor="white", hatch="///",
+        ax_a.legend(handles=[Patch(facecolor=EXCLUDED_FILL, edgecolor="white", hatch="///",
                                    label=f"No data ({', '.join(excluded)})")], loc="lower left", frameon=False)
     cax = fig.add_subplot(grid[2, :])
     clipped = vmin > 0 or vmax < 1

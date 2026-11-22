@@ -3,7 +3,8 @@ and Fig. 1/3 (maps).
 
 Per posterior draw i and region j: p_{A>B,j,i} = logistic(u_{A,j,i} - u_{B,j,i}). National per draw:
 P_i(A>B) = sum_j w_j p_{A>B,j,i} (population-weighted mean of the regional choice probabilities, not of the
-utilities). Expected value = mean over the draws, interval = equal-tailed credible interval. For comparison, the
+utilities). Expected value = mean over the draws, interval = credible interval of utility.credible_interval and
+utility.interval_type. For comparison, the
 previous aggregation logistic(sum_j w_j u_{A,j,i} - sum_j w_j u_{B,j,i}) is reported alongside.
 """
 import numpy as np

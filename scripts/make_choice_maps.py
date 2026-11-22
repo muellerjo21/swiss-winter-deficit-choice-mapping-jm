@@ -19,7 +19,8 @@ if __name__ == "__main__":
     geometry_checks(geometries, regions).to_csv(snakemake.output.checks, index=False)
     fs = FigureSettings("regional", p.credible_interval, p.interval_type, p.year, ticino=p.ticino,
                         price_label=p.price_label, coefficients_label=p.coefficients_label)
+    out_dir = Path(snakemake.output.figures[0]).parent.parent  # build/figures (one subfolder per format)
     for path, names in zip(snakemake.input.tables, p.names):
         table = pd.read_csv(path)
         for name, color_range in zip(names, p.color_ranges):
-            fig_choice_map(geometries, table, p.exclude, fs, Path(p.figure_dir), name, color_range, p.formats)
+            fig_choice_map(geometries, table, p.exclude, fs, out_dir, name, color_range, p.formats)

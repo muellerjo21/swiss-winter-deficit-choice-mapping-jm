@@ -1,13 +1,14 @@
 """
-Sensitivity of the scenario ranking to the ElCom reference price.
+Sensitivity of the ranking of the national aggregate to the reference price of the price formula (cost_scope energy:
+p_ref; otherwise the ElCom price).
 
 - Curve: P(rank 1), rank and utility of all scenarios as a function of the reference price
   (total_rp_kwh); taxes/levies, grid usage and EUR/CHF rate stay at the reference year, only the
   reference price varies.
 - Crossing points: reference price at which two scenarios swap rank (posterior-mean utility equal),
   per region and national, by bisection.
-- Base years: price_change, rank and P(rank 1) per base year with that year's own ElCom reference
-  values and annual EUR/CHF rate.
+- Base years: price_change, rank and P(rank 1) per base year with that year's own reference values (cost_scope
+  energy: the same p_ref) and annual EUR/CHF rate.
 
 The price formula (load_data.price_change_from_cost) and the ranking (utility.rank_with_uncertainty)
 are the ones of the main pipeline; system cost and demand per scenario are read once by the caller.
@@ -18,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 from load_data import price_change_from_cost
-from utility import rank_with_uncertainty
+from utility import compute_regional_utilities, rank_scenarios, rank_with_uncertainty
 
 
 def check_completed_years(years) -> None:
@@ -44,6 +45,23 @@ def rankings_at(attributes: pd.DataFrame, scenario_cost: dict, elcom_ref: dict, 
     attrs["price_change"] = [price_change_from_cost(*scenario_cost[s], elcom_ref, eur_to_chf)
                              for s in attrs["scenario_id"]]
     return rank_with_uncertainty(attrs, **model).set_index("scenario_id")
+
+
+def point_rankings_at(attributes: pd.DataFrame, scenario_cost: dict, elcom_ref: dict, eur_to_chf: float,
+                      model: dict) -> pd.DataFrame:
+    """Utility (posterior-mean coefficients) and rank per scenario and region with price_change recomputed, without the
+    posterior samples: the same columns utility_<tag> and rank_<tag> as rankings_at, for the bisections, which need
+    only these."""
+    attrs = attributes.copy()
+    attrs["price_change"] = [price_change_from_cost(*scenario_cost[s], elcom_ref, eur_to_chf)
+                             for s in attrs["scenario_id"]]
+    utilities, _ = compute_regional_utilities(attrs, model["betas_mean"], model["betas_samples"], model["scale"],
+                                              model["weights"], model["mobile_mean"], model["mobile_samples"],
+                                              model["mobile_share"], with_samples=False)
+    out = utilities.set_index("scenario_id")
+    for tag in region_tags(model["weights"]):
+        out[f"rank_{tag}"] = rank_scenarios(utilities, f"utility_{tag}").set_index("scenario_id")["rank"]
+    return out
 
 
 def region_tags(weights: dict) -> list[str]:
@@ -83,7 +101,7 @@ def crossing_point(attributes: pd.DataFrame, scenario_cost: dict, elcom_ref: dic
     """Reference price in [low, high] at which utility_a - utility_b (posterior-mean betas) changes sign,
     by bisection. NaN if there is no sign change in the interval."""
     def diff(total):
-        rk = rankings_at(attributes, scenario_cost, {**elcom_ref, "total_rp_kwh": total}, eur_to_chf, model)
+        rk = point_rankings_at(attributes, scenario_cost, {**elcom_ref, "total_rp_kwh": total}, eur_to_chf, model)
         return rk.loc[scenario_a, f"utility_{tag}"] - rk.loc[scenario_b, f"utility_{tag}"]
 
     d_low, d_high = diff(low), diff(high)
@@ -111,8 +129,8 @@ def crossing_points(attributes: pd.DataFrame, scenario_cost: dict, elcom_ref: di
         row = {"region": tag, "scenario_a": scenario_a, "scenario_b": scenario_b, "crossing_rp_kwh": x}
         for side, total in [("below", x - check_delta), ("above", x + check_delta)]:
             if (side, total) not in below_above:
-                below_above[(side, total)] = rankings_at(attributes, scenario_cost,
-                                                         {**elcom_ref, "total_rp_kwh": total}, eur_to_chf, model)
+                below_above[(side, total)] = point_rankings_at(attributes, scenario_cost,
+                                                               {**elcom_ref, "total_rp_kwh": total}, eur_to_chf, model)
             rk = below_above[(side, total)]
             row[f"rank_a_{side}"] = int(rk.loc[scenario_a, f"rank_{tag}"])
             row[f"rank_b_{side}"] = int(rk.loc[scenario_b, f"rank_{tag}"])
@@ -149,7 +167,7 @@ def rank1_switches(attributes: pd.DataFrame, scenario_cost: dict, elcom_ref: dic
                 continue
 
             def rank1(total):
-                rk = rankings_at(attributes, scenario_cost, {**elcom_ref, "total_rp_kwh": total}, eur_to_chf, model)
+                rk = point_rankings_at(attributes, scenario_cost, {**elcom_ref, "total_rp_kwh": total}, eur_to_chf, model)
                 return rk[f"rank_{tag}"].idxmin(), rk
 
             x, after = bisect_change(lambda total: rank1(total)[0], low, high, before, after, tolerance)

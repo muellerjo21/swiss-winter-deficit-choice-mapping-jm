@@ -1,205 +1,93 @@
+"""Constants shared by the scripts, all read from the workflow configuration without defaults of their own: a missing
+key stops with an error that names it. Inside the workflow this is the configuration of the run including its
+--config overrides (the Snakefile passes it in the environment variable SWISS_WINTER_DEFICIT_CONFIG); interactive use
+reads config/default.yaml. Only structural code mappings (column names of the attribute tables) are defined here."""
+import json
+import os
 from pathlib import Path
 
 import yaml
 
-# Directory containing config.py (src/)
+# Directory containing config.py (src/) and the project root one level above
 SRC_DIR = Path(__file__).resolve().parent
-
-# Project root is one level above src/
 PROJECT_ROOT = SRC_DIR.parent
+CONFIG_ENVIRONMENT_VARIABLE = "SWISS_WINTER_DEFICIT_CONFIG"
 
-# Workflow configuration (config/default.yaml), single source of the parameters read here
-_WORKFLOW_CONFIG = yaml.safe_load((PROJECT_ROOT / "config" / "default.yaml").read_text())
 
-# Choice model (data.choice_model, an entry of data.choice_models) and, for every entry, the mapping of the Swiss
-# coefficient groups (DE-CH, FR-CH) to the group/country of its file (load_data.model_partworths)
-_CHOICE_MODELS = _WORKFLOW_CONFIG["data"]["choice_models"]
-CHOICE_MODEL_PATH = PROJECT_ROOT / _CHOICE_MODELS[_WORKFLOW_CONFIG["data"]["choice_model"]]["file"]
+def _load_config() -> dict:
+    text = os.environ.get(CONFIG_ENVIRONMENT_VARIABLE)
+    if text:
+        return json.loads(text)
+    return yaml.safe_load((PROJECT_ROOT / "config" / "default.yaml").read_text())
+
+
+_WORKFLOW_CONFIG = _load_config()
+
+
+def setting(*keys):
+    """Configuration value at the key path keys, e.g. setting("attributes", "ownership"); KeyError naming the path
+    if it is missing."""
+    value = _WORKFLOW_CONFIG
+    for i, key in enumerate(keys):
+        if not isinstance(value, dict) or key not in value:
+            raise KeyError(f"config key {'.'.join(str(k) for k in keys[:i + 1])} is missing (config/default.yaml)")
+        value = value[key]
+    return value
+
+
+# For every choice model (data.choice_models), the mapping of the Swiss coefficient groups (DE-CH, FR-CH) to the
+# group/country of its file (load_data.model_partworths)
+_CHOICE_MODELS = setting("data", "choice_models")
 CHOICE_MODEL_COUNTRIES = {str((PROJECT_ROOT / m["file"]).resolve()): m["coefficients"] for m in _CHOICE_MODELS.values()}
 
-RAW_DIR = PROJECT_ROOT / "data" / "raw"
-PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
-
-# Calliope results of Mellot et al., one .nc per scenario
-SCENARIO_DIR = RAW_DIR / "scenario_data"
-
-# Canton areas (km², Statista/BFS), for relative land use
-CANTON_AREA_CSV_PATH = RAW_DIR / "flache_der_schweiz_nach_kantonen_in_quadratkilometern.csv"
-
-# Canton names (German) -> BFS abbreviations
-
-CANTON_NAME_TO_CODE = {
-    "Zürich": "ZH", 
-    "Bern": "BE", 
-    "Luzern": "LU", 
-    "Uri": "UR", 
-    "Schwyz": "SZ",
-    "Obwalden": "OW", 
-    "Nidwalden": "NW",
-    "Glarus": "GL", 
-    "Zug": "ZG", 
-    "Freiburg": "FR",
-    "Solothurn": "SO", 
-    "Basel-Stadt": "BS", 
-    "Basel-Landschaft": "BL", 
-    "Schaffhausen": "SH",
-    "Appenzell Ausserrhoden": "AR", 
-    "Appenzell Innerrhoden": "AI", 
-    "St. Gallen": "SG",
-    "Graubünden": "GR", 
-    "Aargau": "AG", 
-    "Thurgau": "TG", 
-    "Tessin": "TI", 
-    "Waadt": "VD",
-    "Wallis": "VS", 
-    "Neuenburg": "NE", 
-    "Genf": "GE", 
-    "Jura": "JU",
-}
-
-# BFS canton numbers (kantonsnummer, e.g. in swisstopo swissBOUNDARIES3D) -> canton abbreviation
-CANTON_NUMBER_TO_CODE = {
-    1: "ZH", 2: "BE", 3: "LU", 4: "UR", 5: "SZ", 6: "OW", 7: "NW", 8: "GL", 9: "ZG", 10: "FR", 11: "SO", 12: "BS",
-    13: "BL", 14: "SH", 15: "AR", 16: "AI", 17: "SG", 18: "GR", 19: "AG", 20: "TG", 21: "TI", 22: "VD", 23: "VS",
-    24: "NE", 25: "GE", 26: "JU",
-}
-
-CANTON_MERGES = {
-    "AI_AR": ["AI", "AR"],
-    "BL_BS": ["BL", "BS"],
-    "NW_OW": ["NW", "OW"],
-}
-
-CANTON_LANGUAGE = {
-    "ZH": "DE-CH",
-    "BE": "DE-CH",
-    "LU": "DE-CH",
-    "UR": "DE-CH",
-    "SZ": "DE-CH",
-    "GL": "DE-CH",
-    "ZG": "DE-CH",
-    "SO": "DE-CH",
-    "SH": "DE-CH",
-    "SG": "DE-CH",
-    "GR": "DE-CH",
-    "AG": "DE-CH",
-    "TG": "DE-CH",
-    "FR": "FR-CH",
-    "VD": "FR-CH",
-    "VS": "FR-CH",
-    "NE": "FR-CH",
-    "GE": "FR-CH",
-    "JU": "FR-CH",
-    "AI_AR": "DE-CH",
-    "BL_BS": "DE-CH",
-    "NW_OW": "DE-CH",
-    "TI": None,  # Italian-speaking, not covered by the choice model
-}
-
-FOREIGN_CODES = {"AUT", "DEU", "FRA", "ITA"}
+# Regions of the Calliope model (regions in config/default.yaml): canton codes by German name and by BFS number,
+# merged locations, language region per location, foreign locations
+_CANTONS = setting("regions", "cantons")
+CANTON_NAME_TO_CODE = {canton["name"]: code for code, canton in _CANTONS.items()}
+CANTON_NUMBER_TO_CODE = {canton["number"]: code for code, canton in _CANTONS.items()}
+CANTON_MERGES = setting("regions", "merged_cantons")
+CANTON_LANGUAGE = setting("regions", "language")
+FOREIGN_CODES = set(setting("calliope", "foreign_locations"))
 
 
-# Capacity density per technology (GW/km²), following Tröndle et al.'s methodology
-# (8 MW/km² wind, 80 MW/km² PV -- applies equally to all PV and wind subtypes).
-# roof_mounted_pv deliberately excluded: rooftops do not occupy additional land.
-CAPACITY_DENSITY_GW_PER_KM2 = {
-    "wind_onshore_monopoly": 0.008,
-    "wind_onshore_competing": 0.008,
-    "open_field_pv": 0.08,
-    "alpine_pv_subsidised": 0.08,
-    "alpine_pv_not_subsidised": 0.08,
-}
+def region_of_canton(canton: str) -> str:
+    """Calliope location of a canton (merged cantons, e.g. AI -> AI_AR)."""
+    return next((merged for merged, parts in CANTON_MERGES.items() if canton in parts), canton)
 
-# Assumption (not empirical): technology -> ownership category for compute_ownership_shares.
-# "public" is the implicit reference category in the choice model.
-OWNERSHIP_MAPPING = {
-    "roof_mounted_pv": "commercial",
-    "open_field_pv": "commercial",
-    "alpine_pv_subsidised": "commercial",
-    "alpine_pv_not_subsidised": "commercial",
-    "wind_onshore_monopoly": "community",
-    "wind_onshore_competing": "community",
-    "ccgt": "commercial",
-    "ccgt_natgas": "commercial",
-    "scgt_natgas": "commercial",
-    "scgt_renewable": "commercial",
-    "chp_methane": "commercial",
-    "chp_waste": "commercial",
-    "chp_biofuel": "commercial",
-    "hydro_run_of_river": "public",
-    "hydro_reservoir": "public",
-    "pumped_hydro": "public",
-    "nuclear": "public",
-}
 
-# Technology -> source_* category in the choice model.
-# roof_mounted_pv, open_field_pv, alpine_pv_* -> implicit reference category (solar/PV),
-# no beta of their own, but part of the capacity denominator in compute_technology_mix_shares.
-# source_coal, source_nuclear: no corresponding Swiss technology -> share always 0.
-# hydro_reservoir, hydro_run_of_river, pumped_hydro: deliberately excluded -- the choice model
-# has no hydro category, and Mellot et al. freeze hydro capacities across all scenarios
-# ("we freeze the installed capacities to today's levels"), so they do not contribute to
-# scenario variation anyway.
-TECH_SOURCE_MAPPING = {
-    "wind_onshore_monopoly": "source_wind",
-    "wind_onshore_competing": "source_wind",
-    "ccgt": "source_gas",
-    "ccgt_natgas": "source_gas",
-    "scgt_natgas": "source_gas",
-    "scgt_renewable": "source_gas",
-    "chp_methane": "source_gas",
-    "chp_biofuel": "source_biomass",
-    "chp_waste": "source_biomass",
-}
+# Weights of the language regions (regions.language_shares, normalised) and the language groups in this order
+_LANGUAGE_SHARES = setting("regions", "language_shares")
+LANGUAGE_REGION_WEIGHTS = {group: share / sum(_LANGUAGE_SHARES.values()) for group, share in _LANGUAGE_SHARES.items()}
+LANGUAGE_GROUPS = list(LANGUAGE_REGION_WEIGHTS)
+GROUP_TAGS = ["national", *(group.replace("-", "_") for group in LANGUAGE_GROUPS)]  # panel order of the figures
 
-# Techs with electricity as input (sector coupling) that count as electricity consumption in
-# addition to demand_elec (denominator for import_share and price_change). Storage (pumped_hydro,
-# hydrogen_electricity_storage, battery) deliberately excluded -> would double-count.
-SECTOR_COUPLING_ELEC_TECHS = [
-    "light_transport_ev", "heavy_transport_ev", "hp", "electrode_boiler",
-    "electrolysis", "dac", "daccs_local",
-]
+# Mapping of the Calliope results to the choice-model attributes (attributes in config/default.yaml)
+CAPACITY_DENSITY_GW_PER_KM2 = setting("attributes", "capacity_density_gw_per_km2")
+PV_REFERENCE_TECHS = setting("attributes", "pv_reference_techs")
+OWNERSHIP_MAPPING = setting("attributes", "ownership")
+TECH_SOURCE_MAPPING = setting("attributes", "source")
+OWNERSHIP_EXCLUDED_TECHS = setting("attributes", "ownership_excluded")
+SOURCE_EXCLUDED_TECHS = setting("attributes", "source_excluded")
+TRANSMISSION_CHANGE = setting("attributes", "transmission_change")
 
-# Technologies without a source_* category of their own (PV = implicit reference), which must
-# still be part of the capacity denominator (compute_technology_mix_shares) and of the land-use
-# calculation (compute_land_from_capacity via CAPACITY_DENSITY_GW_PER_KM2).
-PV_REFERENCE_TECHS = ["roof_mounted_pv", "open_field_pv", "alpine_pv_subsidised", "alpine_pv_not_subsidised"]
+# Conventions of the result files (calliope in config/default.yaml) and the end-use technologies per carrier
+# (price.end_use_techs, taxes and levies per carrier of cost_scope energy)
+COST_CLASS = setting("calliope", "cost_class")
+ELECTRICITY_CARRIER = setting("calliope", "electricity_carrier")
+DEMAND_ELECTRICITY_TECH = setting("calliope", "demand_electricity_tech")
+DEMAND_TECH_PREFIX = setting("calliope", "demand_tech_prefix")
+TRANSMISSION_TECH = setting("calliope", "transmission_tech")
+HEAT_DEMAND_TECHS = tuple(setting("calliope", "heat_demand_techs"))
+TRANSPORT_MARKER = setting("calliope", "transport_marker")
+SECTOR_COUPLING_ELEC_TECHS = setting("calliope", "sector_coupling_electricity_techs")
+END_USE_TECHS = setting("price", "end_use_techs")
 
-# Price reference parameters: single source is config/default.yaml (section "price", _WORKFLOW_CONFIG above), so
-# that notebooks and interactive runs use the same values as the Snakemake pipeline.
-
-# Revenue margin of the price formula (price.margin; 0.10 = Tröndle's assumed 10 %). The pipeline passes it via the
-# rules' params (load_data.scope_reference), so that --config overrides reach the scripts.
-PRICE_MARGIN = _WORKFLOW_CONFIG["price"]["margin"]
-
-# Base year of the price reference: ElCom reference price (tariffs change only once per year) and
-# EUR/CHF rate (annual mean of the daily ECB rates of that year, fetch_eur_to_chf). Reproducible as
-# long as the year is completed. The base year of the price change in the Jan 2026 choice model is
-# still to be clarified with the supervisor.
-PRICE_REFERENCE_YEAR = _WORKFLOW_CONFIG["price"]["reference_year"]
-# ElCom consumption category (H4 = standard household)
-PRICE_CATEGORY = _WORKFLOW_CONFIG["price"]["category"]
-# Factor on the Calliope system cost before the price formula (1.0 = main analysis)
-PRICE_COST_SCALE_FACTOR = _WORKFLOW_CONFIG["price"]["cost_scale_factor"]
-# Costs in the price formula (total | electricity) and the technology -> cost group assignment
-PRICE_COST_SCOPE = _WORKFLOW_CONFIG["price"]["cost_scope"]
-PRICE_COST_GROUPS = _WORKFLOW_CONFIG["price"]["cost_groups"]
-# Fuel costs of the power plants for cost_scope electricity_fuel (load_data.load_power_fuel_cost keyword arguments)
-# End-use technologies per carrier for the taxes and levies per carrier of cost_scope energy (price.end_use_techs)
-END_USE_TECHS = _WORKFLOW_CONFIG["price"]["end_use_techs"]
-PRICE_POWER_FUEL = {"plants": _WORKFLOW_CONFIG["price"]["fuel_power_techs"], "fuels": _WORKFLOW_CONFIG["price"]["fuel_carriers"],
-                    "chp_allocation": _WORKFLOW_CONFIG["price"]["chp_fuel_allocation"]}
-# Definition of relative_land (land.definition): national_share or canton_mean, see
-# load_data.RELATIVE_LAND_DEFINITIONS. The pipeline passes it via the rule's params.
-LAND_DEFINITION = _WORKFLOW_CONFIG["land"]["definition"]
-# Credible interval (utility.credible_interval: probability mass, utility.interval_type: hdi or equal_tailed);
-# see src/intervals.py.
-CREDIBLE_INTERVAL = _WORKFLOW_CONFIG["utility"]["credible_interval"]
-INTERVAL_TYPE = _WORKFLOW_CONFIG["utility"]["interval_type"]
-TRANSMISSION_REFERENCE_YEAR = PRICE_REFERENCE_YEAR  # same "today" reference-year logic as price
+# Download endpoints and the ElCom tariff product of the fetch rules
+SOURCES = setting("sources")
+ELCOM_PRODUCT = setting("price", "elcom_product")
 
 # Column in scenario_attributes_summary (compute_all_attributes) -> attribute coordinate in the
-# choice model (CHOICE_MODEL_PATH).
+# choice model (data.choice_models). Structural: names of the code, not a modelling choice.
 ATTRIBUTE_COLUMN_TO_MODEL_TERM = {
     "source_wind": "source_wind",
     "source_coal": "source_coal",
@@ -215,61 +103,41 @@ ATTRIBUTE_COLUMN_TO_MODEL_TERM = {
 }
 
 # Unit of the raw scenario attribute z_k per model attribute; beta_real_k = beta_k / sigma_k is the
-# utility per one unit of z_k (e.g. per 1.0 = 100 percentage points of a share).
+# utility per one unit of z_k (e.g. per 1.0 = 100 percentage points of a share). cost and import depend on the price
+# and import definition of the run: attribute_units.
 ATTRIBUTE_UNITS = {
     "source_wind": "share of generation capacity excl. hydro (GW/GW, 0..1)",
     "source_coal": "share of generation capacity excl. hydro (GW/GW, 0..1)",
     "source_gas": "share of generation capacity excl. hydro (GW/GW, 0..1)",
     "source_nuclear": "share of generation capacity excl. hydro (GW/GW, 0..1)",
     "source_biomass": "share of generation capacity excl. hydro (GW/GW, 0..1)",
-    "cost": "relative change of the household price vs. the ElCom reference (-, 0.1 = +10 %)",
-    "import": "net electricity import / electricity demand (GWh/GWh, 0..1)",
     "transmission": "relative change of the transmission capacity (-)",
     "land": "land use of wind and open-field/alpine PV / area (km²/km²)",
     "ownership_commercial": "share of generation capacity incl. hydro (GW/GW, 0..1)",
     "ownership_community": "share of generation capacity incl. hydro (GW/GW, 0..1)",
 }
 
-# Source: Swiss Federal Statistical Office (BFS), "Sprachliche Praktiken in der Schweiz",
-# structural survey 2023. Main languages of the permanent resident population: German 61%,
-# French 23% (multiple answers possible). Normalised here to DE-CH/FR-CH only (analogous to
-# CANTON_LANGUAGE, Italian/Romansh excluded):
-# https://dam-api.bfs.admin.ch/hub/api/dam/assets/34788128/master
-LANGUAGE_REGION_WEIGHTS = {
-    "DE-CH": 61 / (61 + 23),  # 0.726
-    "FR-CH": 23 / (61 + 23),  # 0.274
-}
+_IMPORTS = {"electricity": "net electricity import",
+            "electricity_fuels": "net electricity import + imports of natural gas, hydrogen and synthetic methane",
+            "electricity_fuels_diesel": "net electricity import + imports of natural gas, hydrogen, synthetic methane and "
+                                        "synthetic diesel"}
+_DENOMINATORS = {"electricity": "electricity consumption", "final_energy": "final energy (electricity, heat, transport)"}
 
-# Official cost change of the scenarios relative to EP2050+ ("Swiss cost change [%]"), from
-# Mellot et al. (2024), Energy Conversion and Management 309, 118426, Table 3.
-# "baseline" (EP2050+ with 5 TWh winter constraint) is not in Table 3 -> NaN.
-MELLOT_COST_CHANGE_PCT = {
-    "policy_mix": -17.0,                                # MIX
-    "policy_sccgt_daccs": -16.3,                        # S/CCGT (Fossil) + DACCS
-    "policy_remix": -8.8,                               # RE MIX
-    "policy_sccgt_plus_h2": -3.6,                       # S/CCGT (Ren. Methane) +H2
-    "policy_sccgt_no_h2": -3.6,                         # S/CCGT (Ren. Methane)
-    "policy_alpine_pv": -0.8,                           # Alpine PV
-    "baseline_no_self_sufficiency_result_4H": 0.0,      # EP2050+ (reference)
-    "policy_wind_x2": 18.0,                             # Wind
-    "policy_h2_imports_only": 19.2,                     # H2Imports
-    "policy_chp": 22.2,                                 # CHP
-    "policy_roof_pv": 33.7,                             # Roof PV++
-    "baseline": float("nan"),                           # not in Table 3
-}
 
-# Readable scenario names for figures, following Mellot et al. (2024), Table 3.
-SCENARIO_DISPLAY_NAMES = {
-    "policy_mix": "MIX",
-    "policy_sccgt_daccs": "S/CCGT (Fossil) + DACCS",
-    "policy_remix": "RE MIX",
-    "policy_sccgt_plus_h2": "S/CCGT (Ren. Methane) + H2",
-    "policy_sccgt_no_h2": "S/CCGT (Ren. Methane)",
-    "policy_alpine_pv": "Alpine PV",
-    "baseline_no_self_sufficiency_result_4H": "EP2050+",
-    "policy_wind_x2": "Wind",
-    "policy_h2_imports_only": "H2 Imports",
-    "policy_chp": "CHP",
-    "policy_roof_pv": "Roof PV++",
-    "baseline": "EP2050+ (5 TWh winter cap)",
-}
+def attribute_units(cost_scope: str, import_definition: str, import_denominator: str) -> dict:
+    """ATTRIBUTE_UNITS with the units of cost and import for the price definition (price.cost_scope) and the import
+    definition (imports.definition, imports.denominator; the definition electricity is always over the electricity
+    consumption, load_data.compute_import_share)."""
+    cost = ("relative change of the energy price per kWh of final energy vs. p_ref (-, 0.1 = +10 %)" if cost_scope == "energy"
+            else "relative change of the electricity price vs. the ElCom reference (-, 0.1 = +10 %)")
+    denominator = "electricity" if import_definition == "electricity" else import_denominator
+    imports = f"{_IMPORTS[import_definition]} / {_DENOMINATORS[denominator]} (GWh/GWh, 0..1)"
+    return {**ATTRIBUTE_UNITS, "cost": cost, "import": imports}
+
+
+# Official cost change of the scenarios relative to EP2050+ (mellot_cost_change_pct: Mellot et al. 2024, Table 3);
+# NaN for the scenario that is not in Table 3
+MELLOT_COST_CHANGE_PCT = {scenario: float(value) for scenario, value in setting("mellot_cost_change_pct").items()}
+
+# Readable scenario names for figures and texts (figures.display_names)
+SCENARIO_DISPLAY_NAMES = setting("figures", "display_names")

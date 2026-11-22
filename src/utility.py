@@ -1,5 +1,5 @@
 """
-Utility computation for the Mellot scenarios with the Jan 2026 choice model (CHOICE_MODEL_PATH).
+Utility computation for the Mellot scenarios with the choice model (data.choice_models).
 
 The model is fitted on scaled attribute values z / sigma_k (constant_data/attribute_values_*_scaled =
 raw value / survey maximum sigma_k, e.g. import 0.9, land 0.08, transmission 2.0; read from the model
@@ -21,7 +21,7 @@ import arviz as az
 import numpy as np
 import pandas as pd
 
-from config import ATTRIBUTE_COLUMN_TO_MODEL_TERM, LANGUAGE_REGION_WEIGHTS, CREDIBLE_INTERVAL, INTERVAL_TYPE
+from config import ATTRIBUTE_COLUMN_TO_MODEL_TERM
 from intervals import credible_interval as interval_of, credible_interval_tag
 
 
@@ -57,9 +57,8 @@ def _check_mobile_share(mobile_share: float, mobile) -> None:
         raise ValueError("mobile partworths are required when mobile_share is non-zero")
 
 
-def compute_utility(scenario_row: pd.Series, beta: pd.DataFrame, scale: dict,
-                    mapping: dict = ATTRIBUTE_COLUMN_TO_MODEL_TERM,
-                    mobile: pd.DataFrame = None, mobile_share: float = 0.0) -> float:
+def compute_utility(scenario_row: pd.Series, beta: pd.DataFrame, scale: dict, mobile: pd.DataFrame,
+                    mobile_share: float, mapping: dict = ATTRIBUTE_COLUMN_TO_MODEL_TERM) -> float:
     """Point estimate: sum_k z_k * (beta_real_k + mobile_share * gamma_real_k) over all 11 attributes,
     with raw attributes z and coefficients in real units (to_real_units). beta as returned by
     load_beta_partworths_mean() (columns attribute, beta_mean), mobile as returned by
@@ -72,9 +71,8 @@ def compute_utility(scenario_row: pd.Series, beta: pd.DataFrame, scale: dict,
     return float((z * coef).sum())
 
 
-def compute_utility_samples(scenario_row: pd.Series, beta_samples: dict, scale: dict,
-                            mapping: dict = ATTRIBUTE_COLUMN_TO_MODEL_TERM,
-                            mobile_samples: dict = None, mobile_share: float = 0.0) -> np.ndarray:
+def compute_utility_samples(scenario_row: pd.Series, beta_samples: dict, scale: dict, mobile_samples: dict,
+                            mobile_share: float, mapping: dict = ATTRIBUTE_COLUMN_TO_MODEL_TERM) -> np.ndarray:
     """Utility per posterior sample (array of length chains*draws), same sample order as
     beta_samples (from load_beta_partworths_samples()): per sample i,
     sum_k z_k * (beta_real_k[i] + mobile_share * gamma_real_k[i]) with raw attributes z and
@@ -90,9 +88,8 @@ def compute_utility_samples(scenario_row: pd.Series, beta_samples: dict, scale: 
 
 
 def compute_regional_utilities(scenarios: pd.DataFrame, betas_mean: dict, betas_samples: dict,
-                               scale: dict, weights: dict = LANGUAGE_REGION_WEIGHTS,
-                               mobile_mean: pd.DataFrame = None, mobile_samples: dict = None,
-                               mobile_share: float = 0.0) -> tuple:
+                               scale: dict, weights: dict, mobile_mean: pd.DataFrame, mobile_samples: dict,
+                               mobile_share: float, with_samples: bool = True) -> tuple:
     """Utility per scenario and language region (keys of weights) plus the population-weighted
     national mean. mobile_mean/mobile_samples apply to all regions (mobile_partworths has no
     country dimension) and are mixed in with mobile_share (see compute_utility).
@@ -101,7 +98,8 @@ def compute_regional_utilities(scenarios: pd.DataFrame, betas_mean: dict, betas_
     -------
     (utilities, samples)
         utilities: DataFrame with scenario_id, utility_<region> and utility_national (mean betas).
-        samples: dict region/"national" -> DataFrame (sample x scenario).
+        samples: dict region/"national" -> DataFrame (sample x scenario); empty with with_samples=False (point
+        utilities only, e.g. for bisections).
     """
     utilities = pd.DataFrame({"scenario_id": scenarios["scenario_id"]})
     samples = {}
@@ -110,6 +108,8 @@ def compute_regional_utilities(scenarios: pd.DataFrame, betas_mean: dict, betas_
         utilities[col] = [compute_utility(row, betas_mean[region], scale,
                                           mobile=mobile_mean, mobile_share=mobile_share)
                           for _, row in scenarios.iterrows()]
+        if not with_samples:
+            continue
         samples[region] = pd.DataFrame({row["scenario_id"]: compute_utility_samples(row, betas_samples[region], scale,
                                                                                      mobile_samples=mobile_samples,
                                                                                      mobile_share=mobile_share)
@@ -117,7 +117,8 @@ def compute_regional_utilities(scenarios: pd.DataFrame, betas_mean: dict, betas_
     utilities["utility_national"] = sum(
         w * utilities[f"utility_{region.replace('-', '_')}"] for region, w in weights.items()
     )
-    samples["national"] = sum(w * samples[region] for region, w in weights.items())
+    if with_samples:
+        samples["national"] = sum(w * samples[region] for region, w in weights.items())
     return utilities, samples
 
 
@@ -135,10 +136,8 @@ def probability_rank1(samples: pd.DataFrame) -> pd.Series:
 
 
 def rank_with_uncertainty(attributes: pd.DataFrame, betas_mean: dict, betas_samples: dict, scale: dict,
-                          weights: dict = LANGUAGE_REGION_WEIGHTS, mobile_mean: pd.DataFrame = None,
-                          mobile_samples: dict = None, mobile_share: float = 0.0,
-                          credible_interval: float = CREDIBLE_INTERVAL,
-                          interval_type: str = INTERVAL_TYPE) -> pd.DataFrame:
+                          weights: dict, mobile_mean: pd.DataFrame, mobile_samples: dict, mobile_share: float,
+                          credible_interval: float, interval_type: str) -> pd.DataFrame:
     """Utility, credible interval (probability credible_interval, src/intervals.py), P(rank 1) and rank per
     scenario and region (keys of weights) plus national, and the Mellot cost rank, for already loaded
     betas (see scripts/compute_utility.py). Sorted by descending national utility."""
@@ -149,8 +148,7 @@ def rank_with_uncertainty(attributes: pd.DataFrame, betas_mean: dict, betas_samp
 
 
 def rankings_from_utilities(utilities: pd.DataFrame, samples: dict, groups: list, attributes: pd.DataFrame,
-                            credible_interval: float = CREDIBLE_INTERVAL,
-                            interval_type: str = INTERVAL_TYPE) -> pd.DataFrame:
+                            credible_interval: float, interval_type: str) -> pd.DataFrame:
     """Rank, credible interval (HDI or equal-tailed, src/intervals.py) and P(rank 1) per group (columns utility_<group> in utilities,
     posterior samples in samples[group]) plus the Mellot cost rank; used for the national and the regional
     analysis. Sorted by descending national utility."""

@@ -18,7 +18,7 @@ Not part of the Snakemake workflow (standalone check of the input data, document
 Usage (project root): python scripts/strategy_check.py docs/strategy_check.csv"""
 import glob, re, sys
 from pathlib import Path
-import numpy as np, pandas as pd, xarray as xr
+import pandas as pd, xarray as xr
 
 FOREIGN = {"AUT", "DEU", "FRA", "ITA"}
 

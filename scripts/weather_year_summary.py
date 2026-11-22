@@ -1,9 +1,13 @@
 """Comparison of the weather years (rule weather_year_rankings): one row per weather year, scenario and group with rank,
 P(rank 1), utility and credible interval, over the scenarios of each year (set all) and over the scenarios available in
 every weather year (set common); scenarios without a result file for a year are listed as missing."""
+import sys
+from pathlib import Path
+
 import pandas as pd
 
-GROUPS = ["national", "DE_CH", "FR_CH"]
+sys.path.insert(0, str(Path(snakemake.scriptdir).parent / "src"))
+from config import GROUP_TAGS as GROUPS  # national, DE_CH, FR_CH
 
 
 def long_table(rankings: pd.DataFrame, scenario_set: str) -> pd.DataFrame:

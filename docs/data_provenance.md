@@ -3,7 +3,25 @@
 Large input files are not committed (`data/raw/` is git-ignored). This file records where they come from and how to
 check that a local copy is the right one.
 
-## Choice model "measured" (cleaned choice data, November 2026)
+## Choice model "measured_2026_languages" (corrected model, main model since 21 Nov 2026)
+
+| | |
+|---|---|
+| Sender | Tim Tröndle (supervisor); corrected model of the cleaned choice data, replacing the faulty model of "measured" below |
+| Received | 21 Nov 2026 |
+| File | `data/raw/measured.nc`, NetCDF-4 (ArviZ InferenceData), created 20 Nov 2026 15:11 UTC (PyMC 6.4.0) |
+| Size, SHA-256 | 8'274'292'636 bytes, `eeaf4286d2f0ed92f2a89b218fb58d6f81f5857adb6a2396391745ed51e605a7` |
+
+Structure: 4 chains x 1000 draws; 11 attributes; European mean `beta_partworths` (= `alpha`) and an effect per language
+group `effect_country` (= `z_country` x `sigma_country`) for 10 groups: DA, DE, DE-CH, EN, FR, FR-CH, PL, PT, RO, SV.
+No group for Switzerland as a whole and none for Italian-speaking Switzerland (TI gets the coefficients of
+`spatial.regional.ticino`). 7'574 respondents and 60'592 choice situations, the same respondents, situations,
+attribute values and choices as "measured"; Switzerland: DE-CH 546 respondents (4'368 situations), FR-CH 337
+(2'696). No `mobile_partworths`. Attribute scaling as before (import 0.9, land 0.08, transmission 2.0, others 1.0).
+Checked: u_left = x_left_scaled (alpha + effect) + left_intercept (respondent), u_right without intercept, p_left =
+logistic(u_left - u_right), reproduced to 9e-16. Config entry: `data.choice_models.measured_2026_languages`.
+
+## Choice model "measured" (cleaned choice data, November 2026; option measured_2026, superseded)
 
 | | |
 |---|---|

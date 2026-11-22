@@ -16,6 +16,7 @@ TEXT_PRIMARY = "#0b0b0b"
 TEXT_SECONDARY = "#52514e"
 NEUTRAL = "#a3a29d"
 GRID = "#e4e3df"
+EXCLUDED_FILL = "#d9d8d4"  # regions without data in the maps (hatched)
 
 # Choice probability of scenario 1 (as in Tröndle et al. 2025): orange (0, scenario 2 preferred) -> beige
 # (0.5) -> blue (1, scenario 1 preferred); same orange and blue as SERIES[1] and SERIES[0]

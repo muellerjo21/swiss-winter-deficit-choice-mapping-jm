@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(snakemake.scriptdir).parent / "src"))
-from config import LANGUAGE_REGION_WEIGHTS
+from config import GROUP_TAGS, LANGUAGE_REGION_WEIGHTS
 from load_data import load_scenario_cost_and_demand, scope_reference_table
 from regional import (cost_scale_factors, load_regional_model, population_weights, region_coefficients,
                       regional_cost_scale_curve, regional_cost_scale_switches, regional_rankings, regional_utilities)
@@ -32,15 +32,17 @@ def sweep(path_to_attributes, path_to_population, path_to_elcom, path_to_eur_chf
         u, s, _, _ = regional_utilities(a, weights, coefficients, **model)
         return regional_rankings(a, u, s, credible_interval, interval_type)
 
-    def leader_at(a, tag):
+    def leaders_at(a):
+        """Scenario on rank 1 (posterior-mean utility) per group, one evaluation for all groups."""
         u, _, _, _ = regional_utilities(a, weights, coefficients, **model, with_samples=False)
-        return u.set_index("scenario_id")[f"utility_{tag}"].idxmax()
+        u = u.set_index("scenario_id")
+        return {tag: u[f"utility_{tag}"].idxmax() for tag in GROUP_TAGS}
 
     factors = cost_scale_factors(factors, conversions, eur_to_chf)
     regional_cost_scale_curve(attributes, cost_and_demand, elcom, eur_to_chf, factors, rank_at).to_csv(
         path_to_curve, index=False)
     grid = reference_price_grid(search["start"], search["stop"], search["step"])
-    regional_cost_scale_switches(attributes, cost_and_demand, elcom, eur_to_chf, grid, leader_at, tolerance,
+    regional_cost_scale_switches(attributes, cost_and_demand, elcom, eur_to_chf, grid, leaders_at, tolerance,
                                  check_delta).to_csv(path_to_switches, index=False)
 
 

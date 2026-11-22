@@ -2,22 +2,20 @@
 Load and extract fitted coefficients from Tröndle, Mey & Lilliestam's (2025)
 discrete choice model.
 
-The pipeline selects the model file with data.choice_model (entries of data.choice_models, CHOICE_MODEL_PATH):
-11 attributes; the Swiss coefficient groups DE-CH / FR-CH (per canton via CANTON_LANGUAGE) are mapped to a group or
-country of the file (model_partworths): the January 2026 model has partworths per language group (DA/DE/DE-CH/EN/FR/
-FR-CH/PL/PT/SO/SV), the measured model (Nov 2026) a European mean plus a country effect per country (one level
-Switzerland). The older published-paper model (6 attributes, per country) is only used by the unmaintained first
-approach in legacy/.
+The pipeline selects the model file with data.choice_model (entries of data.choice_models): 11 attributes; the
+Swiss coefficient groups DE-CH / FR-CH (per region via regions.language) are mapped to a group or country of the file
+(model_partworths): the January 2026 model has partworths per language group (DA/DE/DE-CH/EN/FR/FR-CH/PL/PT/SO/SV), the
+measured model (Nov 2026) a European mean plus a country effect per country (one level Switzerland).
 
-See the project proposal for background on the model.
+Also: the attributes of a scenario from its Calliope result file, the price formula and the downloads of the fetch
+rules (ElCom, municipality register, STATPOP, EUR/CHF).
 """
 
 import os
-import re
 from datetime import date
+from functools import lru_cache
 from pathlib import Path
-import ssl, certifi
-os.environ["SSL_CERT_FILE"] = certifi.where()
+import certifi
 import arviz as az
 import numpy as np
 import pandas as pd
@@ -26,13 +24,29 @@ import xarray as xr
 from SPARQLWrapper import SPARQLWrapper, JSON
 
 from config import (
-    CANTON_LANGUAGE, FOREIGN_CODES, CANTON_NAME_TO_CODE, CANTON_MERGES,
-    CAPACITY_DENSITY_GW_PER_KM2, OWNERSHIP_MAPPING, PRICE_MARGIN, PRICE_REFERENCE_YEAR, PRICE_CATEGORY,
-    TECH_SOURCE_MAPPING, PV_REFERENCE_TECHS, TRANSMISSION_REFERENCE_YEAR, CHOICE_MODEL_PATH, CHOICE_MODEL_COUNTRIES,
-    SECTOR_COUPLING_ELEC_TECHS, SCENARIO_DIR, CANTON_AREA_CSV_PATH, RAW_DIR, PROCESSED_DIR,
-    MELLOT_COST_CHANGE_PCT, LAND_DEFINITION, PRICE_COST_SCALE_FACTOR, PRICE_COST_SCOPE, PRICE_COST_GROUPS, END_USE_TECHS,
-    PRICE_POWER_FUEL,
+    CANTON_LANGUAGE, FOREIGN_CODES, CANTON_NAME_TO_CODE, CANTON_MERGES, CAPACITY_DENSITY_GW_PER_KM2, OWNERSHIP_MAPPING,
+    TECH_SOURCE_MAPPING, PV_REFERENCE_TECHS, CHOICE_MODEL_COUNTRIES, SECTOR_COUPLING_ELEC_TECHS, OWNERSHIP_EXCLUDED_TECHS,
+    SOURCE_EXCLUDED_TECHS, MELLOT_COST_CHANGE_PCT, END_USE_TECHS, TRANSMISSION_CHANGE, COST_CLASS, HEAT_DEMAND_TECHS,
+    TRANSPORT_MARKER, SOURCES, ELCOM_PRODUCT, ELECTRICITY_CARRIER, DEMAND_ELECTRICITY_TECH, DEMAND_TECH_PREFIX,
+    TRANSMISSION_TECH,
 )
+from checks import check_technology_mapping, cost_class, require_selection
+
+# Variables of the Calliope result files used by the workflow
+RESULT_VARIABLES = ["carrier_prod", "carrier_con", "energy_cap", "cost"]
+
+
+@lru_cache(maxsize=1)
+def _read_result(nc_path: str) -> xr.Dataset:
+    with xr.open_dataset(nc_path) as ds:
+        return ds[RESULT_VARIABLES].load()
+
+
+def result_dataset(nc_path) -> xr.Dataset:
+    """The used variables (RESULT_VARIABLES) of a Calliope result file, read from disk once and kept in memory for the
+    following calls with the same file (the scripts process one file after the other; the last file stays cached).
+    The values are the same as read directly from the file; callers must not modify the dataset."""
+    return _read_result(str(nc_path))
 
 
 def model_partworths(posterior, data_path, group: str):
@@ -55,12 +69,11 @@ def load_beta_partworths_mean(data_path, country: str) -> pd.DataFrame:
     Parameters
     ----------
     data_path : str or Path
-        Path to the .nc file (CHOICE_MODEL_PATH, or legacy_config.DATA_PATH).
+        Path to the .nc file of the choice model (data.choice_models).
     country : str
         Coefficient group, mapped to the file's group/country by model_partworths
         (DE-CH / FR-CH for Switzerland; the January 2026 model also takes DA/DE/EN/FR/PL/PT/SO/SV).
-        For legacy_config.DATA_PATH: one of DNK/DEU/PRT/POL/NOT_SAMPLED.
-        No default on purpose -- the valid values differ between the two files,
+        No default on purpose -- the valid values differ between the model files,
         so picking a wrong implicit default silently gives the wrong region.
 
     Use this for a first, quick pass (fixed betas). See
@@ -90,14 +103,14 @@ def load_beta_partworths_samples(data_path, country: str) -> dict:
     Parameters
     ----------
     data_path : str or Path
-        Path to the .nc file (CHOICE_MODEL_PATH, or legacy_config.DATA_PATH).
+        Path to the .nc file of the choice model (data.choice_models).
     country : str
         See `load_beta_partworths_mean` for valid values per file.
 
     Returns
     -------
     dict[str, np.ndarray]
-        Keys are attribute labels. For CHOICE_MODEL_PATH these are the 11 fitted
+        Keys are attribute labels: the 11 fitted
         attributes: source_wind, source_coal, source_gas, source_nuclear,
         source_biomass, cost, import, transmission, land, ownership_commercial,
         ownership_community. PV/solar is the implicit zero-beta reference for the
@@ -126,7 +139,7 @@ def load_beta_partworths_samples(data_path, country: str) -> dict:
 def load_mobile_partworths_mean(data_path) -> pd.DataFrame:
     """
     Posterior-MEAN of mobile_partworths, the additive shift of the partworths for respondents
-    with m=1 (constant_data/m) in the Jan 2026 model (CHOICE_MODEL_PATH):
+    with m=1 (constant_data/m) in the Jan 2026 model (data.choice_models.jan_2026):
         u = sum_k z_k / sigma_k * (beta_partworths[country, k] + m * mobile_partworths[k])
     verified against u_left/u_right in the posterior. Not region-specific (no country dim).
     The reading "m=1 = answered on a mobile device" rests on the variable name only; the
@@ -162,31 +175,9 @@ def load_mobile_partworths_samples(data_path) -> dict:
             for attr in mobile_stacked.coords["attribute"].values}
 
 
-#not in the pipeline
-def load_scenarios(scenarios_path: str) -> pd.DataFrame:
-    """
-    Load the scenarios CSV file, which contains the attribute values for
-    each scenario to be evaluated.
-    """
-    df = pd.read_csv(scenarios_path)
-    return df
-
-
-#not in the pipeline
-def compute_beta_real_units(idata) -> pd.DataFrame:
-    """Full posterior beta_partworths in real units, beta / sigma_k (utility per unit of the raw
-    attribute), with sigma_k from utility.attribute_scale_from_constant_data -- the same factor the
-    pipeline uses (utility.to_real_units). For the Jan 2026 model, sigma_k equals the maximum raw survey
-    value (scaled maximum is 1 for every attribute), as in the earlier definition of this function."""
-    from utility import attribute_scale_from_constant_data
-    sigma = pd.Series(attribute_scale_from_constant_data(idata.constant_data)).rename_axis("attribute").to_xarray()
-    beta_real = idata.posterior["beta_partworths"] / sigma
-    return beta_real.to_dataframe(name="beta_real").reset_index()
-
-
 def _load_loc_tech_variable(nc_path: str, variable: str, value_name: str) -> pd.DataFrame:
     """Load a Calliope loc_tech-indexed variable, split into canton/tech, add language region."""
-    ds = xr.open_dataset(nc_path)
+    ds = result_dataset(nc_path)
     values = ds[variable].to_pandas()
     values.index = values.index.str.split("::", expand=True)
     values.index.names = ["canton", "tech"]
@@ -200,37 +191,6 @@ def load_scenario_capacity(nc_path: str) -> pd.DataFrame:
     return df[~df["canton"].isin(FOREIGN_CODES)].copy()
 
 
-#not in the pipeline
-def load_scenario_land(nc_path: str) -> pd.DataFrame:
-    df = _load_loc_tech_variable(nc_path, "resource_area", "land_use_km2")
-    return df[~df["canton"].isin(FOREIGN_CODES)].copy()
-
-
-#not in the pipeline
-def get_ch_foreign_transmission_techs(ds) -> list[str]:
-    """Return loc_techs for AC transmission lines between Switzerland and a neighbouring country."""
-    all_transmission = ds.coords["loc_techs_transmission"].values
-    ch_foreign = []
-    for t in all_transmission:
-        if "ac_transmission" not in t:
-            continue
-        origin, _, dest = t.partition("::")
-        tech, _, dest_canton = dest.partition(":")
-        if (origin in FOREIGN_CODES) != (dest_canton in FOREIGN_CODES):
-            ch_foreign.append(t)
-    return ch_foreign
-
-#not in the pipeline
-def load_scenario_transmission_capacity(nc_path: str) -> pd.DataFrame:
-    """Load installed capacity of CH-foreign AC transmission lines."""
-    ds = xr.open_dataset(nc_path)
-    ch_foreign = get_ch_foreign_transmission_techs(ds)
-    cap = ds["energy_cap"].to_pandas()
-    ds.close()
-    cap = cap.loc[cap.index.isin(ch_foreign)]
-    return cap.reset_index().rename(columns={"loc_techs": "loc_tech", "energy_cap": "capacity"})
-
-
 def get_ch_import_carrier_techs(ds) -> list[str]:
     """loc_tech_carriers_prod entries with a Swiss canton as origin and a foreign country as
     destination -> carrier_prod on these = import into Switzerland."""
@@ -238,7 +198,7 @@ def get_ch_import_carrier_techs(ds) -> list[str]:
     result = []
     for c in prod_coords:
         origin, _, rest = c.partition("::")
-        if "ac_transmission" not in rest:
+        if TRANSMISSION_TECH not in rest:
             continue
         dest = rest.partition(":")[2].partition("::")[0]
         if origin not in FOREIGN_CODES and dest in FOREIGN_CODES:
@@ -246,111 +206,12 @@ def get_ch_import_carrier_techs(ds) -> list[str]:
     return result
 
 
-#not in the pipeline
-def load_scenario_import(nc_path) -> pd.DataFrame:
-    ds = xr.open_dataset(nc_path)
-    import_techs = get_ch_import_carrier_techs(ds)
-    imports = (
-        ds["carrier_prod"]
-        .sel(loc_tech_carriers_prod=import_techs)
-        .sum(dim="timesteps")
-        .to_pandas()
-        .rename("import_mwh")
-        .reset_index()
-    )
-    ds.close()
-
-    imports[["canton", "tech_carrier"]] = imports["loc_tech_carriers_prod"].str.split("::", n=1, expand=True)
-    imports["language_region"] = imports["canton"].map(CANTON_LANGUAGE)
-    return imports
-
-
 def aggregate_national(df: pd.DataFrame, value_col: str) -> float:
     """Sums an attribute column over all cantons into one national value."""
     return df[value_col].sum()
 
 
-#not in the pipeline
-def get_ch_fuel_import_techs(ds) -> list[str]:
-    """loc_tech_carriers_prod entries for all fuel import technologies at Swiss locations
-    (e.g. import_syndiesel, import_synmethane, import_hydrogen -- varies by scenario)."""
-    prod_coords = ds.coords["loc_tech_carriers_prod"].values
-    result = []
-    for c in prod_coords:
-        canton, sep, rest = c.partition("::")
-        if not sep or canton in FOREIGN_CODES:
-            continue
-        if rest.startswith("import_") and "ac_transmission" not in rest:
-            result.append(c)
-    return result
-
-
-#not in the pipeline
-def load_scenario_fuel_import(nc_path: str) -> pd.DataFrame:
-    ds = xr.open_dataset(nc_path)
-    fuel_techs = get_ch_fuel_import_techs(ds)
-    fuel = (
-        ds["carrier_prod"]
-        .sel(loc_tech_carriers_prod=fuel_techs)
-        .sum(dim="timesteps")
-        .to_pandas()
-        .rename("fuel_import_gwh")
-        .reset_index()
-    )
-    ds.close()
-
-    fuel[["canton", "tech_carrier"]] = fuel["loc_tech_carriers_prod"].str.split("::", n=1, expand=True)
-    fuel["language_region"] = fuel["canton"].map(CANTON_LANGUAGE)
-    return fuel
-
-
-def scenario_id_from_filename(filename: str) -> str:
-    """Extracts a short, readable scenario ID from the file name."""
-    base = filename.removesuffix(".nc")
-    return base.split(",")[0].replace("barrier_", "")
-
-
-#not in the pipeline
-def extract_all_scenarios(scenario_dir: str = SCENARIO_DIR) -> dict[str, pd.DataFrame]:
-    """Loops over all scenario files and extracts all attributes.
-    Returns a dict of DataFrames, one per attribute, with a scenario_id column."""
-    results = {
-        "capacity": [], "land": [], "transmission_capacity": [],
-        "import": [], "fuel_import": [],
-    }
-
-    for filename in sorted(os.listdir(scenario_dir)):
-        if not filename.endswith(".nc"):
-            continue
-        nc_path = os.path.join(scenario_dir, filename)
-        sid = scenario_id_from_filename(filename)
-        print(f"Processing {sid}...")
-
-        cap = load_scenario_capacity(nc_path); cap["scenario_id"] = sid
-        land = load_scenario_land(nc_path); land["scenario_id"] = sid
-        trans = load_scenario_transmission_capacity(nc_path); trans["scenario_id"] = sid
-        imp = load_scenario_import(nc_path); imp["scenario_id"] = sid
-        fuel = load_scenario_fuel_import(nc_path); fuel["scenario_id"] = sid
-
-        results["capacity"].append(cap)
-        results["land"].append(land)
-        results["transmission_capacity"].append(trans)
-        results["import"].append(imp)
-        results["fuel_import"].append(fuel)
-
-    return {k: pd.concat(v, ignore_index=True) for k, v in results.items()}
-
-
-#not in the pipeline
-def save_all_scenarios(scenario_dir: str = SCENARIO_DIR, out_dir: str = PROCESSED_DIR) -> None:
-    os.makedirs(out_dir, exist_ok=True)
-    all_data = extract_all_scenarios(scenario_dir)
-    for name, df in all_data.items():
-        df.to_csv(os.path.join(out_dir, f"scenario_{name}.csv"), index=False)
-        print(f"Saved {name}: {len(df)} rows")
-
-
-def load_canton_area(csv_path: str = CANTON_AREA_CSV_PATH) -> dict:
+def load_canton_area(csv_path: str) -> dict:
     """Loads canton areas (km²) from the Statista CSV and maps them to canton codes,
     incl. the merged codes (AI_AR, BL_BS, NW_OW) from Calliope data."""
     df = pd.read_csv(csv_path, sep=";")
@@ -363,16 +224,6 @@ def load_canton_area(csv_path: str = CANTON_AREA_CSV_PATH) -> dict:
         area[merged_code] = sum(area[p] for p in parts)
 
     return area
-
-
-#not in the pipeline
-def compute_relative_land(land_df: pd.DataFrame, area_dict: dict) -> pd.DataFrame:
-    """Computes relative land use (land_use_km2 / canton area) per canton/technology,
-    matching the scale of the choice-model attribute LAND."""
-    land_df = land_df.copy()
-    land_df["canton_area_km2"] = land_df["canton"].map(area_dict)
-    land_df["relative_land"] = land_df["land_use_km2"] / land_df["canton_area_km2"]
-    return land_df
 
 
 def compute_land_from_capacity(capacity_df: pd.DataFrame, area_dict: dict, density_dict: dict = CAPACITY_DENSITY_GW_PER_KM2) -> pd.DataFrame:
@@ -390,12 +241,11 @@ def compute_land_from_capacity(capacity_df: pd.DataFrame, area_dict: dict, densi
 
 def load_scenario_net_import(nc_path: str) -> pd.DataFrame:
     """Net electricity import (import - export) per Swiss cross-border line, in GWh."""
-    ds = xr.open_dataset(nc_path)
-    import_techs = get_ch_import_carrier_techs(ds)
+    ds = result_dataset(nc_path)
+    import_techs = require_selection(get_ch_import_carrier_techs(ds), "cross-border lines", nc_path)
 
     imp = ds["carrier_prod"].sel(loc_tech_carriers_prod=import_techs).sum(dim="timesteps")
     exp = ds["carrier_con"].sel(loc_tech_carriers_con=import_techs).sum(dim="timesteps")
-    ds.close()
 
     net_values = imp.values - abs(exp.values)
     net = pd.DataFrame({
@@ -409,7 +259,7 @@ def load_scenario_net_import(nc_path: str) -> pd.DataFrame:
 
 def get_ch_demand_elec_techs(ds) -> list[str]:
     con_coords = ds.coords["loc_tech_carriers_con"].values
-    return [c for c in con_coords if "::demand_elec::" in c and c.split("::")[0] not in FOREIGN_CODES]
+    return [c for c in con_coords if f"::{DEMAND_ELECTRICITY_TECH}::" in c and c.split("::")[0] not in FOREIGN_CODES]
 
 
 def get_ch_total_electricity_demand_techs(ds) -> list[str]:
@@ -421,14 +271,14 @@ def get_ch_total_electricity_demand_techs(ds) -> list[str]:
         c for c in con_coords
         if c.split("::")[0] not in FOREIGN_CODES
         and c.split("::")[1] in SECTOR_COUPLING_ELEC_TECHS
-        and c.endswith("::electricity")
+        and c.endswith(f"::{ELECTRICITY_CARRIER}")
     ]
-    return get_ch_demand_elec_techs(ds) + sector_coupling
+    return require_selection(get_ch_demand_elec_techs(ds), "electricity demand at the Swiss locations") + sector_coupling
 
 
 def load_scenario_demand(nc_path: str) -> pd.DataFrame:
     """Total electricity consumption per Swiss canton and tech (demand_elec + sector coupling), in GWh."""
-    ds = xr.open_dataset(nc_path)
+    ds = result_dataset(nc_path)
     demand_techs = get_ch_total_electricity_demand_techs(ds)
     demand = (
         ds["carrier_con"]
@@ -439,7 +289,6 @@ def load_scenario_demand(nc_path: str) -> pd.DataFrame:
         .rename("demand_gwh")
         .reset_index()
     )
-    ds.close()
     demand[["canton", "tech_carrier"]] = demand["loc_tech_carriers_con"].str.split("::", n=1, expand=True)
     demand["language_region"] = demand["canton"].map(CANTON_LANGUAGE)
     return demand
@@ -460,18 +309,17 @@ IMPORT_DEFINITIONS = ("electricity", "electricity_fuels", "electricity_fuels_die
 def load_fuel_imports(nc_path: str, techs: dict) -> dict:
     """Annual fuel imports into Switzerland per import technology (GWh): carrier_prod of tech::carrier (techs
     {tech: carrier}) summed over all time steps and Swiss locations. Technologies absent from the scenario count 0."""
-    ds = xr.open_dataset(nc_path)
+    ds = result_dataset(nc_path)
     prod = ds.coords["loc_tech_carriers_prod"].values
     out = {}
     for tech, carrier in techs.items():
         sel = [c for c in prod if c.split("::")[0] not in FOREIGN_CODES and c.split("::")[1] == tech
                and c.split("::")[2] == carrier]
         out[tech] = float(ds["carrier_prod"].sel(loc_tech_carriers_prod=sel).sum()) if sel else 0.0
-    ds.close()
     return out
 
 
-def import_quantities(nc_path: str, fuel_techs: dict, diesel_techs: dict, denominator: str = "electricity") -> dict:
+def import_quantities(nc_path: str, fuel_techs: dict, diesel_techs: dict, denominator: str) -> dict:
     """Net electricity import, fuel imports and electricity consumption (annual sums, GWh) and the import shares of
     the three definitions (IMPORT_DEFINITIONS), each clipped to [0, 1]. The electricity share is computed exactly
     as compute_import_share. Fuel variants add the fuel imports to the net electricity import, counted with their
@@ -497,17 +345,6 @@ def import_quantities(nc_path: str, fuel_techs: dict, diesel_techs: dict, denomi
     return row
 
 
-#not in the pipeline
-def compute_import_share_extended(nc_path: str) -> float:
-    """Extended import share = (electricity net import + fuel import) / total consumption (electricity).
-    Own extension beyond the original choice-model definition (which covers electricity only)."""
-    net_import = aggregate_national(load_scenario_net_import(nc_path), "net_import_gwh")
-    fuel_import = aggregate_national(load_scenario_fuel_import(nc_path), "fuel_import_gwh")
-    demand = aggregate_national(load_scenario_demand(nc_path), "demand_gwh")
-    share = (net_import + fuel_import) / demand
-    return max(0.0, min(1.0, share))
-
-
 def compute_ownership_shares(capacity_df: pd.DataFrame, mapping: dict = OWNERSHIP_MAPPING) -> dict:
     """Capacity-weighted expected value for ownership_commercial / ownership_community,
     based on a fixed technology-to-owner mapping (assumption, not empirical).
@@ -523,6 +360,10 @@ def compute_ownership_shares(capacity_df: pd.DataFrame, mapping: dict = OWNERSHI
     }
 
 
+# Source attributes of the choice model, in the column order of the attribute tables
+SOURCE_CATEGORIES = ("source_wind", "source_gas", "source_biomass", "source_coal", "source_nuclear")
+
+
 def compute_technology_mix_shares(capacity_df: pd.DataFrame, mapping: dict = TECH_SOURCE_MAPPING) -> dict:
     """Capacity share per source_* category. The denominator (total_capacity) includes ALL
     generation-relevant technologies incl. the PV reference category (PV_REFERENCE_TECHS);
@@ -532,22 +373,23 @@ def compute_technology_mix_shares(capacity_df: pd.DataFrame, mapping: dict = TEC
     df["source_category"] = df["tech"].map(mapping)
     total_capacity = df["capacity"].sum()
     shares = df.groupby("source_category")["capacity"].sum() / total_capacity
-    return {
-        "source_wind": shares.get("source_wind", 0.0),
-        "source_gas": shares.get("source_gas", 0.0),
-        "source_biomass": shares.get("source_biomass", 0.0),
-        "source_coal": 0.0,
-        "source_nuclear": 0.0,
-    }
+    # every source category of the choice model; a category without mapped technology (coal, nuclear: no Swiss
+    # technology in attributes.source) has share 0
+    return {category: shares.get(category, 0.0) for category in SOURCE_CATEGORIES}
 
 
-ELCOM_SPARQL_ENDPOINT = "https://lindas.admin.ch/query"
+ELCOM_SPARQL_ENDPOINT = SOURCES["lindas_sparql"]
 
 
-def fetch_elcom_price(year: int, category: str, product: str = "standard") -> pd.DataFrame:
+def _use_certifi_certificates() -> None:
+    """CA certificates of certifi for the downloads (SPARQLWrapper and requests), set only when downloading."""
+    os.environ["SSL_CERT_FILE"] = certifi.where()
+
+
+def fetch_elcom_price(year: int, category: str, product: str = ELCOM_PRODUCT) -> pd.DataFrame:
     """Fetches ElCom electricity prices (Rp./kWh) per municipality directly via the LINDAS SPARQL
     endpoint instead of hard-coding values. category e.g. 'H4' = standard household category
-    (PRICE_CATEGORY, i.e. price.category in config/default.yaml)."""
+    (price.category in config/default.yaml)."""
     query = f"""
     PREFIX schema: <http://schema.org/>
     PREFIX cube: <https://cube.link/>
@@ -571,6 +413,7 @@ def fetch_elcom_price(year: int, category: str, product: str = "standard") -> pd
       FILTER(?category = "{category}")
     }}
     """
+    _use_certifi_certificates()
     sparql = SPARQLWrapper(ELCOM_SPARQL_ENDPOINT)
     sparql.setQuery(query)
     sparql.setReturnFormat(JSON)
@@ -594,6 +437,7 @@ def fetch_municipality_cantons() -> pd.DataFrame:
          <http://schema.org/containedInPlace> ?c .
       ?c a <https://schema.ld.admin.ch/Canton> ; <http://schema.org/alternateName> ?canton } }
     """
+    _use_certifi_certificates()
     sparql = SPARQLWrapper(ELCOM_SPARQL_ENDPOINT)
     sparql.setQuery(query)
     sparql.setReturnFormat(JSON)
@@ -603,7 +447,7 @@ def fetch_municipality_cantons() -> pd.DataFrame:
     return df.drop_duplicates().sort_values("bfs_nr").reset_index(drop=True)
 
 
-STATPOP_API = "https://www.pxweb.bfs.admin.ch/api/v1/de/{table}/{table}.px"
+STATPOP_API = SOURCES["statpop_pxweb"]
 
 
 def fetch_statpop(year: int, table: str) -> pd.DataFrame:
@@ -611,6 +455,7 @@ def fetch_statpop(year: int, table: str) -> pd.DataFrame:
     the PxWeb API, municipalities in the table's current boundaries). Returns bfs_nr, name, population."""
     if year >= date.today().year:
         raise ValueError(f"STATPOP needs a completed year, got {year} (current year {date.today().year}).")
+    _use_certifi_certificates()
     url = STATPOP_API.format(table=table)
     meta = requests.get(url, timeout=60)
     meta.raise_for_status()
@@ -650,14 +495,13 @@ def load_scenario_system_cost(nc_path: str) -> float:
     """Total Swiss system cost (million EUR/year), summed over all Swiss loc_techs
     (foreign loc_techs excluded, as for the other attributes). The cost class is 'monetary'; the result
     files state neither currency nor price year, EUR is our assumption."""
-    ds = xr.open_dataset(nc_path)
+    ds = result_dataset(nc_path)
     cost = ds["cost"]
     classes = list(cost.coords["costs"].values)
-    cost = cost.sel(costs="monetary") if "monetary" in classes else cost.sel(costs=classes[0])
+    cost = cost.sel(costs=cost_class(classes, COST_CLASS))
     loc_techs = cost.coords["loc_techs_cost"].values
     ch_loc_techs = [lt for lt in loc_techs if lt.split("::")[0] not in FOREIGN_CODES]
     total = cost.sel(loc_techs_cost=ch_loc_techs).sum().item()
-    ds.close()
     return total  # million EUR/year
 
 
@@ -675,11 +519,10 @@ def cost_group_of(tech: str, groups: dict) -> str:
 def load_scenario_cost_by_technology(nc_path: str, groups: dict) -> pd.DataFrame:
     """Swiss system cost (million EUR/year) per technology (summed over the Swiss locations) with its cost group;
     the costs sum to load_scenario_system_cost."""
-    ds = xr.open_dataset(nc_path)
+    ds = result_dataset(nc_path)
     cost = ds["cost"]
     classes = list(cost.coords["costs"].values)
-    cost = (cost.sel(costs="monetary") if "monetary" in classes else cost.sel(costs=classes[0])).to_pandas()
-    ds.close()
+    cost = cost.sel(costs=cost_class(classes, COST_CLASS)).to_pandas()
     cost = cost[[lt.split("::")[0] not in FOREIGN_CODES for lt in cost.index]]
     by_tech = cost.groupby([lt.split("::")[1] for lt in cost.index]).sum().rename("cost").rename_axis("tech").reset_index()
     by_tech["group"] = [cost_group_of(t, groups) for t in by_tech["tech"]]
@@ -698,7 +541,7 @@ def _swiss_flows(ds) -> tuple[pd.Series, pd.Series, pd.Series]:
         return df.groupby(["tech", "carrier"])["value"].sum()
     cost = ds["cost"]
     classes = list(cost.coords["costs"].values)
-    cost = (cost.sel(costs="monetary") if "monetary" in classes else cost.sel(costs=classes[0])).to_pandas()
+    cost = cost.sel(costs=cost_class(classes, COST_CLASS)).to_pandas()
     cost = cost[[lt.split("::")[0] not in FOREIGN_CODES for lt in cost.index]]
     cost = cost.groupby([lt.split("::")[1] for lt in cost.index]).sum()
     return by_tech_carrier("carrier_prod"), by_tech_carrier("carrier_con"), cost
@@ -734,18 +577,17 @@ def fuel_unit_costs(prod: pd.Series, con: pd.Series, cost: pd.Series, fuels: lis
     raise ValueError("fuel unit costs did not converge")
 
 
-def load_power_fuel_cost(nc_path: str, plants: list, fuels: list, chp_allocation: str = "output_share") -> pd.DataFrame:
+def load_power_fuel_cost(nc_path: str, plants: list, fuels: list, chp_allocation: str) -> pd.DataFrame:
     """Fuel cost of the power plants (price.fuel_power_techs) per plant and fuel: fuel consumed (GWh, from the
     results, i.e. with the plant's efficiency) x unit cost of the fuel (fuel_unit_costs), and the part allocated to
     electricity: output_share = electricity / all energy output of the plant (CHP: rest to heat), electricity = all."""
-    ds = xr.open_dataset(nc_path)
+    ds = result_dataset(nc_path)
     prod, con, cost = _swiss_flows(ds)
-    ds.close()
     unit = fuel_unit_costs(prod, con, cost, fuels)
     rows = []
     for t in plants:
         out = prod[[i for i in prod.index if i[0] == t]]
-        electricity = float(out.get((t, "electricity"), 0.0))
+        electricity = float(out.get((t, ELECTRICITY_CARRIER), 0.0))
         output = float(out.sum())
         if chp_allocation == "output_share":
             share = electricity / output if output > 0 else 0.0
@@ -764,7 +606,7 @@ def load_power_fuel_cost(nc_path: str, plants: list, fuels: list, chp_allocation
                                        "fuel_cost", "electricity_share", "fuel_cost_electricity"])
 
 
-def load_scenario_scoped_cost(nc_path: str, cost_scope: str = "total", groups: dict = None,
+def load_scenario_scoped_cost(nc_path: str, cost_scope: str, groups: dict = None,
                               power_fuel: dict = None) -> float:
     """System cost of the price formula (price.cost_scope): total = load_scenario_system_cost; a group name of
     groups (price.cost_groups, e.g. electricity) = only the costs of that group; electricity_fuel = electricity costs
@@ -792,8 +634,8 @@ def fetch_eur_to_chf(year: int) -> tuple[float, int]:
     if year >= date.today().year:
         raise ValueError(f"EUR/CHF annual mean needs a completed year, got {year} "
                          f"(current year {date.today().year}); the mean would not be reproducible.")
-    response = requests.get(f"https://api.frankfurter.dev/v1/{year}-01-01..{year}-12-31",
-                            params={"from": "EUR", "to": "CHF"})
+    _use_certifi_certificates()
+    response = requests.get(SOURCES["eur_chf_rates"].format(year=year), params={"from": "EUR", "to": "CHF"}, timeout=60)
     response.raise_for_status()
     rates = [r["CHF"] for day, r in response.json()["rates"].items() if day.startswith(f"{year}-")]
     if not rates:
@@ -801,9 +643,10 @@ def fetch_eur_to_chf(year: int) -> tuple[float, int]:
     return sum(rates) / len(rates), len(rates)
 
 
-def compute_price_change(nc_path: str, elcom_ref: dict, eur_to_chf: float, cost_scale: float = 1.0,
-                         cost_scope: str = "total", cost_groups: dict = None, power_fuel: dict = None) -> float:
-    """Relative price change vs. the ElCom reference price. Deliberately NOT clipped to >=0
+def compute_price_change(nc_path: str, elcom_ref: dict, eur_to_chf: float, cost_scale: float,
+                         cost_scope: str, cost_groups: dict = None, power_fuel: dict = None) -> float:
+    """Relative price change vs. the reference price (elcom_ref: ElCom values or, with cost_scope energy, p_ref and the
+    energy surcharge, see scope_reference). Deliberately NOT clipped to >=0
     (unlike import) -- price is a continuous, linear attribute, so mild extrapolation beyond the
     training range (-25% to +100%, survey levels -25/0/+25/+50/+100%) is more defensible here than
     e.g. for net export.
@@ -814,23 +657,18 @@ def compute_price_change(nc_path: str, elcom_ref: dict, eur_to_chf: float, cost_
                                   elcom_ref, eur_to_chf)
 
 
-HEAT_DEMAND_TECHS = ("demand_buildings_heat", "demand_low_temp_process_heat", "demand_medium_temp_process_heat",
-                     "demand_high_temp_process_heat")
-
-
 def load_scenario_final_energy(nc_path: str) -> dict:
     """Final energy demand (GWh/year, carrier_con summed over time and the Swiss locations): electricity = demand_elec,
-    heat = the heat demands (HEAT_DEMAND_TECHS, delivered heat), transport = energy into the vehicles (*_transport_*
-    technologies: electricity, hydrogen, diesel; the transport demand itself is not energy), and their sum. The model
-    has no direct fuel demand. Same calculation as the cost/energy untangling of Nov 2026."""
-    ds = xr.open_dataset(nc_path)
+    heat = the heat demands (calliope.heat_demand_techs, delivered heat), transport = energy into the vehicles
+    (technologies whose name contains calliope.transport_marker: electricity, hydrogen, diesel; the transport demand
+    itself is not energy), and their sum. The model has no direct fuel demand."""
+    ds = result_dataset(nc_path)
     con = ds["carrier_con"].sum("timesteps").to_pandas().abs()
-    ds.close()
     con = con[[i.split("::")[0] not in FOREIGN_CODES for i in con.index]]
     tech = pd.Series([i.split("::")[1] for i in con.index], index=con.index)
-    out = {"electricity": float(con[tech == "demand_elec"].sum()),
+    out = {"electricity": float(con[tech == DEMAND_ELECTRICITY_TECH].sum()),
            "heat": float(con[tech.isin(HEAT_DEMAND_TECHS)].sum()),
-           "transport": float(con[tech.str.contains("_transport_") & ~tech.str.startswith("demand")].sum())}
+           "transport": float(con[tech.str.contains(TRANSPORT_MARKER, regex=False) & ~tech.str.startswith(DEMAND_TECH_PREFIX)].sum())}
     out["final_energy"] = out["electricity"] + out["heat"] + out["transport"]
     return out
 
@@ -880,16 +718,15 @@ def price_reference_columns(table: pd.DataFrame) -> list[str]:
 def load_scenario_end_use(nc_path: str) -> dict:
     """End-use consumption per carrier (GWh/year, carrier_con at the Swiss locations) of the technologies in
     price.end_use_techs, for the taxes and levies per carrier (simulated_price)."""
-    ds = xr.open_dataset(nc_path)
+    ds = result_dataset(nc_path)
     con = ds["carrier_con"].sum("timesteps").to_pandas().abs()
-    ds.close()
     con = con[[i.split("::")[0] not in FOREIGN_CODES for i in con.index]]
     parts = [i.split("::") for i in con.index]
     return {name: float(con[[p[1] in spec["techs"] and p[2] == spec["carrier"] for p in parts]].sum())
             for name, spec in END_USE_TECHS.items()}
 
 
-def load_scenario_cost_and_demand(nc_path: str, cost_scale: float = 1.0, cost_scope: str = "total",
+def load_scenario_cost_and_demand(nc_path: str, cost_scale: float, cost_scope: str,
                                   cost_groups: dict = None, power_fuel: dict = None) -> tuple[float, float, dict]:
     """Swiss system cost (million EUR/year; all technologies, or with cost_scope only one cost group, see
     load_scenario_scoped_cost) times cost_scale (price.cost_scale_factor, 1.0 = costs as in the result file),
@@ -975,95 +812,59 @@ RELATIVE_LAND_DEFINITIONS = {
 }
 
 
-def compute_all_attributes(nc_path: str, area_dict: dict, elcom_ref: dict, eur_to_chf: float,
-                           land_definition: str, cost_scale: float = 1.0, cost_scope: str = "total",
+def electricity_producing_technologies(nc_path: str) -> list[str]:
+    """Technologies that can produce electricity at the Swiss locations (loc_tech_carriers_prod with carrier
+    electricity, without the transmission links tech:<region>), from the coordinates of the result file."""
+    ds = result_dataset(nc_path)
+    entries = [c.split("::") for c in ds.coords["loc_tech_carriers_prod"].values]
+    return sorted({tech for loc, tech, carrier in entries
+                   if loc not in FOREIGN_CODES and ":" not in tech and carrier == ELECTRICITY_CARRIER})
+
+
+def check_attribute_mappings(nc_path: str) -> None:
+    """Every electricity producer of the scenario is in the ownership and the source mapping or deliberately excluded
+    (checks.check_technology_mapping); stops otherwise."""
+    check_technology_mapping(electricity_producing_technologies(nc_path), {
+        "ownership mapping": (OWNERSHIP_MAPPING, OWNERSHIP_EXCLUDED_TECHS),
+        "source mapping (incl. PV reference)": (list(TECH_SOURCE_MAPPING) + PV_REFERENCE_TECHS, SOURCE_EXCLUDED_TECHS),
+    }, nc_path)
+
+
+def national_import_share(nc_path: str, imports: dict) -> float:
+    """Import attribute of the national aggregate with the definition of the main analysis (imports: definition,
+    denominator, fuel_techs, diesel_techs of imports in config/default.yaml): import_quantities, as rule import_shares
+    for the regional analysis; the definition electricity is the net electricity import over the electricity
+    consumption (compute_import_share), as the regional analysis uses it for this definition."""
+    if imports["definition"] == "electricity":
+        return compute_import_share(nc_path)
+    quantities = import_quantities(nc_path, imports["fuel_techs"], imports["diesel_techs"], imports["denominator"])
+    return quantities[f"import_share_{imports['definition']}"]
+
+
+def compute_all_attributes(scenario_id: str, nc_path: str, area_dict: dict, elcom_ref: dict, eur_to_chf: float,
+                           land_definition: str, cost_scale: float, cost_scope: str, imports: dict,
                            cost_groups: dict = None, power_fuel: dict = None) -> dict:
     """Computes all 11 choice-model attributes (national) for one scenario.
-    land_definition: key of RELATIVE_LAND_DEFINITIONS (land.definition in config/default.yaml);
+    scenario_id: the scenario's ID in config/default.yaml (scenarios), for the cost change of Mellot Table 3;
+    land_definition: key of RELATIVE_LAND_DEFINITIONS (land.definition in config/default.yaml); imports: import
+    definition of the main analysis (national_import_share);
     cost_scale, cost_scope, cost_groups, power_fuel: price.cost_scale_factor, cost_scope, cost_groups, power plant fuels."""
     if land_definition not in RELATIVE_LAND_DEFINITIONS:
         raise ValueError(f"Unknown land definition {land_definition!r}, expected one of {list(RELATIVE_LAND_DEFINITIONS)}")
+    check_attribute_mappings(nc_path)
     capacity_df = load_scenario_capacity(nc_path)
     return {
         # Empirically verified, not a placeholder: the CH-foreign AC capacity is identical in all 12
         # scenarios (13.249 GW per direction); Mellot et al. do not expand transmission.
-        "transmission_change": 0.0,
+        "transmission_change": TRANSMISSION_CHANGE,
         "relative_land": RELATIVE_LAND_DEFINITIONS[land_definition](nc_path, area_dict),
-        # import_share_extended (compute_import_share_extended) deliberately not included:
-        # fuel and electricity GWh are not comparable; the choice model defines electricity import only.
-        "import_share": compute_import_share(nc_path),
+        "import_share": national_import_share(nc_path, imports),
         **compute_ownership_shares(capacity_df),
         **compute_technology_mix_shares(capacity_df),
         "price_change": compute_price_change(nc_path, elcom_ref=elcom_ref, eur_to_chf=eur_to_chf, cost_scale=cost_scale,
                                              cost_scope=cost_scope, cost_groups=cost_groups, power_fuel=power_fuel),
         # Official cost change vs. EP2050+ (Mellot Table 3), not a choice-model attribute;
-        # for comparing preference rank vs. cost rank (NaN for baseline, not in Table 3)
-        "mellot_cost_change_pct": MELLOT_COST_CHANGE_PCT[scenario_id_from_filename(os.path.basename(nc_path))],
+        # for comparing preference rank vs. cost rank (NaN for baseline, not in Table 3); by the scenario ID of the
+        # configuration, not the file name (the EP2050+ files of 2017/2018 are named barrier_baseline,...)
+        "mellot_cost_change_pct": MELLOT_COST_CHANGE_PCT[scenario_id],
     }
-
-
-#not in the pipeline
-def compute_all_scenarios(scenario_dir: str = SCENARIO_DIR, area_csv_path: str = CANTON_AREA_CSV_PATH) -> pd.DataFrame:
-    """Runs all finished attribute functions over all scenario files; the ElCom reference price and
-    the EUR/CHF rate are fetched once (not per scenario) and reused."""
-    area_dict = load_canton_area(area_csv_path)
-    elcom_ref = {**get_elcom_reference_price(PRICE_REFERENCE_YEAR, PRICE_CATEGORY), "margin": PRICE_MARGIN, "vat": 0.0}
-    eur_to_chf, _ = fetch_eur_to_chf(PRICE_REFERENCE_YEAR)
-
-    rows = []
-    for filename in sorted(os.listdir(scenario_dir)):
-        if not filename.endswith(".nc"):
-            continue
-        nc_path = os.path.join(scenario_dir, filename)
-        sid = scenario_id_from_filename(filename)
-        print(f"Processing {sid}...")
-        row = compute_all_attributes(nc_path, area_dict, elcom_ref, eur_to_chf, LAND_DEFINITION, PRICE_COST_SCALE_FACTOR,
-                                     PRICE_COST_SCOPE, PRICE_COST_GROUPS, PRICE_POWER_FUEL)
-        row["scenario_id"] = sid
-        rows.append(row)
-    return pd.DataFrame(rows)
-
-
-SWISSGRID_LISTING_URL = "https://www.swissgrid.ch/en/home/customers/topics/energy-data-ch.html"
-
-
-#not in the pipeline
-def get_swissgrid_report_url(year: int) -> str:
-    """Dynamically finds the Swissgrid download URL for a given year (instead of hard-coding the
-    year->URL mapping -- the URLs contain an asset ID that cannot be derived from the year).
-    NOTE: this file only contains national production/consumption statistics, no cross-border
-    capacities -- so it is not directly usable for transmission (see notes)."""
-    response = requests.get(SWISSGRID_LISTING_URL)
-    response.raise_for_status()
-    match = re.search(
-        rf'(https://www\.swissgrid\.ch/dam/jcr:[a-f0-9-]+/EnergieUebersichtCH-{year}\.xlsx)',
-        response.text,
-    )
-    if not match:
-        raise ValueError(f"No Swissgrid report URL found for {year}.")
-    return match.group(1)
-
-
-#not in the pipeline
-def download_swissgrid_report(year: int = TRANSMISSION_REFERENCE_YEAR, out_dir: str = RAW_DIR) -> str:
-    """Downloads the Swissgrid annual report for a given year and saves it locally."""
-    url = get_swissgrid_report_url(year)
-    response = requests.get(url)
-    response.raise_for_status()
-    out_path = os.path.join(out_dir, f"EnergieUebersichtCH-{year}.xlsx")
-    with open(out_path, "wb") as f:
-        f.write(response.content)
-    return out_path
-
-
-if __name__ == "__main__":
-    print("=== Mean betas (point estimate, DE-CH) ===")
-    print(load_beta_partworths_mean(CHOICE_MODEL_PATH, country="DE-CH"))
-
-    print()
-    print("=== Sample betas (full posterior, DE-CH) ===")
-    samples = load_beta_partworths_samples(CHOICE_MODEL_PATH, country="DE-CH")
-    for attr, values in samples.items():
-        print(f"{attr}: {len(values)} samples, mean={values.mean():.4f}, "
-              f"94% equal-tailed interval (3rd-97th percentile, not HDI)="
-              f"[{np.percentile(values, 3):.4f}, {np.percentile(values, 97):.4f}]")

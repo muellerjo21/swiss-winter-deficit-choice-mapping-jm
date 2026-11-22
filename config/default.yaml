@@ -1,7 +1,6 @@
-# Configuration of the Snakemake pipeline. The "price" section is the single source for the
-# price parameters: src/config.py reads PRICE_REFERENCE_YEAR and PRICE_CATEGORY from here, so that
-# notebooks and interactive runs use the same values. reference_year is the base year of both the
-# ElCom reference price and the EUR/CHF rate (annual mean of the daily ECB rates of that year).
+# Configuration of the Snakemake pipeline, the single source of all parameters (the code has no defaults of its own;
+# a missing key stops with an error that names it). The scripts read it through the rules' params and through
+# src/config.py, which gets the configuration of the run including its --config overrides from the Snakefile.
 
 data:
     # Calliope results of Mellot et al. (2024) per weather year: data/raw/<weather_year>/ (copies of the Zenodo files;
@@ -11,8 +10,14 @@ data:
     # Choice model: name of an entry of choice_models (provenance, sizes and checksums: docs/data_provenance.md).
     # coefficients: Swiss coefficient group -> group/country of the model file; mobile_partworths: the file has the
     # mobile shift (utility.mobile_share > 0 is only possible then).
-    choice_model: measured_2026
+    choice_model: measured_2026_languages
     choice_models:
+        # corrected model of the cleaned choice data (Tim Tröndle, 20 Nov 2026): European mean + effect per language
+        # group; Switzerland as DE-CH and FR-CH (same respondents and choices as measured_2026); no mobile shift
+        measured_2026_languages:
+            file: data/raw/measured.nc
+            coefficients: {DE-CH: DE-CH, FR-CH: FR-CH}
+            mobile_partworths: false
         # cleaned choice data (Kristiina Joon, Climate Policy Lab, Nov 2026): European mean + country effect, one
         # Swiss coefficient set for all regions (no language split)
         measured_2026:
@@ -35,10 +40,12 @@ price:
     # reproducible.
     reference_year: 2025
     category: H4
+    # ElCom tariff product of the reference prices (LINDAS, rules fetch_elcom_*)
+    elcom_product: standard
     # Factor on the Calliope system cost C_s before the price formula (load_data.load_scenario_cost_and_demand),
     # in all analyses. 1.0 = costs as in the result files (main analysis). The currency year of C_s is not stated
-    # in the result files; converting EUR 2020 to EUR 2025 with the euro area HICP would be 128.75 / 105.06 = 1.2255
-    # (Eurostat prc_hicp_aind, CP00, EA, annual average index 2015 = 100, retrieved 29 Oct 2026).
+    # in the result files; Mellot et al. take most costs in EUR 2015 (see sensitivity.cost_scale_conversions for the
+    # conversion to 2025 prices as a sensitivity).
     cost_scale_factor: 1.0
     # Revenue margin mu of the price formula p_sim = C/D * e * 100 * (1 + mu) + tau + g, in all analyses and cost
     # scopes. 0.10 = margin assumed by Tröndle et al. (2025).
@@ -157,12 +164,13 @@ utility:
     interval_type: hdi
 
 # Spatial resolution of the main analysis. regional (main): analysis on the 23 Calliope regions
-# (20 cantons, AI_AR, BL_BS, NW_OW, TI) with their own land use, technology and ownership shares and
-# ElCom reference price, utility with the coefficients of the region's language region and population-
-# weighted aggregation; results in files with the suffix _regional. national: only the national aggregate
-# (attributes computed nationally, utility per language region), which is always computed as secondary
-# analysis (files without suffix, figures fig1-fig6). The regional outputs are part of the rule all only
-# with resolution: regional (they can always be built explicitly and are part of the tests).
+# (20 cantons, AI_AR, BL_BS, NW_OW, TI) with their own land use, technology and ownership shares; price change and
+# import share national (cost_scope energy: one reference price p_ref for all regions); utility with the coefficients
+# of the region's coefficient group (regions.language mapped by data.choice_models.<entry>.coefficients; the measured
+# model has one Swiss set) and population-weighted aggregation; results in files with the suffix _regional.
+# national: only the national aggregate (attributes computed nationally, utility per coefficient group), which is
+# always computed as secondary analysis (files without suffix, figures fig1-fig6). The regional outputs are part of
+# the rule all only with resolution: regional (they can always be built explicitly and are part of the tests).
 spatial:
     resolution: regional
     regional:
@@ -186,7 +194,8 @@ spatial:
             stop: 6.0
             step: 0.25
 
-# Sensitivity of the ranking to the ElCom reference price (rule sensitivity_reference_price, fig6).
+# Sensitivity of the ranking of the national aggregate to the reference price of the price formula (cost_scope energy:
+# price.energy_reference_ct_per_kwh; otherwise the ElCom price), rule sensitivity_reference_price, fig6 national.
 sensitivity:
     # Curve: only total_rp_kwh varies (Rp./kWh); taxes/levies, grid usage and EUR/CHF rate stay at
     # price.reference_year. The reference year's own total is added to the grid.
@@ -263,6 +272,20 @@ figures:
     # Scenarios with their own colour in every figure, in this order blue, orange, green, violet (at most 4; the
     # lines of fig6); all other scenarios grey.
     highlight_scenarios: [policy_alpine_pv, policy_sccgt_daccs, policy_mix, policy_remix]
+    # Names of the scenarios in figures and texts, following Mellot et al. (2024), Table 3
+    display_names:
+        policy_mix: "MIX"
+        policy_sccgt_daccs: "S/CCGT (Fossil) + DACCS"
+        policy_remix: "RE MIX"
+        policy_sccgt_plus_h2: "S/CCGT (Ren. Methane) + H2"
+        policy_sccgt_no_h2: "S/CCGT (Ren. Methane)"
+        policy_alpine_pv: "Alpine PV"
+        baseline_no_self_sufficiency_result_4H: "EP2050+"
+        policy_wind_x2: "Wind"
+        policy_h2_imports_only: "H2 Imports"
+        policy_chp: "CHP"
+        policy_roof_pv: "Roof PV++"
+        baseline: "EP2050+ (5 TWh constraint)"
 
 # Pairwise choice probabilities of the regional main analysis (as in Tröndle et al. 2025, Fig. 1-4): per draw and
 # region p = logistic(u_1 - u_2), aggregated as the population-weighted mean of the regional probabilities.
@@ -293,6 +316,146 @@ maps:
     # differences (values outside take the end colours); both are written (variant with suffix _range<lo>-<hi>).
     color_range: [0, 100]
     color_range_variant: [40, 60]
+
+# Conventions of the Calliope result files of Mellot et al. (2024), used to read them (src/load_data.py)
+calliope:
+    # Locations of the neighbouring countries in the model; all other locations are Swiss (FR is the canton of
+    # Fribourg, FRA is France)
+    foreign_locations: [AUT, DEU, FRA, ITA]
+    # Cost class of the system cost (variable cost; the files state no currency, read as million EUR)
+    cost_class: monetary
+    # Names in the files: electricity carrier, exogenous electricity demand, prefix of all demand technologies, and
+    # the transmission links (<location>::<transmission_tech>:<other location>)
+    electricity_carrier: electricity
+    demand_electricity_tech: demand_elec
+    demand_tech_prefix: demand
+    transmission_tech: ac_transmission
+    # Final energy (price.cost_scope energy, imports.denominator final_energy, load_data.load_scenario_final_energy):
+    # electricity = demand_elec; heat = these heat demands (delivered heat); transport = energy into the vehicles, i.e.
+    # the technologies whose name contains transport_marker (the transport demand technologies themselves are no energy)
+    heat_demand_techs: [demand_buildings_heat, demand_low_temp_process_heat, demand_medium_temp_process_heat,
+                        demand_high_temp_process_heat]
+    transport_marker: _transport_
+    # Technologies with electricity as input (sector coupling) that count as electricity consumption besides
+    # demand_elec (denominator of the electricity import share and of the electricity price variants). Storage
+    # (pumped_hydro, hydrogen_electricity_storage, battery) deliberately excluded: it would be counted twice.
+    sector_coupling_electricity_techs: [light_transport_ev, heavy_transport_ev, hp, electrode_boiler, electrolysis, dac,
+                                        daccs_local]
+
+# Regions of the Calliope model (20 cantons, AI_AR, BL_BS, NW_OW, TI) and their languages (src/config.py)
+regions:
+    # BFS canton number (e.g. in swissBOUNDARIES3D) and German name (as in data.canton_area) of every canton
+    cantons:
+        ZH: {number: 1, name: "Zürich"}
+        BE: {number: 2, name: "Bern"}
+        LU: {number: 3, name: "Luzern"}
+        UR: {number: 4, name: "Uri"}
+        SZ: {number: 5, name: "Schwyz"}
+        OW: {number: 6, name: "Obwalden"}
+        NW: {number: 7, name: "Nidwalden"}
+        GL: {number: 8, name: "Glarus"}
+        ZG: {number: 9, name: "Zug"}
+        FR: {number: 10, name: "Freiburg"}
+        SO: {number: 11, name: "Solothurn"}
+        BS: {number: 12, name: "Basel-Stadt"}
+        BL: {number: 13, name: "Basel-Landschaft"}
+        SH: {number: 14, name: "Schaffhausen"}
+        AR: {number: 15, name: "Appenzell Ausserrhoden"}
+        AI: {number: 16, name: "Appenzell Innerrhoden"}
+        SG: {number: 17, name: "St. Gallen"}
+        GR: {number: 18, name: "Graubünden"}
+        AG: {number: 19, name: "Aargau"}
+        TG: {number: 20, name: "Thurgau"}
+        TI: {number: 21, name: "Tessin"}
+        VD: {number: 22, name: "Waadt"}
+        VS: {number: 23, name: "Wallis"}
+        NE: {number: 24, name: "Neuenburg"}
+        GE: {number: 25, name: "Genf"}
+        JU: {number: 26, name: "Jura"}
+    # Cantons merged into one location of the Calliope model
+    merged_cantons: {AI_AR: [AI, AR], BL_BS: [BL, BS], NW_OW: [NW, OW]}
+    # Language region of every location (coefficient group of the choice model and the groups DE-CH / FR-CH); null =
+    # no coefficients in the choice model (TI, Italian-speaking; see spatial.regional.ticino)
+    language: {ZH: DE-CH, BE: DE-CH, LU: DE-CH, UR: DE-CH, SZ: DE-CH, GL: DE-CH, ZG: DE-CH, SO: DE-CH, SH: DE-CH,
+               SG: DE-CH, GR: DE-CH, AG: DE-CH, TG: DE-CH, FR: FR-CH, VD: FR-CH, VS: FR-CH, NE: FR-CH, GE: FR-CH,
+               JU: FR-CH, AI_AR: DE-CH, BL_BS: DE-CH, NW_OW: DE-CH, TI: null}
+    # Weights of the language regions (national aggregate, TI with mixed coefficients), normalised to sum 1: main
+    # languages of the permanent resident population in %, German 61, French 23 (multiple answers possible; Italian
+    # and Romansh left out as in language), BFS "Sprachliche Praktiken in der Schweiz", structural survey 2023,
+    # https://dam-api.bfs.admin.ch/hub/api/dam/assets/34788128/master
+    language_shares: {DE-CH: 61, FR-CH: 23}
+
+# Mapping of the Calliope results to the attributes of the choice model (src/load_data.py)
+attributes:
+    # Change of the transmission capacity: 0 in all scenarios (the cross-border AC capacity is 13.249 GW per direction
+    # in all 12 scenarios; Mellot et al. do not expand transmission). The mapping therefore carries no information on
+    # grid expansion.
+    transmission_change: 0.0
+    # Capacity density (GW/km²) of the technologies that occupy land, as in Tröndle et al. (2025): 8 MW/km² wind,
+    # 80 MW/km² PV (all PV and wind subtypes); rooftop PV occupies no additional land
+    capacity_density_gw_per_km2: {wind_onshore_monopoly: 0.008, wind_onshore_competing: 0.008, open_field_pv: 0.08,
+                                  alpine_pv_subsidised: 0.08, alpine_pv_not_subsidised: 0.08}
+    # PV technologies: implicit reference category (solar) of the source attributes, part of the capacity denominator
+    pv_reference_techs: [roof_mounted_pv, open_field_pv, alpine_pv_subsidised, alpine_pv_not_subsidised]
+    # Owner of every generating technology (assumption, not empirical); public = implicit reference category
+    ownership:
+        roof_mounted_pv: commercial
+        open_field_pv: commercial
+        alpine_pv_subsidised: commercial
+        alpine_pv_not_subsidised: commercial
+        wind_onshore_monopoly: community
+        wind_onshore_competing: community
+        ccgt: commercial
+        ccgt_natgas: commercial
+        scgt_natgas: commercial
+        scgt_renewable: commercial
+        chp_methane: commercial
+        chp_waste: commercial
+        chp_biofuel: commercial
+        hydro_run_of_river: public
+        hydro_reservoir: public
+        pumped_hydro: public
+        nuclear: public
+    # Source category of the choice model per technology; PV (pv_reference_techs) is the reference, coal and nuclear
+    # have no Swiss technology (share 0); hydropower has no category (capacities frozen by Mellot et al.)
+    source:
+        wind_onshore_monopoly: source_wind
+        wind_onshore_competing: source_wind
+        ccgt: source_gas
+        ccgt_natgas: source_gas
+        scgt_natgas: source_gas
+        scgt_renewable: source_gas
+        chp_methane: source_gas
+        chp_biofuel: source_biomass
+        chp_waste: source_biomass
+    # Electricity-producing technologies deliberately without an assignment; every other electricity producer must be
+    # mapped (src/checks.py stops the workflow otherwise). Storage releases stored electricity and owns no generation.
+    ownership_excluded: [battery, hydrogen_electricity_storage]
+    source_excluded: [battery, hydrogen_electricity_storage, hydro_reservoir, hydro_run_of_river, pumped_hydro]
+
+# Swiss cost change of the scenarios relative to EP2050+ in %, Mellot et al. (2024), Energy Conversion and Management
+# 309, 118426, Table 3; comparison with the preference ranking, not a choice-model attribute. baseline (EP2050+ with
+# the 5 TWh winter constraint) is not in Table 3 (.nan).
+mellot_cost_change_pct:
+    policy_mix: -17.0
+    policy_sccgt_daccs: -16.3
+    policy_remix: -8.8
+    policy_sccgt_plus_h2: -3.6
+    policy_sccgt_no_h2: -3.6
+    policy_alpine_pv: -0.8
+    baseline_no_self_sufficiency_result_4H: 0.0
+    policy_wind_x2: 18.0
+    policy_h2_imports_only: 19.2
+    policy_chp: 22.2
+    policy_roof_pv: 33.7
+    baseline: .nan
+
+# Download endpoints of the fetch rules (src/load_data.py). Changing them does not re-run the downloads; re-fetch on
+# purpose with --forcerun <rule>.
+sources:
+    lindas_sparql: https://lindas.admin.ch/query
+    statpop_pxweb: "https://www.pxweb.bfs.admin.ch/api/v1/de/{table}/{table}.px"
+    eur_chf_rates: "https://api.frankfurter.dev/v1/{year}-01-01..{year}-12-31"
 
 # Scenario ID (wildcard) -> .nc file name in data.scenario_dir. Explicit mapping instead of a glob,
 # because the file names contain commas.
@@ -351,6 +514,14 @@ scenarios:
         2016: "barrier_policy_wind_x2,neighbours_fixed_by_EP2050_baseline_2016_result_4H.nc"
         2017: "barrier_policy_wind_x2,sensitivity_weather_2017,neighbours_fixed_by_EP2050_baseline_2017_result_4H.nc"
         2018: "barrier_policy_wind_x2,sensitivity_weather_2018,neighbours_fixed_by_EP2050_baseline_2018_result_4H.nc"
+
+# Reporting conventions (scripts/adjacent_pairs.py, docs/tie_groups.csv): neighbouring ranks are reported as tied if
+# the higher-ranked scenario has the higher utility in fewer than tie_threshold of the posterior draws, or if their
+# mean utilities differ by less than tie_utility_tolerance (practically identical scenarios). A convention of this
+# project, not a statistical test.
+report:
+    tie_threshold: 0.95
+    tie_utility_tolerance: 1.0e-5
 
 # Frozen, validated reference results for the rule "test"
 reference:

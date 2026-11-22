@@ -18,8 +18,6 @@ sys.path.insert(0, str(Path(snakemake.scriptdir).parent / "src"))
 from config import SCENARIO_DISPLAY_NAMES
 
 LAST = ["test", "all"]  # bottom row of the map
-LAND_DEFINITIONS = {"national_share": "Landnutzung geteilt durch die Fläche der Schweiz",
-                    "canton_mean": "Mittel der Kantonsanteile"}
 
 
 def name(scenario_id: str) -> str:
@@ -61,7 +59,7 @@ def survey_values(path_to_choice_model: str, coefficients: dict) -> tuple[list, 
     return [float(v) for v in levels], float(resp.mean())
 
 
-def values(inp, p) -> dict:
+def values(inp, p, texts: dict) -> dict:
     """Every {placeholder} of docs/pipeline_map.yaml, computed from the results and the config."""
     elcom = json.loads(Path(inp.elcom_national).read_text())
     eur_chf = json.loads(Path(inp.eur_chf).read_text())["eur_to_chf"]
@@ -111,7 +109,10 @@ def values(inp, p) -> dict:
         "ref_price_regional_range": f"{fixed(regions.min())} Rp./kWh in {regions.idxmin()} bis {fixed(regions.max())} "
                                     f"in {regions.idxmax()}",
         "boundaries_release": "Release " + re.search(r"swissboundaries3d_(\d{4}-\d{2})", p.boundaries_url).group(1),
-        "land_definition": LAND_DEFINITIONS[p.land_definition],
+        "land_definition": texts["land_definitions"][p.land_definition],
+        "weather_years": join([str(y) for y in p.weather_years]),
+        "missing_runs": "; ".join(f"{name(s)} ({join([str(y) for y in g['weather_year']])})"
+                                  for s, g in pd.read_csv(inp.missing_runs).groupby("scenario_id", sort=False)) or "keiner",
         "n_scenarios": len(pd.read_csv(inp.attributes)),
         "import_definition": p.import_definition,
         "survey_import_levels": join([f"{v:g}" for v in levels]),
@@ -193,7 +194,7 @@ def build(inp, p, path_to_output: str) -> None:
     rules = sorted(names.values())
     texts = yaml.safe_load(Path(inp.texts).read_text())
     described = check_texts(rules, texts)
-    vals = values(inp, p)
+    vals = values(inp, p, texts)
     nodes = {r: {"g": described[r]["group"], "nat": bool(described[r].get("national", False)),
                  "text": fill(described[r]["text"], vals, r),
                  "open": fill(described[r].get("open", ""), vals, r)} for r in rules}

@@ -17,11 +17,11 @@ from regional import (load_regional_model, population_weights, region_coefficien
                       regional_rankings, regional_utilities)
 
 
-def national_attributes(nc_by_scenario, area, elcom_ref, eur_to_chf, land_definition, cost_options):
+def national_attributes(nc_by_scenario, area, elcom_ref, eur_to_chf, land_definition, imports, cost_options):
     """As scenario_attributes + compute_attributes: one row per scenario, sorted by scenario_id."""
     rows = []
     for s, nc in nc_by_scenario.items():
-        row = compute_all_attributes(nc, area, elcom_ref, eur_to_chf, land_definition, **cost_options)
+        row = compute_all_attributes(s, nc, area, elcom_ref, eur_to_chf, land_definition, imports=imports, **cost_options)
         row["scenario_id"] = s
         rows.append(row)
     return pd.DataFrame(rows).sort_values("scenario_id")
@@ -41,7 +41,9 @@ def weather_year(p, inp, out):
                                 p.cost_scope, p.energy_reference, p.margin)
     cost_options = dict(cost_scale=p.cost_scale, cost_scope=p.cost_scope, cost_groups=p.cost_groups,
                         power_fuel=p.power_fuel)
-    national = national_attributes(nc_by_scenario, area, elcom_ref, eur_to_chf, p.land_definition, cost_options)
+    imports = dict(definition=p.import_definition, denominator=p.import_denominator, fuel_techs=p.fuel_techs,
+                   diesel_techs=p.diesel_techs)
+    national = national_attributes(nc_by_scenario, area, elcom_ref, eur_to_chf, p.land_definition, imports, cost_options)
     national.assign(weather_year=p.year).to_csv(out.national, index=False)
     import_share = None
     if p.import_definition != "electricity":
