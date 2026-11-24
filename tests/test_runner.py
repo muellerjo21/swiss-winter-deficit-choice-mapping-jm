@@ -306,6 +306,20 @@ def _create_config_plugin(snakemake):
             return pd.read_csv(snakemake.input.geometry_checks)
 
         @pytest.fixture()
+        def language_shares(self):
+            return pd.read_csv(snakemake.input.language_shares)
+
+        @pytest.fixture()
+        def languages(self):
+            """Settings of the language map (maps.languages)."""
+            return snakemake.params.languages
+
+        @pytest.fixture()
+        def region_languages(self):
+            """Coefficient group of every region (regions.language), None = no group."""
+            return snakemake.params.region_languages
+
+        @pytest.fixture()
         def sensitivity_curve(self):
             return pd.read_csv(snakemake.input.sensitivity_curve)
 

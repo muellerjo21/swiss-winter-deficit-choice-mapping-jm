@@ -1,0 +1,11 @@
+name: language
+channels:
+    - conda-forge
+dependencies:
+    # Reads the BFS language tables (xlsx) for the language map (rule language_shares); separate environment, so
+    # that envs/default.yaml and envs/maps.yaml stay unchanged. Versions pinned as in envs/default.yaml.
+    - python=3.13.15
+    - numpy=2.5.3
+    - pandas=3.0.6
+    - pyyaml=6.0.3
+    - openpyxl=3.1.5

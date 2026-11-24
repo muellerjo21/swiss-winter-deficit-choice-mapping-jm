@@ -316,6 +316,43 @@ maps:
     # differences (values outside take the end colours); both are written (variant with suffix _range<lo>-<hi>).
     color_range: [0, 100]
     color_range_variant: [40, 60]
+    # Language map (fig12, rules fetch_languages, fetch_language_areas, language_shares, language_map); figure only,
+    # no input of the analysis. Sources: docs/data_provenance.md.
+    languages:
+        # BFS, structural survey: "Hauptsprachen nach Kanton" (table T40.02.01.08.07, order no.
+        # su-d-40.02.01.08.07-2024), permanent resident population, several main languages per person possible;
+        # fixed BFS asset, checksum verified
+        url: https://dam-api.bfs.admin.ch/hub/api/dam/assets/36399520/master
+        sha256: 07b84a188c5da639a190695d78f0df57adbe4f6f07d73e8d6ce63e6a9dd86d56
+        file: data/raw/su-d-40.02.01.08.07-2024.xlsx
+        year: 2024
+        sheet: Kanton
+        total_column: Total Bevölkerung
+        # Start of the column label of each language in the BFS tables -> key used in the code and figure
+        columns: {de: Deutsch, fr: Französisch, it: Italienisch, rm: Rätoromanisch, en: Englisch, other: Andere Sprachen}
+        # Canton names of the table that are not the German name of regions.cantons
+        canton_names: {TI: Ticino, VD: Vaud, NE: Neuchâtel, GE: Genève}
+        # Each canton is coloured by the majority among these languages, the intensity by its share in share_range
+        majority_of: [de, fr, it]
+        share_range: [0.5, 1.0]
+        names: {de: German, fr: French, it: Italian, rm: Romansh}
+        # Officially bi- or trilingual cantons (cantonal constitutions); outlined in the map
+        bilingual_cantons: [BE, FR, VS, GR]
+        # Language of each coefficient group of regions.language (same colour in both maps)
+        group_language: {DE-CH: de, FR-CH: fr}
+    language_areas:
+        # BFS Raumgliederungen, typology "Sprachgebiete 2020" (HR_SPRGEB2020) per municipality, status 1 Jan 2025
+        # (as swissBOUNDARIES3D 2025-01); export of the BFS query tool (HTTP POST). The export is generated on
+        # request and is not byte-stable, so its content is checked instead of a checksum (rule language_shares).
+        url: https://www.agvchapp.bfs.admin.ch/de/typologies/results/xls?SnapshotDate=01.01.2025&SelectedTypologies%5B0%5D=HR_SPRGEB2020
+        method: post
+        file: data/raw/bfs_sprachgebiete_2020_gemeinden_2025-01-01.xlsx
+        label: BFS language areas 2020
+        status: 1 Jan 2025
+        sheet: Daten
+        # Column labels of the export (header row) for municipality number, canton and language area
+        columns: {municipality: BFS Gde-nummer, canton: Kanton, area: Sprachgebiete}
+        municipality_layer: tlm_hoheitsgebiet
 
 # Conventions of the Calliope result files of Mellot et al. (2024), used to read them (src/load_data.py)
 calliope:

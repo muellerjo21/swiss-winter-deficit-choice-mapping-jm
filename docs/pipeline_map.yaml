@@ -54,6 +54,21 @@ rules:
     text: >-
       Lädt die Kantonsgrenzen von swisstopo (swissBOUNDARIES3D, {boundaries_release}) und prüft die Prüfsumme. Wird
       nur für die Karten gebraucht.
+  fetch_languages:
+    group: data
+    text: >-
+      Lädt die Tabelle „Hauptsprachen nach Kanton“ des BFS (Strukturerhebung) und prüft die Prüfsumme. Nur für die
+      Sprachkarte, kein Input der Analyse.
+  fetch_language_areas:
+    group: data
+    text: >-
+      Lädt die Sprachgebiete pro Gemeinde aus den Raumgliederungen des BFS. Der Export ist nicht bytegleich; geprüft
+      wird der Inhalt. Nur für die Sprachkarte.
+  language_shares:
+    group: data
+    text: >-
+      Bereitet die Sprachdaten auf: Anteil jeder Hauptsprache pro Kanton mit Mehrheitssprache und das Sprachgebiet
+      jeder Gemeinde.
 
   scenario_attributes:
     group: attr
@@ -199,6 +214,12 @@ rules:
     text: >-
       Karten der paarweisen Wahlwahrscheinlichkeit pro Region für {n_map_pairs} Szenariopaare, je mit Farbbereich
       {map_range} und {map_range_variant}; prüft auch, dass jede Region genau eine Geometrie hat.
+  language_map:
+    group: out
+    text: >-
+      Karte der Sprachverteilung (Mehrheitssprache pro Kanton, Sprachgrenze aus den Gemeinden) neben der Zuordnung
+      jeder Region zu den Koeffizienten DE-CH oder FR-CH; das Tessin nutzt die Koeffizienten von
+      spatial.regional.ticino.
   plot_pairwise:
     group: out
     text: Paarmatrix der Wahlwahrscheinlichkeiten, wie in Tröndle et al.

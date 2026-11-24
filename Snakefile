@@ -79,6 +79,7 @@ MAP_RANGES = [MAPS["color_range"], MAPS["color_range_variant"]]
 MAP_RANGE_TAGS = ["", "_range{}-{}".format(*MAPS["color_range_variant"])]
 FIGURES_MAPS_BY_PAIR = [[f"fig10_choice_map_{pair}{tag}_regional" for tag in MAP_RANGE_TAGS] for pair in MAP_PAIRS]
 FIGURES_MAPS = [name for names in FIGURES_MAPS_BY_PAIR for name in names]
+FIGURE_LANGUAGE_MAP = "fig12_language_map"  # language distribution (BFS) and coefficient groups, figure only
 FIGURE_PARAMS = dict(  # what every figure states (analysis, interval, year), its scenario order and colours
     credible_interval = config["utility"]["credible_interval"],
     interval_type = config["utility"]["interval_type"],
@@ -106,6 +107,7 @@ REGIONAL_OUTPUTS = [  # part of rule all only with spatial.resolution: regional
     *expand(FIGURE_PATH, figure="fig11_rank_by_weather_year_regional", fmt=PNG_PDF),
     *expand(FIGURE_PATH, figure=FIGURES_REGIONAL, fmt=FIGURE_FORMATS),
     *expand(FIGURE_PATH, figure=[FIGURE_PAIRWISE, *FIGURES_MAPS], fmt=PAIRWISE_FORMATS),
+    *expand(FIGURE_PATH, figure=FIGURE_LANGUAGE_MAP, fmt=PNG_PDF),
 ]
 
 
@@ -659,6 +661,76 @@ rule choice_maps:
     script: "scripts/make_choice_maps.py"
 
 
+
+rule fetch_languages:
+    message: "Download the BFS main languages per canton (structural survey {params.year}, checksum verified)."
+    params:
+        url = MAPS["languages"]["url"],
+        sha256 = MAPS["languages"]["sha256"],
+        method = "get",
+        year = MAPS["languages"]["year"]
+    output: MAPS["languages"]["file"]
+    log: "build/logs/fetch_languages.log"
+    conda: "envs/default.yaml"
+    script: "scripts/fetch_source_file.py"
+
+
+rule fetch_language_areas:
+    message: "Download the BFS language areas per municipality (export of the BFS query tool, content checked)."
+    params:
+        url = MAPS["language_areas"]["url"],
+        sha256 = None,
+        method = MAPS["language_areas"]["method"]
+    output: MAPS["language_areas"]["file"]
+    log: "build/logs/fetch_language_areas.log"
+    conda: "envs/default.yaml"
+    script: "scripts/fetch_source_file.py"
+
+
+rule language_shares:
+    message: "Main languages per canton and language area per municipality (BFS) as tables."
+    params:
+        settings = MODEL_SETTINGS,
+        languages = MAPS["languages"],
+        areas = MAPS["language_areas"]
+    input:
+        src = src_modules("scripts/language_shares.py"),
+        languages = rules.fetch_languages.output[0],
+        areas = rules.fetch_language_areas.output[0]
+    output:
+        cantons = "build/data/regional/language_shares_canton.csv",
+        municipalities = "build/data/regional/language_areas_municipality.csv"
+    log: "build/logs/language_shares.log"
+    conda: "envs/language.yaml"
+    script: "scripts/language_shares.py"
+
+
+rule language_map:
+    message: "Map of the language distribution (BFS) next to the coefficient groups of the regions (figure only)."
+    params:
+        settings = MODEL_SETTINGS,
+        boundaries = MAPS["boundaries"],
+        crs = MAPS["crs"],
+        tolerance = MAPS["simplify_tolerance_m"],
+        languages = MAPS["languages"],
+        areas = MAPS["language_areas"],
+        ticino = TICINO,
+        choice_model = config["data"]["choice_model"],
+        coefficients = CHOICE_MODEL["coefficients"],
+        name = FIGURE_LANGUAGE_MAP,
+        formats = PNG_PDF
+    input:
+        src = src_modules("scripts/make_language_map.py"),
+        boundaries = rules.fetch_boundaries.output[0],
+        cantons = rules.language_shares.output.cantons,
+        municipalities = rules.language_shares.output.municipalities
+    output:
+        figures = expand(FIGURE_PATH, figure=FIGURE_LANGUAGE_MAP, fmt=PNG_PDF)
+    log: "build/logs/language_map.log"
+    conda: "envs/maps.yaml"
+    script: "scripts/make_language_map.py"
+
+
 rule sensitivity_reference_price:
     message: "Sensitivity to the ElCom reference price: curve, crossing points, base years {params.base_years}."
     params:
@@ -837,7 +909,9 @@ rule test:
         cost_scale_factors = SENSITIVITY["cost_scale_factors"],
         cost_scale_conversions = SENSITIVITY["cost_scale_conversions"],
         cost_scale_search = SENSITIVITY["cost_scale_search"],
-        ticino = TICINO
+        ticino = TICINO,
+        languages = MAPS["languages"],
+        region_languages = config["regions"]["language"]
     input:
         test_dir = "tests",
         tests = map(str, Path("tests").glob("**/test_*.py")),
@@ -853,6 +927,7 @@ rule test:
         pairwise_map_tables = rules.pairwise_regional.output.map_tables,
         pairwise_checks = rules.pairwise_regional.output.checks,
         geometry_checks = rules.choice_maps.output.checks,
+        language_shares = rules.language_shares.output.cantons,
         contributions_national = rules.make_plots.output.contributions,
         contributions_regional = rules.make_plots_regional.output.contributions,
         population_by_region = rules.regional_reference.output.population,

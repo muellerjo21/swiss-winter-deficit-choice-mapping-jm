@@ -142,3 +142,32 @@ Results:
   every weather year (inferred from the results; the cap is not stored in the files).
 - Scenarios per weather year: 12 (2016), 11 (2017), 11 (2018); common to all three years: 11 (all except
   Baseline 5 TWh).
+
+## Language data for the language map (fig12, downloaded 24 Nov 2026)
+
+Figure only (rule language_map); no input of the analysis. Settings: `maps.languages`, `maps.language_areas` in
+config/default.yaml. Both files are downloaded by the workflow (rules fetch_languages, fetch_language_areas) to
+data/raw/ (not in git).
+
+- **Main languages per canton**: BFS, Strukturerhebung 2024, table "Hauptsprachen nach Kanton" (T40.02.01.08.07,
+  order no. su-d-40.02.01.08.07-2024), permanent resident population, published 5 Mar 2026.
+  URL https://dam-api.bfs.admin.ch/hub/api/dam/assets/36399520/master (BFS asset 36399520),
+  file data/raw/su-d-40.02.01.08.07-2024.xlsx, 245'093 bytes,
+  SHA-256 07b84a188c5da639a190695d78f0df57adbe4f6f07d73e8d6ce63e6a9dd86d56 (checked by the fetch rule; byte-identical
+  on repeated download). Sheet "Kanton": persons per main language (German, French, Italian, Romansh, English, other)
+  and canton with 95 % confidence interval; several main languages per person possible, so the shares add up to more
+  than 100 %; "X" = not published (too few observations). Shares used (majority language): BE 82.1 % German
+  (French 10.2 %), FR 69.7 % French (German 24.1 %), VS 66.2 % French (German 23.5 %), GR 75.1 % German (Italian
+  12.8 %, Romansh 12.3 %), TI 88.1 % Italian (German 8.4 %).
+- **Language area per municipality**: BFS Raumgliederungen, typology "Sprachgebiete 2020" (HR_SPRGEB2020),
+  municipalities as of 1 Jan 2025 (same status as swissBOUNDARIES3D 2025-01). Export of the BFS query tool
+  (HTTP POST) https://www.agvchapp.bfs.admin.ch/de/typologies/results/xls?SnapshotDate=01.01.2025&SelectedTypologies%5B0%5D=HR_SPRGEB2020,
+  file data/raw/bfs_sprachgebiete_2020_gemeinden_2025-01-01.xlsx. The export is generated on request (embedded
+  creation date), so its bytes differ between downloads (file of 24 Nov 2026: SHA-256
+  ed0052c5c656e73035389f106e49e35c54bbf08482716df2fe148b0651d80207); the rule language_shares checks its content
+  instead: 2121 municipalities, each once, codes 1-4 read from the code list of the export (German 1378, French 607,
+  Italian 121, Romansh 15), all with a geometry in swissBOUNDARIES3D (not assigned: lakes, two joint territories and
+  the state forest Galm). Used only for the dashed language border.
+- **Consistency with the analysis**: tests/test_languages.py checks that the coefficient group of every region
+  (regions.language) is the majority language of its population in the BFS table (merged regions: summed counts)
+  and that Ticino, without a group, has a majority language without a group (Italian).
