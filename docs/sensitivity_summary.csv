@@ -1,12 +1,12 @@
 weather_year,variant,source,rank1_national,p_rank1_national,rank1_DE_CH,p_rank1_DE_CH,rank1_FR_CH,p_rank1_FR_CH,rank2_national,utility_gap_1_2_national,regional_rank1_differs
-2016,TI with DE-CH coefficients,data/processed/sensitivity_regional.csv,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_remix,0.059645448415199004,False
-2016,TI with FR-CH coefficients,data/processed/sensitivity_regional.csv,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_remix,0.059645448415199004,False
-2016,TI with mixed coefficients,data/processed/sensitivity_regional.csv,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_remix,0.059645448415199004,False
+2016,TI with DE-CH coefficients,docs/sensitivities/2016/main/sensitivity_regional.csv,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_remix,0.0531792395019218,False
+2016,TI with FR-CH coefficients,docs/sensitivities/2016/main/sensitivity_regional.csv,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_remix,0.0542466913687534,False
+2016,TI with mixed coefficients,docs/sensitivities/2016/main/sensitivity_regional.csv,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_remix,0.0534715179892685,False
 2016,imp_denominator_elec,docs/sensitivities/2016/imp_denominator_elec/utility_rankings_regional.csv,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_remix,0.0578374579338555,False
 2016,imp_electricity,docs/sensitivities/2016/imp_electricity/utility_rankings_regional.csv,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_alpine_pv,1.0,baseline_no_self_sufficiency_result_4H,0.05269513954225749,False
 2016,imp_fuels,docs/sensitivities/2016/imp_fuels/utility_rankings_regional.csv,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_remix,0.0531792395019218,False
-2016,import: regional balance,data/processed/sensitivity_regional.csv,policy_sccgt_daccs,1.0,policy_sccgt_daccs,1.0,policy_sccgt_daccs,1.0,policy_mix,0.042261632455271175,False
-2016,land: national share,data/processed/sensitivity_regional.csv,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_remix,0.02490045761381829,False
+2016,import: regional balance,docs/sensitivities/2016/main/sensitivity_regional.csv,policy_sccgt_daccs,1.0,policy_sccgt_daccs,1.0,policy_sccgt_daccs,0.99975,policy_mix,0.039078739778505595,False
+2016,land: national share,docs/sensitivities/2016/main/sensitivity_regional.csv,policy_alpine_pv,0.99975,policy_alpine_pv,0.983,policy_alpine_pv,1.0,policy_remix,0.0197579365719857,False
 2016,main,docs/sensitivities/2016/main/utility_rankings_regional.csv,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_remix,0.0531792395019218,False
 2016,margin20,docs/sensitivities/2016/margin20/utility_rankings_regional.csv,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_remix,0.0492642889567706,False
 2016,margin30,docs/sensitivities/2016/margin30/utility_rankings_regional.csv,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_alpine_pv,1.0,policy_remix,0.04534933841161931,False

@@ -3,8 +3,8 @@ variants computed inside every run (sensitivity_regional.csv: "import: regional 
 Ticino variants). One row per weather year x variant: rank 1 in Switzerland (national), DE-CH and FR-CH with
 P(rank 1), rank 2 and the utility difference rank 1 - rank 2 (posterior means, national), and whether rank 1 of
 DE-CH or FR-CH differs from the national rank 1.
-In-run variants of the main weather year: data/processed/sensitivity_regional.csv (main analysis); other years: the
-file of the run "main".
+In-run variants: the file sensitivity_regional.csv of the run "main" of each weather year (not the frozen test
+reference in data/processed, which can lag behind the current choice model until it is refrozen).
 Usage (project root): python scripts/sensitivity_summary.py docs/sensitivity_summary.csv"""
 import glob, os, sys
 import pandas as pd
@@ -30,10 +30,7 @@ rows = []
 for path in sorted(glob.glob("docs/sensitivities/20*/*/utility_rankings_regional.csv")):
     year, name = path.split(os.sep)[-3:-1]
     rows.append({"weather_year": int(year), "variant": name, "source": path, **summarise(pd.read_csv(path))})
-main_year = setting("weather_year")
-in_run = {main_year: "data/processed/sensitivity_regional.csv"}
-in_run.update({y: f"docs/sensitivities/{y}/main/sensitivity_regional.csv" for y in setting("sensitivity", "weather_years")
-               if y != main_year})
+in_run = {y: f"docs/sensitivities/{y}/main/sensitivity_regional.csv" for y in setting("sensitivity", "weather_years")}
 for year, path in in_run.items():
     if not os.path.exists(path):
         continue

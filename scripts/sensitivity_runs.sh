@@ -15,9 +15,9 @@
 #   run (scripts/regional_utility.py) and are in sensitivity_regional.csv of the run "main".
 # - The reference-price variants are p_ref -20 % and +20 % of price.energy_reference_ct_per_kwh (rounded to 10
 #   significant digits, e.g. 13.552 and 20.328 for p_ref = 16.94).
-# - The copies for 2016 in docs/sensitivities/2016 were made on 17 Nov 2026 with an earlier version of this script
-#   that copied rank1_population_share_regional.csv instead of sensitivity_regional.csv; the 2016 variants of
-#   sensitivity_regional.csv are in data/processed/sensitivity_regional.csv.
+# - All years were recomputed on 21 Nov 2026 with the choice model measured_2026_languages.
+# - The restore at the end includes the regression tests; it reports no "main analysis restored" while the frozen
+#   references (data/processed) belong to another configuration, e.g. after a change of the choice model.
 set -u
 cd "$(dirname "$0")/.."
 SNAKEMAKE=${SNAKEMAKE:-snakemake}
